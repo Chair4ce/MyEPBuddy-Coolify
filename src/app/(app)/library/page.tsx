@@ -34,9 +34,13 @@ import {
   BookMarked,
   Share2,
   Globe,
+  Plus,
+  Combine,
 } from "lucide-react";
 import { StatementCard } from "@/components/library/statement-card";
 import { ShareStatementDialog } from "@/components/library/share-statement-dialog";
+import { AddStatementDialog } from "@/components/library/add-statement-dialog";
+import { StatementWorkspaceDialog } from "@/components/library/statement-workspace-dialog";
 import type { RefinedStatement, StatementHistory, CommunityStatement, SharedStatementView, StatementShare } from "@/types/database";
 
 type UserVotes = Record<string, "up" | "down">;
@@ -72,6 +76,12 @@ export default function LibraryPage() {
 
   // Share dialog
   const [sharingStatement, setSharingStatement] = useState<RefinedStatement | null>(null);
+
+  // Add statement dialog
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+
+  // Combine statements dialog
+  const [isCombineDialogOpen, setIsCombineDialogOpen] = useState(false);
 
   const supabase = createClient();
   const mgas = STANDARD_MGAS;
@@ -465,11 +475,32 @@ export default function LibraryPage() {
 
   return (
     <div className="w-full min-w-0 space-y-4 sm:space-y-6">
-      <div>
-        <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Statement Library</h1>
-        <p className="text-sm sm:text-base text-muted-foreground">
-          Your saved statements, shared statements, and community contributions
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Statement Library</h1>
+          <p className="text-sm sm:text-base text-muted-foreground">
+            Your saved statements, shared statements, and community contributions
+          </p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <Button
+            variant="outline"
+            onClick={() => setIsCombineDialogOpen(true)}
+            className="gap-1.5"
+            aria-label="Open statement workspace"
+          >
+            <Combine className="size-4" />
+            <span className="hidden sm:inline">Workspace</span>
+          </Button>
+          <Button
+            onClick={() => setIsAddDialogOpen(true)}
+            className="gap-1.5"
+            aria-label="Add statement"
+          >
+            <Plus className="size-4" />
+            <span className="hidden sm:inline">Add</span>
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -802,6 +833,23 @@ export default function LibraryPage() {
         open={!!sharingStatement}
         onOpenChange={() => setSharingStatement(null)}
         onSharesUpdated={loadStatements}
+      />
+
+      {/* Add Statement Dialog */}
+      <AddStatementDialog
+        open={isAddDialogOpen}
+        onOpenChange={setIsAddDialogOpen}
+        onStatementAdded={loadStatements}
+      />
+
+      {/* Statement Workspace Dialog */}
+      <StatementWorkspaceDialog
+        open={isCombineDialogOpen}
+        onOpenChange={setIsCombineDialogOpen}
+        onStatementSaved={loadStatements}
+        myStatements={myStatements}
+        sharedStatements={sharedStatements}
+        communityStatements={communityStatements}
       />
     </div>
   );
