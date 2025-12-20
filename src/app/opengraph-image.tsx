@@ -130,14 +130,12 @@ export default async function Image() {
                 style={{
                   display: "flex",
                   alignItems: "center",
-                  gap: 10,
                   padding: "12px 24px",
                   background: "rgba(255, 255, 255, 0.1)",
                   borderRadius: 30,
                   border: "1px solid rgba(255, 255, 255, 0.2)",
                 }}
               >
-                <span style={{ color: "#22c55e", fontSize: 20 }}>✓</span>
                 <span style={{ color: "#e2e8f0", fontSize: 20 }}>{feature}</span>
               </div>
             ))}
