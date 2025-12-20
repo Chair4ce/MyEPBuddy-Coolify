@@ -1,0 +1,375 @@
+"use client";
+
+import { useEffect, useState, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
+import { useUserStore } from "@/stores/user-store";
+import { useAccomplishmentsStore } from "@/stores/accomplishments-store";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { EntryFormDialog } from "@/components/entries/entry-form-dialog";
+import { toast } from "@/components/ui/sonner";
+import { deleteAccomplishment } from "@/app/actions/accomplishments";
+import { Plus, Pencil, Trash2, Filter, FileText } from "lucide-react";
+import type { Accomplishment } from "@/types/database";
+
+function EntriesContent() {
+  const searchParams = useSearchParams();
+  const { profile, subordinates, epbConfig } = useUserStore();
+  const {
+    accomplishments,
+    setAccomplishments,
+    removeAccomplishment,
+    isLoading,
+    setIsLoading,
+  } = useAccomplishmentsStore();
+
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingEntry, setEditingEntry] = useState<Accomplishment | null>(null);
+  const [selectedUser, setSelectedUser] = useState<string>("self");
+  const [selectedMPA, setSelectedMPA] = useState<string>("all");
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  const supabase = createClient();
+  const cycleYear = epbConfig?.current_cycle_year || new Date().getFullYear();
+  const mgas = epbConfig?.major_graded_areas || [];
+
+  // Open dialog if ?new=true
+  useEffect(() => {
+    if (searchParams.get("new") === "true") {
+      setDialogOpen(true);
+    }
+  }, [searchParams]);
+
+  // Load accomplishments
+  useEffect(() => {
+    async function loadAccomplishments() {
+      if (!profile) return;
+
+      setIsLoading(true);
+
+      const targetUserId =
+        selectedUser === "self" ? profile.id : selectedUser;
+
+      let query = supabase
+        .from("accomplishments")
+        .select("*")
+        .eq("user_id", targetUserId)
+        .eq("cycle_year", cycleYear)
+        .order("date", { ascending: false });
+
+      if (selectedMPA !== "all") {
+        query = query.eq("mpa", selectedMPA);
+      }
+
+      const { data, error } = await query;
+
+      if (!error && data) {
+        setAccomplishments(data);
+      }
+
+      setIsLoading(false);
+    }
+
+    loadAccomplishments();
+  }, [profile, selectedUser, selectedMPA, cycleYear, supabase, setAccomplishments, setIsLoading]);
+
+  function handleEdit(entry: Accomplishment) {
+    setEditingEntry(entry);
+    setDialogOpen(true);
+  }
+
+  async function handleDelete(id: string) {
+    const result = await deleteAccomplishment(id);
+
+    if (result.error) {
+      toast.error(result.error);
+      return;
+    }
+
+    removeAccomplishment(id);
+    toast.success("Entry deleted");
+    setDeleteId(null);
+  }
+
+  function handleDialogClose() {
+    setDialogOpen(false);
+    setEditingEntry(null);
+  }
+
+  // Users can add entries for subordinates if they have any
+  const canManageTeam = subordinates.length > 0 || profile?.role === "admin";
+
+  if (isLoading) {
+    return <EntriesSkeleton />;
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Entries</h1>
+          <p className="text-muted-foreground">
+            Track and manage your accomplishments for the {cycleYear} cycle
+          </p>
+        </div>
+        <Button onClick={() => setDialogOpen(true)}>
+          <Plus className="size-4 mr-2" />
+          New Entry
+        </Button>
+      </div>
+
+      {/* Filters */}
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex flex-wrap gap-4">
+            {canManageTeam && subordinates.length > 0 && (
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Viewing for</label>
+                <Select value={selectedUser} onValueChange={setSelectedUser}>
+                  <SelectTrigger className="w-[200px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="self">Myself</SelectItem>
+                    {subordinates.map((sub) => (
+                      <SelectItem key={sub.id} value={sub.id}>
+                        {sub.rank} {sub.full_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium flex items-center gap-2">
+                <Filter className="size-4" />
+                Filter by MPA
+              </label>
+              <Select value={selectedMPA} onValueChange={setSelectedMPA}>
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All MPAs</SelectItem>
+                  {mgas.map((mpa) => (
+                    <SelectItem key={mpa.key} value={mpa.key}>
+                      {mpa.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Entries List */}
+      {accomplishments.length === 0 ? (
+        <Card>
+          <CardContent className="py-12">
+            <div className="text-center">
+              <FileText className="size-12 mx-auto text-muted-foreground/50 mb-4" />
+              <h3 className="font-medium mb-2">No entries found</h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                {selectedMPA !== "all"
+                  ? "No entries for this MPA. Try a different filter."
+                  : "Start tracking accomplishments by creating your first entry."}
+              </p>
+              <Button onClick={() => setDialogOpen(true)}>
+                <Plus className="size-4 mr-2" />
+                Create Entry
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-4">
+          {accomplishments.map((entry) => (
+            <Card key={entry.id} className="group">
+              <CardHeader className="pb-3">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-2 flex-wrap">
+                      <Badge variant="outline">
+                        {mgas.find((m) => m.key === entry.mpa)?.label ||
+                          entry.mpa}
+                      </Badge>
+                      <span className="text-sm text-muted-foreground">
+                        {new Date(entry.date).toLocaleDateString("en-US", {
+                          year: "numeric",
+                          month: "short",
+                          day: "numeric",
+                        })}
+                      </span>
+                    </div>
+                    <CardTitle className="text-lg leading-tight">
+                      {entry.action_verb}
+                    </CardTitle>
+                  </div>
+                  <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleEdit(entry)}
+                      aria-label="Edit entry"
+                    >
+                      <Pencil className="size-4" />
+                    </Button>
+                    <AlertDialog
+                      open={deleteId === entry.id}
+                      onOpenChange={(open) => !open && setDeleteId(null)}
+                    >
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => setDeleteId(entry.id)}
+                          aria-label="Delete entry"
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Delete Entry</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Are you sure you want to delete this entry? This
+                            action cannot be undone.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={() => handleDelete(entry.id)}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                          >
+                            Delete
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Details
+                  </p>
+                  <p className="text-sm">{entry.details}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Impact
+                  </p>
+                  <p className="text-sm">{entry.impact}</p>
+                </div>
+                {entry.metrics && (
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">
+                      Metrics
+                    </p>
+                    <p className="text-sm">{entry.metrics}</p>
+                  </div>
+                )}
+                {entry.tags && entry.tags.length > 0 && (
+                  <div className="flex gap-1 flex-wrap pt-2">
+                    {entry.tags.map((tag: string) => (
+                      <Badge key={tag} variant="secondary" className="text-xs">
+                        {tag}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      <EntryFormDialog
+        open={dialogOpen}
+        onOpenChange={handleDialogClose}
+        editEntry={editingEntry}
+        targetUserId={selectedUser === "self" ? profile?.id : selectedUser}
+      />
+    </div>
+  );
+}
+
+export default function EntriesPage() {
+  return (
+    <Suspense fallback={<EntriesSkeleton />}>
+      <EntriesContent />
+    </Suspense>
+  );
+}
+
+function EntriesSkeleton() {
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between">
+        <div className="space-y-2">
+          <Skeleton className="h-8 w-32" />
+          <Skeleton className="h-4 w-64" />
+        </div>
+        <Skeleton className="h-10 w-28" />
+      </div>
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex gap-4">
+            <Skeleton className="h-10 w-48" />
+            <Skeleton className="h-10 w-48" />
+          </div>
+        </CardContent>
+      </Card>
+      <div className="space-y-4">
+        {[...Array(3)].map((_, i) => (
+          <Card key={i}>
+            <CardHeader>
+              <div className="flex gap-2 mb-2">
+                <Skeleton className="h-5 w-24" />
+                <Skeleton className="h-5 w-20" />
+              </div>
+              <Skeleton className="h-6 w-48" />
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-3/4" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
