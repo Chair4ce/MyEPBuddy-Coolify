@@ -9,10 +9,16 @@ const jetbrainsMono = JetBrains_Mono({
   variable: "--font-sans",
 });
 
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://myepbuddy.com";
+
 export const metadata: Metadata = {
-  title: "My EPBuddy | Air Force Performance Brief Tool",
+  // Basic metadata
+  title: {
+    default: "My EPBuddy | Air Force EPB Statement Generator",
+    template: "%s | My EPBuddy",
+  },
   description:
-    "Track accomplishments and generate myEval-ready Enlisted Performance Brief (EPB) narrative statements compliant with AFI 36-2406.",
+    "AI-powered tool to track accomplishments and generate myEval-ready Enlisted Performance Brief (EPB) narrative statements. Compliant with AFI 36-2406.",
   keywords: [
     "Air Force",
     "EPB",
@@ -20,20 +26,80 @@ export const metadata: Metadata = {
     "Performance Brief",
     "Enlisted",
     "AFI 36-2406",
+    "narrative statements",
+    "accomplishment tracking",
+    "NCO",
+    "SNCO",
+    "enlisted evaluation",
+    "performance statement",
+    "AI writing assistant",
   ],
-  authors: [{ name: "My EPBuddy" }],
-  openGraph: {
-    title: "My EPBuddy",
-    description:
-      "Air Force EPB narrative statement generator for supervisors and subordinates",
-    type: "website",
-    siteName: "My EPBuddy",
+  authors: [{ name: "My EPBuddy", url: siteUrl }],
+  creator: "My EPBuddy",
+  publisher: "My EPBuddy",
+  
+  // Canonical URL
+  metadataBase: new URL(siteUrl),
+  alternates: {
+    canonical: "/",
   },
+  
+  // Open Graph
+  openGraph: {
+    type: "website",
+    locale: "en_US",
+    url: siteUrl,
+    siteName: "My EPBuddy",
+    title: "My EPBuddy | Air Force EPB Statement Generator",
+    description:
+      "AI-powered tool to generate myEval-ready Enlisted Performance Brief statements. Track accomplishments, generate compliant narratives, and streamline your EPB process.",
+    // The opengraph-image.tsx file will automatically be used
+  },
+  
+  // Twitter Card
+  twitter: {
+    card: "summary_large_image",
+    title: "My EPBuddy | Air Force EPB Statement Generator",
+    description:
+      "AI-powered EPB statement generator for Air Force enlisted. Track accomplishments and generate myEval-ready narratives.",
+    creator: "@myepbuddy",
+    // The twitter-image.tsx file will automatically be used
+  },
+  
+  // Robots
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
+  
+  // Icons
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/icon.svg", type: "image/svg+xml" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180" }],
+  },
+  
+  // Manifest for PWA
+  manifest: "/manifest.json",
+  
+  // App-specific
+  applicationName: "My EPBuddy",
+  category: "productivity",
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  maximumScale: 5,
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#ffffff" },
     { media: "(prefers-color-scheme: dark)", color: "#0a0a0a" },

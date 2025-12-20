@@ -20,6 +20,7 @@ import {
   Library,
   Wand2,
   GitBranch,
+  Heart,
 } from "lucide-react";
 import type { Profile } from "@/types/database";
 
@@ -200,6 +201,23 @@ export function AppSidebar({ profile }: AppSidebarProps) {
                 );
               })}
             </nav>
+
+            <Separator className="my-4" />
+
+            {/* Support Link */}
+            <Link
+              href="/support"
+              onClick={() => setIsOpen(false)}
+              className={cn(
+                "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
+                pathname === "/support"
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                  : "text-sidebar-foreground hover:bg-sidebar-accent/50"
+              )}
+            >
+              <Heart className="size-4 text-pink-500" />
+              <span>Support</span>
+            </Link>
           </ScrollArea>
 
           {/* User info */}
