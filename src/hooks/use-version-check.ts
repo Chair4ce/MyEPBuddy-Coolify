@@ -10,7 +10,7 @@ interface VersionInfo {
 }
 
 interface UseVersionCheckOptions {
-  /** Base polling interval in milliseconds (default: 300000 = 5 minutes) */
+  /** Base polling interval in milliseconds (default: 900000 = 15 minutes) */
   pollInterval?: number;
   /** Whether to check on tab/window focus (default: true) */
   checkOnFocus?: boolean;
@@ -101,7 +101,7 @@ export function useVersionCheck(
   options: UseVersionCheckOptions = {}
 ): UseVersionCheckReturn {
   const {
-    pollInterval = 300000, // 5 minutes default
+    pollInterval = 900000, // 15 minutes default
     checkOnFocus = true,
     disabled = false,
   } = options;

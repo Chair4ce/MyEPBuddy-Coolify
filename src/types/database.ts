@@ -187,6 +187,7 @@ export interface UserLLMSettings {
   id: string;
   user_id: string;
   max_characters_per_statement: number;
+  max_example_statements: number;
   scod_date: string;
   current_cycle_year: number;
   major_graded_areas: MajorGradedArea[];

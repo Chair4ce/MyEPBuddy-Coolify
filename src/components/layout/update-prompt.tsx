@@ -5,11 +5,11 @@ import { Button } from "@/components/ui/button";
 import { RefreshCw, X, Sparkles } from "lucide-react";
 
 interface UpdatePromptProps {
-  /** Polling interval in milliseconds (default: 300000 = 5 minutes) */
+  /** Polling interval in milliseconds (default: 900000 = 15 minutes) */
   pollInterval?: number;
 }
 
-export function UpdatePrompt({ pollInterval = 300000 }: UpdatePromptProps) {
+export function UpdatePrompt({ pollInterval = 900000 }: UpdatePromptProps) {
   const { hasUpdate, latestVersion, refreshApp, dismissUpdate } = useVersionCheck({
     pollInterval,
     checkOnFocus: true,

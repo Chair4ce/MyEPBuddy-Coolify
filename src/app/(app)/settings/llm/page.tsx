@@ -54,7 +54,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { DEFAULT_ACRONYMS } from "@/lib/default-acronyms";
-import { DEFAULT_ABBREVIATIONS } from "@/lib/default-abbreviations";
+// DEFAULT_ABBREVIATIONS removed - abbreviations start empty for new users
 import {
   Save,
   Loader2,
@@ -284,7 +284,7 @@ function AbbreviationEditor({
   }, [abbreviations, onChange]);
 
   return (
-    <Card>
+    <Card className="w-full">
       <CardHeader className="px-3 py-3 sm:px-6 sm:py-4 space-y-3">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
@@ -520,7 +520,7 @@ function AcronymEditor({
   }, [acronyms, onChange]);
 
   return (
-    <Card>
+    <Card className="w-full">
       <CardHeader className="px-3 py-3 sm:px-6 sm:py-4 space-y-3">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
@@ -662,6 +662,7 @@ export default function LLMSettingsPage() {
 
   // Separate state for each section to prevent unnecessary re-renders
   const [maxChars, setMaxChars] = useState(350);
+  const [maxExampleStatements, setMaxExampleStatements] = useState(6);
   const [scodDate, setScodDate] = useState("31 March");
   const [cycleYear, setCycleYear] = useState(new Date().getFullYear());
   const [styleGuidelines, setStyleGuidelines] = useState(DEFAULT_STYLE_GUIDELINES);
@@ -669,7 +670,7 @@ export default function LLMSettingsPage() {
   const [systemPrompt, setSystemPrompt] = useState(DEFAULT_SYSTEM_PROMPT);
   const [rankVerbs, setRankVerbs] = useState<RankVerbProgression>(DEFAULT_RANK_VERBS);
   const [acronyms, setAcronyms] = useState<Acronym[]>(DEFAULT_ACRONYMS);
-  const [abbreviations, setAbbreviations] = useState<Abbreviation[]>(DEFAULT_ABBREVIATIONS);
+  const [abbreviations, setAbbreviations] = useState<Abbreviation[]>([]);
 
   // Track initial state to detect changes
   const initialStateRef = useRef<SettingsState | null>(null);
@@ -774,15 +775,17 @@ export default function LLMSettingsPage() {
         setHasExistingSettings(true);
         const settings = data as unknown as UserLLMSettings;
         const loadedMaxChars = settings.max_characters_per_statement;
+        const loadedMaxExamples = settings.max_example_statements ?? 6;
         const loadedScodDate = settings.scod_date;
         const loadedCycleYear = settings.current_cycle_year;
         const loadedStyleGuidelines = settings.style_guidelines;
         const loadedSystemPrompt = settings.base_system_prompt;
         const loadedRankVerbs = settings.rank_verb_progression;
         const loadedAcronyms = settings.acronyms;
-        const loadedAbbreviations = settings.abbreviations || DEFAULT_ABBREVIATIONS;
+        const loadedAbbreviations = settings.abbreviations || [];
 
         setMaxChars(loadedMaxChars);
+        setMaxExampleStatements(loadedMaxExamples);
         setScodDate(loadedScodDate);
         setCycleYear(loadedCycleYear);
         setStyleGuidelines(loadedStyleGuidelines);
@@ -813,7 +816,7 @@ export default function LLMSettingsPage() {
           systemPrompt: DEFAULT_SYSTEM_PROMPT,
           rankVerbs: JSON.parse(JSON.stringify(DEFAULT_RANK_VERBS)),
           acronyms: JSON.parse(JSON.stringify(DEFAULT_ACRONYMS)),
-          abbreviations: JSON.parse(JSON.stringify(DEFAULT_ABBREVIATIONS)),
+          abbreviations: [],
         };
       }
     } catch (error) {
@@ -831,6 +834,7 @@ export default function LLMSettingsPage() {
     try {
       const settingsData = {
         max_characters_per_statement: maxChars,
+        max_example_statements: maxExampleStatements,
         scod_date: scodDate,
         current_cycle_year: cycleYear,
         major_graded_areas: STANDARD_MGAS, // Always use standard MPAs
@@ -889,6 +893,7 @@ export default function LLMSettingsPage() {
 
   function resetToDefaults() {
     setMaxChars(350);
+    setMaxExampleStatements(6);
     setScodDate("31 March");
     setCycleYear(new Date().getFullYear());
     setStyleGuidelines(DEFAULT_STYLE_GUIDELINES);
@@ -896,7 +901,7 @@ export default function LLMSettingsPage() {
     setSystemPrompt(DEFAULT_SYSTEM_PROMPT);
     setRankVerbs(DEFAULT_RANK_VERBS);
     setAcronyms(DEFAULT_ACRONYMS);
-    setAbbreviations(DEFAULT_ABBREVIATIONS);
+    setAbbreviations([]);
     toast.success("Settings reset to defaults (save to apply)");
   }
 
@@ -923,7 +928,7 @@ export default function LLMSettingsPage() {
   }
 
   return (
-    <div className="space-y-4 sm:space-y-6 min-w-0">
+    <div className="w-full space-y-4 sm:space-y-6 min-w-0">
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
@@ -952,7 +957,7 @@ export default function LLMSettingsPage() {
         </div>
       </div>
 
-      <Tabs defaultValue="general" className="space-y-3 sm:space-y-4">
+      <Tabs defaultValue="general" className="w-full space-y-3 sm:space-y-4">
         <TabsList className="w-full h-auto p-1 grid grid-cols-5 gap-0.5">
           <TabsTrigger value="general" className="flex-col sm:flex-row gap-0.5 sm:gap-1.5 text-[10px] sm:text-xs px-1 sm:px-2.5 py-1.5 sm:py-2 data-[state=active]:text-foreground">
             <Settings className="size-4 sm:size-3.5 flex-shrink-0" />
@@ -977,7 +982,7 @@ export default function LLMSettingsPage() {
         </TabsList>
 
         {/* General Settings */}
-        <TabsContent value="general">
+        <TabsContent value="general" className="w-full min-h-[580px]">
           <Card>
             <CardHeader className="px-3 py-3 sm:px-6 sm:py-4">
               <CardTitle className="text-base sm:text-lg">General Settings</CardTitle>
@@ -986,7 +991,7 @@ export default function LLMSettingsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="px-3 pb-4 sm:px-6 sm:pb-6 space-y-4 sm:space-y-6">
-              <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="space-y-1.5">
                   <Label htmlFor="max-chars" className="text-xs sm:text-sm">Max Chars/Statement</Label>
                   <Input
@@ -1000,6 +1005,20 @@ export default function LLMSettingsPage() {
                   <p id="max-chars-hint" className="text-[10px] sm:text-xs text-muted-foreground">AFI 36-2406: 350 chars</p>
                 </div>
                 <div className="space-y-1.5">
+                  <Label htmlFor="max-examples" className="text-xs sm:text-sm">Example Statements</Label>
+                  <Input
+                    id="max-examples"
+                    type="number"
+                    min={0}
+                    max={20}
+                    value={maxExampleStatements}
+                    onChange={(e) => setMaxExampleStatements(Math.min(20, Math.max(0, parseInt(e.target.value) || 0)))}
+                    aria-describedby="max-examples-hint"
+                    className="h-9"
+                  />
+                  <p id="max-examples-hint" className="text-[10px] sm:text-xs text-muted-foreground">0-20, reduces token cost</p>
+                </div>
+                <div className="space-y-1.5">
                   <Label htmlFor="scod" className="text-xs sm:text-sm">SCOD Date</Label>
                   <Input
                     id="scod"
@@ -1011,7 +1030,7 @@ export default function LLMSettingsPage() {
                   />
                   <p id="scod-hint" className="text-[10px] sm:text-xs text-muted-foreground">Static Close Out Date</p>
                 </div>
-                <div className="space-y-1.5 sm:col-span-2 lg:col-span-1">
+                <div className="space-y-1.5">
                   <Label htmlFor="cycle-year" className="text-xs sm:text-sm">Cycle Year</Label>
                   <Input
                     id="cycle-year"
@@ -1066,7 +1085,7 @@ export default function LLMSettingsPage() {
         </TabsContent>
 
         {/* System Prompt */}
-        <TabsContent value="prompt">
+        <TabsContent value="prompt" className="w-full min-h-[580px]">
           <Card>
             <CardHeader className="px-3 py-3 sm:px-6 sm:py-4">
               <CardTitle className="text-base sm:text-lg">System Prompt</CardTitle>
@@ -1088,7 +1107,7 @@ export default function LLMSettingsPage() {
         </TabsContent>
 
         {/* Rank Verbs */}
-        <TabsContent value="verbs">
+        <TabsContent value="verbs" className="w-full min-h-[580px]">
           <Card>
             <CardHeader className="px-3 py-3 sm:px-6 sm:py-4">
               <CardTitle className="text-base sm:text-lg">Rank Verb Progression</CardTitle>
@@ -1275,12 +1294,12 @@ export default function LLMSettingsPage() {
         </TabsContent>
 
         {/* Abbreviations */}
-        <TabsContent value="abbreviations">
+        <TabsContent value="abbreviations" className="w-full min-h-[580px]">
           <AbbreviationEditor abbreviations={abbreviations} onChange={setAbbreviations} />
         </TabsContent>
 
         {/* Acronyms */}
-        <TabsContent value="acronyms">
+        <TabsContent value="acronyms" className="w-full min-h-[580px]">
           <AcronymEditor acronyms={acronyms} onChange={setAcronyms} />
         </TabsContent>
       </Tabs>

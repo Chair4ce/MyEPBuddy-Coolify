@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useUserStore } from "@/stores/user-store";
 import { Button } from "@/components/ui/button";
@@ -430,6 +430,31 @@ export default function LibraryPage() {
     return matchesMpa && matchesAfsc && matchesSearch;
   });
 
+  // Calculate MPA-specific ranks for community statements
+  // Each MPA has its own top 20
+  const mpaRankMap = useMemo(() => {
+    const rankMap = new Map<string, number>();
+    
+    // Group by MPA and sort each group by net votes
+    const byMpa: Record<string, CommunityStatement[]> = {};
+    communityStatements.forEach((s) => {
+      if (!byMpa[s.mpa]) byMpa[s.mpa] = [];
+      byMpa[s.mpa].push(s);
+    });
+    
+    // For each MPA, sort by net votes and assign ranks
+    Object.values(byMpa).forEach((statements) => {
+      statements
+        .map((s) => ({ ...s, netVotes: s.upvotes - (s.downvotes || 0) }))
+        .sort((a, b) => b.netVotes - a.netVotes)
+        .forEach((s, idx) => {
+          rankMap.set(s.id, idx);
+        });
+    });
+    
+    return rankMap;
+  }, [communityStatements]);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -600,24 +625,27 @@ export default function LibraryPage() {
                 {/* Info banner */}
                 <div className="w-full flex items-start sm:items-center gap-2 p-2.5 sm:p-3 rounded-lg bg-muted/50 text-xs sm:text-sm text-muted-foreground">
                   <Trophy className="size-4 text-yellow-500 shrink-0 mt-0.5 sm:mt-0" />
-                  <span>Crowdsourced statements for {profile.afsc} — Top 20 by votes are used as examples when generating</span>
+                  <span>Crowdsourced for {profile.afsc} — Each MPA has its own Top 20 used as examples when generating</span>
                 </div>
 
-                {filteredCommunity.map((statement, index) => (
-                  <StatementCard
-                    key={statement.id}
-                    type="community"
-                    statement={statement}
-                    mpaLabel={getMpaLabel(statement.mpa)}
-                    userVote={userVotes[statement.id]}
-                    isVoting={votingId === statement.id}
-                    isTopRated={index < 20}
-                    rank={index}
-                    onVote={voteOnStatement}
-                    onCopyToLibrary={copyToLibrary}
-                    isCopying={copyingId === statement.id}
-                  />
-                ))}
+                {filteredCommunity.map((statement) => {
+                  const mpaRank = mpaRankMap.get(statement.id) ?? 999;
+                  return (
+                    <StatementCard
+                      key={statement.id}
+                      type="community"
+                      statement={statement}
+                      mpaLabel={getMpaLabel(statement.mpa)}
+                      userVote={userVotes[statement.id]}
+                      isVoting={votingId === statement.id}
+                      isTopRated={mpaRank < 20}
+                      rank={mpaRank}
+                      onVote={voteOnStatement}
+                      onCopyToLibrary={copyToLibrary}
+                      isCopying={copyingId === statement.id}
+                    />
+                  );
+                })}
               </>
             )}
           </div>

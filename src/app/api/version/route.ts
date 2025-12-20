@@ -48,7 +48,7 @@ export async function GET(request: Request) {
       status: 304,
       headers: {
         "ETag": etag,
-        "Cache-Control": "public, max-age=60, stale-while-revalidate=300",
+        "Cache-Control": "public, max-age=300, stale-while-revalidate=900",
       },
     });
   }
@@ -57,8 +57,8 @@ export async function GET(request: Request) {
   return NextResponse.json(versionInfo, {
     headers: {
       "ETag": etag,
-      // Allow CDN/browser caching for 60s, serve stale for 5 min while revalidating
-      "Cache-Control": "public, max-age=60, stale-while-revalidate=300",
+      // Allow CDN/browser caching for 5 min, serve stale for 15 min while revalidating
+      "Cache-Control": "public, max-age=300, stale-while-revalidate=900",
       // Ensure CDN can cache but still respects ETag
       "Vary": "Accept-Encoding",
     },

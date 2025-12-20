@@ -71,6 +71,9 @@ export default function GeneratePage() {
   const [copiedIndex, setCopiedIndex] = useState<string | null>(null);
   const [hasUserKey, setHasUserKey] = useState(false);
   const [writingStyle, setWritingStyle] = useState<WritingStyle>("personal");
+  const [communityMpaFilter, setCommunityMpaFilter] = useState<string>("all"); // "all" or specific MPA key
+  const [communityAfscFilter, setCommunityAfscFilter] = useState<string>("my-afsc"); // "my-afsc" = user's AFSC, or specific AFSC
+  const [availableAfscs, setAvailableAfscs] = useState<string[]>([]);
   const [userSettings, setUserSettings] = useState<Partial<UserLLMSettings> | null>(null);
   
   // MPA selection state - default to all MPAs selected
@@ -100,6 +103,29 @@ export default function GeneratePage() {
       setWritingStyle(profile.writing_style as WritingStyle);
     }
   }, [profile]);
+
+  // Load available AFSCs from community statements
+  useEffect(() => {
+    async function loadAvailableAfscs() {
+      // Get unique AFSCs from community_statements and shared community statements
+      const { data: communityData } = await supabase
+        .from("community_statements")
+        .select("afsc")
+        .eq("is_approved", true);
+      
+      const { data: sharedData } = await supabase
+        .from("shared_statements_view")
+        .select("afsc")
+        .eq("share_type", "community");
+      
+      const afscs = new Set<string>();
+      communityData?.forEach((d: { afsc: string }) => d.afsc && afscs.add(d.afsc));
+      sharedData?.forEach((d: { afsc: string }) => d.afsc && afscs.add(d.afsc));
+      
+      setAvailableAfscs(Array.from(afscs).sort());
+    }
+    loadAvailableAfscs();
+  }, [supabase]);
 
   // Load user's LLM settings
   useEffect(() => {
@@ -222,6 +248,8 @@ export default function GeneratePage() {
           cycleYear,
           model: selectedModel,
           writingStyle,
+          communityMpaFilter: communityMpaFilter === "all" ? null : communityMpaFilter,
+          communityAfscFilter: communityAfscFilter === "my-afsc" ? null : communityAfscFilter, // null = use ratee's AFSC
           selectedMPAs: mpasToGenerate,
           accomplishments: accomplishments.map((a) => ({
             mpa: a.mpa,
@@ -490,12 +518,60 @@ export default function GeneratePage() {
               <p className="flex items-start gap-1.5"><User className="size-4 shrink-0 mt-0.5" /> <span><strong>Personal Style:</strong> Uses your own refined statements as examples for consistent voice.</span></p>
             )}
             {writingStyle === "community" && (
-              <p className="flex items-start gap-1.5"><Users className="size-4 shrink-0 mt-0.5" /> <span><strong>Community Style:</strong> Uses top-rated statements from your AFSC community.</span></p>
+              <p className="flex items-start gap-1.5"><Users className="size-4 shrink-0 mt-0.5" /> <span><strong>Community Style:</strong> Uses top-rated crowdsourced statements from your AFSC ({rateeProfile?.afsc || profile?.afsc}).</span></p>
             )}
             {writingStyle === "hybrid" && (
-              <p className="flex items-start gap-1.5"><Star className="size-4 shrink-0 mt-0.5" /> <span><strong>Hybrid:</strong> Combines your personal style with community best practices.</span></p>
+              <p className="flex items-start gap-1.5"><Star className="size-4 shrink-0 mt-0.5" /> <span><strong>Hybrid:</strong> Combines your personal style with crowdsourced community examples.</span></p>
             )}
           </div>
+
+          {/* Community Filters - only show when using community or hybrid style */}
+          {(writingStyle === "community" || writingStyle === "hybrid") && (
+            <div className="space-y-4 p-3 rounded-lg border bg-muted/30">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* AFSC Filter */}
+                <div className="space-y-2">
+                  <Label className="text-sm">AFSC for Examples</Label>
+                  <Select value={communityAfscFilter} onValueChange={setCommunityAfscFilter}>
+                    <SelectTrigger aria-label="Select which AFSC examples to use">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="my-afsc">
+                        My AFSC ({rateeProfile?.afsc || profile?.afsc || "—"})
+                      </SelectItem>
+                      {availableAfscs.filter(a => a !== (rateeProfile?.afsc || profile?.afsc)).map((afsc) => (
+                        <SelectItem key={afsc} value={afsc}>
+                          {afsc}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* MPA Filter */}
+                <div className="space-y-2">
+                  <Label className="text-sm">MPA for Examples</Label>
+                  <Select value={communityMpaFilter} onValueChange={setCommunityMpaFilter}>
+                    <SelectTrigger aria-label="Select which MPA examples to use">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All MPAs (Top 20)</SelectItem>
+                      {STANDARD_MGAS.map((mpa) => (
+                        <SelectItem key={mpa.key} value={mpa.key}>
+                          {mpa.label} (Top 20)
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Using {communityMpaFilter === "all" ? "top 20 crowdsourced statements across all MPAs" : `top 20 for "${STANDARD_MGAS.find(m => m.key === communityMpaFilter)?.label}"`} from {communityAfscFilter === "my-afsc" ? (rateeProfile?.afsc || profile?.afsc || "your AFSC") : communityAfscFilter}
+              </p>
+            </div>
+          )}
 
           <Separator />
 

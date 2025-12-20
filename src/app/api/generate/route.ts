@@ -6,7 +6,7 @@ import { createXai } from "@ai-sdk/xai";
 import { generateText } from "ai";
 import { NextResponse } from "next/server";
 import { DEFAULT_ACRONYMS, formatAcronymsList } from "@/lib/default-acronyms";
-import { DEFAULT_ABBREVIATIONS, formatAbbreviationsList } from "@/lib/default-abbreviations";
+import { formatAbbreviationsList } from "@/lib/default-abbreviations";
 import { STANDARD_MGAS } from "@/lib/constants";
 import type { Rank, WritingStyle, UserLLMSettings, MajorGradedArea, Acronym, Abbreviation } from "@/types/database";
 
@@ -25,6 +25,8 @@ interface GenerateRequest {
   cycleYear: number;
   model: string;
   writingStyle: WritingStyle;
+  communityMpaFilter?: string | null; // null = all MPAs, or specific MPA key
+  communityAfscFilter?: string | null; // null = use ratee's AFSC, or specific AFSC
   accomplishments: AccomplishmentData[];
   selectedMPAs?: string[]; // Optional - if not provided, generate for all MPAs with entries
 }
@@ -38,6 +40,7 @@ interface ExampleStatement {
 // Default settings if user hasn't configured their own
 const DEFAULT_SETTINGS: Partial<UserLLMSettings> = {
   max_characters_per_statement: 350,
+  max_example_statements: 6,
   scod_date: "31 March",
   current_cycle_year: new Date().getFullYear(),
   major_graded_areas: STANDARD_MGAS, // Always use standard MPAs
@@ -116,15 +119,17 @@ Using the provided accomplishment entries, generate 2–3 HIGH-DENSITY statement
 WORD ABBREVIATIONS (AUTO-APPLY):
 {{abbreviations_list}}`,
   acronyms: DEFAULT_ACRONYMS,
-  abbreviations: DEFAULT_ABBREVIATIONS,
+  abbreviations: [], // Users set their own abbreviations
 };
 
 async function fetchExampleStatements(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string,
-  afsc: string,
+  personalAfsc: string, // AFSC for personal examples (ratee's AFSC)
+  communityAfsc: string, // AFSC for community examples (may be different if user selected one)
   rank: Rank,
-  writingStyle: WritingStyle
+  writingStyle: WritingStyle,
+  communityMpaFilter?: string | null
 ): Promise<ExampleStatement[]> {
   const examples: ExampleStatement[] = [];
 
@@ -133,7 +138,7 @@ async function fetchExampleStatements(
       .from("refined_statements")
       .select("mpa, statement")
       .eq("user_id", userId)
-      .eq("afsc", afsc)
+      .eq("afsc", personalAfsc) // Use ratee's AFSC for personal examples
       .order("created_at", { ascending: false })
       .limit(10);
 
@@ -149,13 +154,20 @@ async function fetchExampleStatements(
   }
 
   if (writingStyle === "community" || writingStyle === "hybrid") {
-    // Fetch top 20 community-voted statements for this AFSC
-    // These are the highest-rated examples as voted by the community
-    const { data: communityData } = await supabase
+    // Fetch top 20 community-voted statements for the selected AFSC
+    // Optionally filtered by specific MPA for more targeted examples
+    let query = supabase
       .from("community_statements")
       .select("mpa, statement, upvotes, downvotes")
-      .eq("afsc", afsc)
-      .eq("is_approved", true)
+      .eq("afsc", communityAfsc) // Use selected community AFSC
+      .eq("is_approved", true);
+    
+    // If a specific MPA is selected, filter to that MPA's top 20
+    if (communityMpaFilter) {
+      query = query.eq("mpa", communityMpaFilter);
+    }
+    
+    const { data: communityData } = await query
       .order("upvotes", { ascending: false })
       .limit(50); // Fetch extra to sort by net votes
 
@@ -178,6 +190,35 @@ async function fetchExampleStatements(
         }))
       );
     }
+    
+    // Also fetch from shared community statements (statement_shares with share_type='community')
+    let sharedQuery = supabase
+      .from("shared_statements_view")
+      .select("mpa, statement")
+      .eq("share_type", "community")
+      .eq("afsc", communityAfsc); // Use selected community AFSC
+    
+    if (communityMpaFilter) {
+      sharedQuery = sharedQuery.eq("mpa", communityMpaFilter);
+    }
+    
+    const { data: sharedCommunityData } = await sharedQuery
+      .order("created_at", { ascending: false })
+      .limit(20);
+    
+    if (sharedCommunityData) {
+      // Add shared community statements, avoiding duplicates
+      const existingStatements = new Set(examples.map(e => e.statement));
+      const newShared = (sharedCommunityData as { mpa: string; statement: string }[])
+        .filter(s => !existingStatements.has(s.statement))
+        .slice(0, 10) // Limit to avoid too many
+        .map(s => ({
+          mpa: s.mpa,
+          statement: s.statement,
+          source: "community" as const,
+        }));
+      examples.push(...newShared);
+    }
   }
 
   return examples;
@@ -196,8 +237,10 @@ function buildSystemPrompt(
   const acronyms = settings.acronyms || DEFAULT_ACRONYMS;
   const acronymsList = formatAcronymsList(acronyms);
   
-  const abbreviations = settings.abbreviations || DEFAULT_ABBREVIATIONS;
-  const abbreviationsList = formatAbbreviationsList(abbreviations);
+  const abbreviations = settings.abbreviations || [];
+  const abbreviationsList = abbreviations.length > 0 
+    ? formatAbbreviationsList(abbreviations)
+    : "No abbreviations configured - use full words";
   
   // Build MGA list - always use standard MPAs for all users
   const mgaList = STANDARD_MGAS.map((m) => `- ${m.label}`).join("\n");
@@ -221,12 +264,15 @@ function buildSystemPrompt(
   prompt = prompt.replace(/\{\{acronyms_list\}\}/g, acronymsList);
   prompt = prompt.replace(/\{\{abbreviations_list\}\}/g, abbreviationsList);
 
-  if (examples.length > 0) {
+  // Get the max example statements from settings, default to 6
+  const maxExamples = settings.max_example_statements ?? 6;
+  
+  if (examples.length > 0 && maxExamples > 0) {
     prompt += `\n\nEXAMPLE STATEMENTS TO EMULATE:
 The following are high-quality example statements that demonstrate the desired writing style:
 
 ${examples
-  .slice(0, 6)
+  .slice(0, maxExamples)
   .map((ex, i) => `${i + 1}. [${ex.mpa}] ${ex.statement}`)
   .join("\n")}
 
@@ -294,7 +340,7 @@ export async function POST(request: Request) {
     }
 
     const body: GenerateRequest = await request.json();
-    const { rateeId, rateeRank, rateeAfsc, cycleYear, model, writingStyle, accomplishments, selectedMPAs } = body;
+    const { rateeId, rateeRank, rateeAfsc, cycleYear, model, writingStyle, communityMpaFilter, communityAfscFilter, accomplishments, selectedMPAs } = body;
 
     if (!rateeRank || !accomplishments || accomplishments.length === 0) {
       return NextResponse.json(
@@ -329,12 +375,17 @@ export async function POST(request: Request) {
     } | null;
 
     // Fetch example statements based on AFSC and writing style
+    // communityMpaFilter allows filtering to a specific MPA's top 20 examples
+    // communityAfscFilter allows using examples from a different AFSC
+    const exampleAfsc = communityAfscFilter || rateeAfsc || "UNKNOWN";
     const examples = await fetchExampleStatements(
       supabase,
       user.id,
-      rateeAfsc || "UNKNOWN",
+      rateeAfsc || "UNKNOWN", // For personal examples, always use ratee's AFSC
+      exampleAfsc, // For community examples, use selected AFSC
       rateeRank,
-      writingStyle || "personal"
+      writingStyle || "personal",
+      communityMpaFilter
     );
 
     const systemPrompt = buildSystemPrompt(settings, rateeRank, examples);
