@@ -200,6 +200,51 @@ export interface UserLLMSettings {
   updated_at: string;
 }
 
+// Workspace Collaboration Types
+export interface WorkspaceSession {
+  id: string;
+  host_user_id: string;
+  session_code: string;
+  workspace_state: WorkspaceState;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  expires_at: string;
+  // Joined fields
+  host_profile?: Profile;
+}
+
+export interface WorkspaceSnapshot {
+  id: string;
+  statement: string;
+  timestamp: string; // ISO string for JSON serialization
+}
+
+export interface WorkspaceState {
+  draftStatement: string;
+  selectedMpa: string;
+  maxCharLimit: number;
+  cycleYear: number;
+  selectedSources: {
+    id: string;
+    statement: string;
+    mpa: string;
+    source: "my" | "shared" | "community";
+  }[];
+  snapshots?: WorkspaceSnapshot[];
+}
+
+export interface WorkspaceSessionParticipant {
+  id: string;
+  session_id: string;
+  user_id: string;
+  joined_at: string;
+  left_at: string | null;
+  is_host: boolean;
+  // Joined fields
+  profile?: Profile;
+}
+
 // JSON type for Supabase
 type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 

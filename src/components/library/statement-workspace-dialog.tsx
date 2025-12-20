@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useUserStore } from "@/stores/user-store";
 import { Button } from "@/components/ui/button";
@@ -12,12 +12,28 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -45,8 +61,13 @@ import {
   ArrowRight,
   History,
   Save,
+  Replace,
+  Search,
+  Trash2,
 } from "lucide-react";
-import type { Rank, RefinedStatement, SharedStatementView, CommunityStatement } from "@/types/database";
+import type { Rank, RefinedStatement, SharedStatementView, CommunityStatement, WorkspaceState, WorkspaceSnapshot } from "@/types/database";
+import { useWorkspaceCollaboration } from "@/hooks/use-workspace-collaboration";
+import { WorkspaceCollaboration } from "./workspace-collaboration";
 
 interface StatementWorkspaceDialogProps {
   open: boolean;
@@ -75,6 +96,18 @@ interface DraftSnapshot {
   timestamp: Date;
   copied: boolean;
 }
+
+interface SavedWorkspaceState {
+  draftStatement: string;
+  selectedMpa: string;
+  maxCharLimit: number;
+  cycleYear: number;
+  snapshots: DraftSnapshot[];
+  selectedSources: SelectedSource[];
+  savedAt: string;
+}
+
+const WORKSPACE_STORAGE_KEY = "epbuddy_statement_workspace";
 
 export function StatementWorkspaceDialog({
   open,
@@ -112,18 +145,144 @@ export function StatementWorkspaceDialog({
   const [snapshots, setSnapshots] = useState<DraftSnapshot[]>([]);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
+  // Synonym feature state
+  const draftTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const [synonymPopoverOpen, setSynonymPopoverOpen] = useState(false);
+  const [selectedWord, setSelectedWord] = useState("");
+  const [selectionRange, setSelectionRange] = useState<{ start: number; end: number } | null>(null);
+  const [synonyms, setSynonyms] = useState<string[]>([]);
+  const [aiSynonyms, setAiSynonyms] = useState<string[]>([]);
+  const [synonymSearch, setSynonymSearch] = useState("");
+  const [isLoadingSynonyms, setIsLoadingSynonyms] = useState(false);
+  const [isLoadingAiSynonyms, setIsLoadingAiSynonyms] = useState(false);
+  const [synonymTab, setSynonymTab] = useState<"quick" | "ai">("quick");
+
+  // Collaboration state
+  const handleCollaborationStateChange = useCallback((state: WorkspaceState) => {
+    // Update local state from remote changes
+    setDraftStatement(state.draftStatement || "");
+    setSelectedMpa(state.selectedMpa || "");
+    setMaxCharLimit(state.maxCharLimit || 350);
+    setCycleYear(state.cycleYear || new Date().getFullYear());
+    setSelectedSources(state.selectedSources || []);
+    // Sync snapshots - convert ISO strings back to Date objects
+    if (state.snapshots) {
+      setSnapshots(
+        state.snapshots.map((s) => ({
+          ...s,
+          timestamp: new Date(s.timestamp),
+          copied: false,
+        }))
+      );
+    }
+  }, []);
+
+  const collaboration = useWorkspaceCollaboration({
+    onStateChange: handleCollaborationStateChange,
+    onParticipantJoin: (participant) => {
+      toast.success(`${participant.fullName} joined the session`);
+    },
+    onParticipantLeave: (participantId) => {
+      const left = collaboration.collaborators.find((c) => c.id === participantId);
+      if (left) {
+        toast.info(`${left.fullName} left the session`);
+      }
+    },
+  });
+
+  // Broadcast state changes when in collaboration mode
+  const broadcastIfCollaborating = useCallback(
+    (updates: Partial<WorkspaceState>) => {
+      if (collaboration.isInSession) {
+        collaboration.broadcastState(updates);
+      }
+    },
+    [collaboration]
+  );
+
+  // Create session with current workspace state
+  const handleCreateSession = useCallback(async () => {
+    return collaboration.createSession({
+      draftStatement,
+      selectedMpa,
+      maxCharLimit,
+      cycleYear,
+      selectedSources,
+      // Convert Date objects to ISO strings for JSON serialization
+      snapshots: snapshots.map((s) => ({
+        id: s.id,
+        statement: s.statement,
+        timestamp: s.timestamp.toISOString(),
+      })),
+    });
+  }, [collaboration, draftStatement, selectedMpa, maxCharLimit, cycleYear, selectedSources, snapshots]);
+
   const defaultMaxChars = epbConfig?.max_characters_per_statement || MAX_STATEMENT_CHARACTERS;
   const selectedModelInfo = AI_MODELS.find((m) => m.id === selectedModel);
 
-  // Initialize defaults when dialog opens
+  // Track if we have unsaved work
+  const [hasRecoveredData, setHasRecoveredData] = useState(false);
+
+  // Load saved workspace from localStorage when dialog opens
+  useEffect(() => {
+    if (open) {
+      try {
+        const saved = localStorage.getItem(WORKSPACE_STORAGE_KEY);
+        if (saved) {
+          const data: SavedWorkspaceState = JSON.parse(saved);
+          // Only restore if there's actual content
+          if (data.draftStatement?.trim() || data.snapshots?.length > 0 || data.selectedSources?.length > 0) {
+            setDraftStatement(data.draftStatement || "");
+            setSelectedMpa(data.selectedMpa || "");
+            setMaxCharLimit(data.maxCharLimit || defaultMaxChars);
+            setCycleYear(data.cycleYear || new Date().getFullYear());
+            setSelectedSources(data.selectedSources || []);
+            // Restore snapshots with proper Date objects
+            setSnapshots(
+              (data.snapshots || []).map((s) => ({
+                ...s,
+                timestamp: new Date(s.timestamp),
+              }))
+            );
+            setHasRecoveredData(true);
+            toast.success("Recovered your previous work");
+          }
+        }
+      } catch (error) {
+        console.error("Failed to restore workspace:", error);
+      }
+    }
+  }, [open, defaultMaxChars]);
+
+  // Initialize profile defaults when dialog opens
   useEffect(() => {
     if (open && profile) {
       setSelectedAfsc(profile.afsc || "");
       setSelectedRank(profile.rank || "");
-      setCycleYear(epbConfig?.current_cycle_year || new Date().getFullYear());
-      setMaxCharLimit(defaultMaxChars);
+      // Only set these if we didn't recover saved data
+      if (!hasRecoveredData) {
+        setCycleYear(epbConfig?.current_cycle_year || new Date().getFullYear());
+        setMaxCharLimit(defaultMaxChars);
+      }
     }
-  }, [open, profile, epbConfig, defaultMaxChars]);
+  }, [open, profile, epbConfig, defaultMaxChars, hasRecoveredData]);
+
+  // Auto-save workspace to localStorage when state changes
+  useEffect(() => {
+    // Only save if dialog is open and there's content worth saving
+    if (open && (draftStatement.trim() || snapshots.length > 0 || selectedSources.length > 0)) {
+      const stateToSave: SavedWorkspaceState = {
+        draftStatement,
+        selectedMpa,
+        maxCharLimit,
+        cycleYear,
+        snapshots,
+        selectedSources,
+        savedAt: new Date().toISOString(),
+      };
+      localStorage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(stateToSave));
+    }
+  }, [open, draftStatement, selectedMpa, maxCharLimit, cycleYear, snapshots, selectedSources]);
 
   function resetForm() {
     setSelectedSources([]);
@@ -137,6 +296,21 @@ export function StatementWorkspaceDialog({
     setSearchQuery("");
     setSnapshots([]);
     setIsHistoryOpen(false);
+    setSynonymPopoverOpen(false);
+    setSelectedWord("");
+    setSelectionRange(null);
+    setSynonyms([]);
+    setAiSynonyms([]);
+    setSynonymTab("quick");
+    setHasRecoveredData(false);
+    // Clear localStorage
+    localStorage.removeItem(WORKSPACE_STORAGE_KEY);
+  }
+
+  // Clear workspace and start fresh
+  function clearWorkspace() {
+    resetForm();
+    toast.success("Workspace cleared");
   }
 
   // Save current draft as a snapshot
@@ -151,7 +325,16 @@ export function StatementWorkspaceDialog({
       timestamp: new Date(),
       copied: false,
     };
-    setSnapshots((prev) => [newSnapshot, ...prev]);
+    const updatedSnapshots = [newSnapshot, ...snapshots];
+    setSnapshots(updatedSnapshots);
+    // Broadcast to collaborators
+    broadcastIfCollaborating({
+      snapshots: updatedSnapshots.map((s) => ({
+        id: s.id,
+        statement: s.statement,
+        timestamp: s.timestamp.toISOString(),
+      })),
+    });
     toast.success("Snapshot saved");
   }
 
@@ -178,7 +361,16 @@ export function StatementWorkspaceDialog({
 
   // Delete a snapshot
   function deleteSnapshot(id: string) {
-    setSnapshots((prev) => prev.filter((s) => s.id !== id));
+    const updatedSnapshots = snapshots.filter((s) => s.id !== id);
+    setSnapshots(updatedSnapshots);
+    // Broadcast to collaborators
+    broadcastIfCollaborating({
+      snapshots: updatedSnapshots.map((s) => ({
+        id: s.id,
+        statement: s.statement,
+        timestamp: s.timestamp.toISOString(),
+      })),
+    });
     toast.success("Snapshot deleted");
   }
 
@@ -186,6 +378,159 @@ export function StatementWorkspaceDialog({
   function formatTime(date: Date): string {
     return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   }
+
+  // Fetch synonyms from Datamuse API using multiple endpoints for better results
+  async function fetchSynonyms(word: string) {
+    if (!word.trim()) return;
+    
+    setIsLoadingSynonyms(true);
+    setSynonyms([]);
+    
+    const encodedWord = encodeURIComponent(word.toLowerCase());
+    
+    try {
+      // Use multiple Datamuse endpoints for comprehensive results:
+      // - rel_syn: strict synonyms
+      // - ml: "means like" - words with similar meaning
+      // - rel_trg: trigger words - commonly associated
+      const [synResponse, mlResponse] = await Promise.all([
+        fetch(`https://api.datamuse.com/words?rel_syn=${encodedWord}&max=30`),
+        fetch(`https://api.datamuse.com/words?ml=${encodedWord}&max=40`),
+      ]);
+      
+      const [synData, mlData] = await Promise.all([
+        synResponse.json(),
+        mlResponse.json(),
+      ]);
+      
+      // Combine and deduplicate results, prioritizing exact synonyms
+      const synWords = synData.map((item: { word: string }) => item.word);
+      const mlWords = mlData
+        .map((item: { word: string }) => item.word)
+        .filter((w: string) => !w.includes(" ")); // Filter out multi-word phrases
+      
+      // Combine: synonyms first, then "means like" words, deduplicated
+      const allWords = [...new Set([...synWords, ...mlWords])];
+      
+      // Filter out the original word and limit results
+      const filteredWords = allWords
+        .filter((w) => w.toLowerCase() !== word.toLowerCase())
+        .slice(0, 50);
+      
+      if (filteredWords.length > 0) {
+        setSynonyms(filteredWords);
+      } else {
+        setSynonyms([]);
+        toast.info(`No synonyms found for "${word}"`);
+      }
+    } catch (error) {
+      console.error("Failed to fetch synonyms:", error);
+      toast.error("Failed to fetch synonyms");
+      setSynonyms([]);
+    } finally {
+      setIsLoadingSynonyms(false);
+    }
+  }
+
+  // Fetch AI-powered synonyms using LLM
+  async function fetchAiSynonyms(word: string) {
+    if (!word.trim() || !draftStatement.trim()) return;
+    
+    setIsLoadingAiSynonyms(true);
+    setAiSynonyms([]);
+    
+    try {
+      const response = await fetch("/api/synonyms", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          word,
+          fullStatement: draftStatement,
+          model: selectedModel,
+        }),
+      });
+      
+      if (!response.ok) {
+        throw new Error("Failed to fetch AI synonyms");
+      }
+      
+      const data = await response.json();
+      
+      if (data.synonyms && data.synonyms.length > 0) {
+        setAiSynonyms(data.synonyms);
+      } else {
+        setAiSynonyms([]);
+        toast.info(`No AI synonyms found for "${word}"`);
+      }
+    } catch (error) {
+      console.error("Failed to fetch AI synonyms:", error);
+      toast.error("Failed to fetch AI synonyms");
+      setAiSynonyms([]);
+    } finally {
+      setIsLoadingAiSynonyms(false);
+    }
+  }
+
+  // Handle synonym button click - get selected text from textarea
+  function handleSynonymClick() {
+    const textarea = draftTextareaRef.current;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    
+    if (start === end) {
+      toast.info("Select a word first, then click Synonym");
+      return;
+    }
+
+    const selected = draftStatement.substring(start, end).trim();
+    
+    // Check if it's a single word (no spaces)
+    if (selected.includes(" ")) {
+      toast.info("Please select a single word");
+      return;
+    }
+
+    setSelectedWord(selected);
+    setSelectionRange({ start, end });
+    setSynonymSearch("");
+    setSynonymPopoverOpen(true);
+    fetchSynonyms(selected);
+  }
+
+  // Replace selected word with synonym
+  function replaceSynonym(synonym: string) {
+    if (!selectionRange) return;
+
+    // Preserve the original casing if the word was capitalized
+    let replacementWord = synonym;
+    if (selectedWord[0] === selectedWord[0].toUpperCase()) {
+      replacementWord = synonym.charAt(0).toUpperCase() + synonym.slice(1);
+    }
+
+    const newDraft =
+      draftStatement.substring(0, selectionRange.start) +
+      replacementWord +
+      draftStatement.substring(selectionRange.end);
+
+    setDraftStatement(newDraft);
+    setSynonymPopoverOpen(false);
+    setSelectedWord("");
+    setSelectionRange(null);
+    setSynonyms([]);
+    setAiSynonyms([]);
+    setSynonymTab("quick");
+    toast.success(`Replaced "${selectedWord}" with "${replacementWord}"`);
+  }
+
+  // Filter synonyms by search (works for both quick and AI synonyms)
+  const filteredSynonyms = synonyms.filter((s) =>
+    s.toLowerCase().includes(synonymSearch.toLowerCase())
+  );
+  const filteredAiSynonyms = aiSynonyms.filter((s) =>
+    s.toLowerCase().includes(synonymSearch.toLowerCase())
+  );
 
   // Get MPA label
   function getMpaLabel(key: string): string {
@@ -527,9 +872,168 @@ export function StatementWorkspaceDialog({
                 {/* Draft Workspace */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <Label htmlFor="draft" className="text-sm font-medium">
-                      Draft Workspace
-                    </Label>
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="draft" className="text-sm font-medium">
+                        Draft Workspace
+                      </Label>
+                      {/* Collaboration Button */}
+                      <WorkspaceCollaboration
+                        isInSession={collaboration.isInSession}
+                        isHost={collaboration.isHost}
+                        sessionCode={collaboration.session?.session_code || null}
+                        collaborators={collaboration.collaborators}
+                        isLoading={collaboration.isLoading}
+                        onCreateSession={handleCreateSession}
+                        onJoinSession={collaboration.joinSession}
+                        onLeaveSession={collaboration.leaveSession}
+                        onEndSession={collaboration.endSession}
+                      />
+                      {/* Synonym Popover - positioned in header so it doesn't cover text */}
+                      <Popover open={synonymPopoverOpen} onOpenChange={setSynonymPopoverOpen}>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-6 px-2 gap-1 text-[10px]"
+                            onClick={handleSynonymClick}
+                            disabled={!draftStatement.trim()}
+                          >
+                            <Replace className="size-3" />
+                            Synonym
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-80 p-0" align="start" side="bottom" sideOffset={8}>
+                        <div className="p-3 border-b space-y-2">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-sm font-medium">
+                              Synonyms for &quot;{selectedWord}&quot;
+                            </Label>
+                          </div>
+                          <div className="relative">
+                            <Search className="absolute left-2 top-1/2 -translate-y-1/2 size-3 text-muted-foreground" />
+                            <Input
+                              placeholder="Filter synonyms..."
+                              value={synonymSearch}
+                              onChange={(e) => setSynonymSearch(e.target.value)}
+                              className="h-8 text-xs pl-7"
+                            />
+                          </div>
+                        </div>
+                        <Tabs value={synonymTab} onValueChange={(v) => setSynonymTab(v as "quick" | "ai")} className="w-full">
+                          <div className="px-3 pt-2">
+                            <TabsList className="w-full h-8">
+                              <TabsTrigger value="quick" className="text-xs flex-1 gap-1.5">
+                                <Search className="size-3" />
+                                Quick
+                                {filteredSynonyms.length > 0 && (
+                                  <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0">
+                                    {filteredSynonyms.length}
+                                  </Badge>
+                                )}
+                              </TabsTrigger>
+                              <TabsTrigger 
+                                value="ai" 
+                                className="text-xs flex-1 gap-1.5"
+                                onClick={() => {
+                                  if (synonymTab !== "ai" && aiSynonyms.length === 0 && !isLoadingAiSynonyms && selectedWord) {
+                                    fetchAiSynonyms(selectedWord);
+                                  }
+                                }}
+                              >
+                                <Sparkles className="size-3" />
+                                AI
+                                {filteredAiSynonyms.length > 0 && (
+                                  <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0">
+                                    {filteredAiSynonyms.length}
+                                  </Badge>
+                                )}
+                              </TabsTrigger>
+                            </TabsList>
+                          </div>
+                          
+                          <TabsContent value="quick" className="mt-0">
+                            <div className="max-h-[220px] overflow-y-auto">
+                              {isLoadingSynonyms ? (
+                                <div className="flex items-center justify-center py-8">
+                                  <Loader2 className="size-4 animate-spin text-muted-foreground" />
+                                </div>
+                              ) : filteredSynonyms.length > 0 ? (
+                                <div className="p-1 grid grid-cols-2 gap-0.5">
+                                  {filteredSynonyms.map((synonym, idx) => (
+                                    <button
+                                      key={idx}
+                                      className="text-left px-2 py-1.5 text-xs rounded hover:bg-muted transition-colors truncate"
+                                      onClick={() => replaceSynonym(synonym)}
+                                      title={synonym}
+                                    >
+                                      {synonym}
+                                    </button>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="py-8 text-center text-xs text-muted-foreground">
+                                  {synonyms.length === 0
+                                    ? "No synonyms found"
+                                    : "No matches"}
+                                </div>
+                              )}
+                            </div>
+                          </TabsContent>
+                          
+                          <TabsContent value="ai" className="mt-0">
+                            <div className="max-h-[220px] overflow-y-auto">
+                              {isLoadingAiSynonyms ? (
+                                <div className="flex flex-col items-center justify-center py-8 gap-2">
+                                  <Loader2 className="size-4 animate-spin text-muted-foreground" />
+                                  <span className="text-[10px] text-muted-foreground">
+                                    Analyzing context...
+                                  </span>
+                                </div>
+                              ) : filteredAiSynonyms.length > 0 ? (
+                                <div className="p-1 grid grid-cols-2 gap-0.5">
+                                  {filteredAiSynonyms.map((synonym, idx) => (
+                                    <button
+                                      key={idx}
+                                      className="text-left px-2 py-1.5 text-xs rounded hover:bg-muted transition-colors truncate"
+                                      onClick={() => replaceSynonym(synonym)}
+                                      title={synonym}
+                                    >
+                                      {synonym}
+                                    </button>
+                                  ))}
+                                </div>
+                              ) : aiSynonyms.length === 0 && !isLoadingAiSynonyms ? (
+                                <div className="py-6 text-center space-y-2">
+                                  <p className="text-xs text-muted-foreground">
+                                    AI analyzes your full statement for context-aware suggestions
+                                  </p>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 text-xs gap-1.5"
+                                    onClick={() => fetchAiSynonyms(selectedWord)}
+                                  >
+                                    <Sparkles className="size-3" />
+                                    Generate AI Synonyms
+                                  </Button>
+                                </div>
+                              ) : (
+                                <div className="py-8 text-center text-xs text-muted-foreground">
+                                  No matches
+                                </div>
+                              )}
+                            </div>
+                            <div className="px-3 pb-2 pt-1 border-t">
+                              <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                                <Sparkles className="size-2.5" />
+                                Uses {selectedModelInfo?.name || "AI"} for context-aware suggestions
+                              </p>
+                            </div>
+                          </TabsContent>
+                        </Tabs>
+                      </PopoverContent>
+                    </Popover>
+                    </div>
                     <span
                       className={cn(
                         "text-xs tabular-nums",
@@ -540,9 +1044,14 @@ export function StatementWorkspaceDialog({
                     </span>
                   </div>
                   <Textarea
+                    ref={draftTextareaRef}
                     id="draft"
                     value={draftStatement}
-                    onChange={(e) => setDraftStatement(e.target.value)}
+                    onChange={(e) => {
+                      const newValue = e.target.value;
+                      setDraftStatement(newValue);
+                      broadcastIfCollaborating({ draftStatement: newValue });
+                    }}
                     placeholder="Build your statement here... Copy portions from sources above, type your own content, or start from scratch."
                     rows={5}
                     className="resize-none text-sm min-h-[120px]"
@@ -555,7 +1064,7 @@ export function StatementWorkspaceDialog({
                       draftStatement.length > maxCharLimit && "[&>*]:bg-destructive"
                     )}
                   />
-                  {/* Snapshot buttons */}
+                  {/* Workspace action buttons */}
                   <div className="flex items-center gap-2 pt-1">
                     <Button
                       variant="ghost"
@@ -577,6 +1086,37 @@ export function StatementWorkspaceDialog({
                         <History className="size-3" />
                         History ({snapshots.length})
                       </Button>
+                    )}
+                    {(draftStatement.trim() || selectedSources.length > 0 || snapshots.length > 0) && (
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 gap-1.5 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                          >
+                            <Trash2 className="size-3" />
+                            Clear All
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Clear workspace?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              This will remove your draft statement, selected sources, and all snapshots. This action cannot be undone.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={clearWorkspace}
+                              className="bg-destructive text-white hover:bg-destructive/90"
+                            >
+                              Clear All
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     )}
                   </div>
                 </div>
