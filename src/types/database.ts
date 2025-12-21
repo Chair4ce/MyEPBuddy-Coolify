@@ -224,6 +224,8 @@ export interface ManagedMember {
   unit: string | null;
   is_placeholder: boolean;
   member_status: ManagedMemberStatus;
+  supervision_start_date: string | null;
+  supervision_end_date: string | null;
   created_at: string;
   updated_at: string;
 }

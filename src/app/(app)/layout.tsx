@@ -77,7 +77,7 @@ export default async function AppLayout({
       managedMembers={managedMembers}
       epbConfig={epbConfig}
     >
-      <div className="flex h-screen overflow-hidden">
+      <div className="fixed inset-0 flex overflow-hidden">
         <AppSidebar profile={profile} />
         <div className="flex-1 flex flex-col ml-0 lg:ml-64 min-w-0 overflow-hidden">
           <AppHeader profile={profile} />

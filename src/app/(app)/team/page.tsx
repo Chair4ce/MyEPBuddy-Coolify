@@ -62,6 +62,9 @@ import {
   MoreHorizontal,
   Archive,
   Trash2,
+  Info,
+  Calendar,
+  History,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -111,6 +114,8 @@ interface TreeNodeData {
   isPlaceholder?: boolean;
   email?: string | null;
   member_status?: "active" | "prior_subordinate" | "archived";
+  supervision_start_date?: string | null;
+  supervision_end_date?: string | null;
 }
 
 interface TreeNode {
@@ -123,6 +128,28 @@ type RankColors = Record<string, string>;
 
 function canSupervise(rank: Rank | null | undefined): boolean {
   return rank !== null && rank !== undefined && SUPERVISOR_RANKS.includes(rank);
+}
+
+function calculateDaysSupervised(startDate: string | null | undefined, endDate: string | null | undefined): number {
+  if (!startDate) return 0;
+  const start = new Date(startDate);
+  const end = endDate ? new Date(endDate) : new Date();
+  const diffTime = Math.abs(end.getTime() - start.getTime());
+  return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+}
+
+function formatDaysSupervised(days: number): string {
+  if (days === 0) return "0 days";
+  if (days === 1) return "1 day";
+  if (days < 30) return `${days} days`;
+  if (days < 365) {
+    const months = Math.floor(days / 30);
+    return months === 1 ? "1 month" : `${months} months`;
+  }
+  const years = Math.floor(days / 365);
+  const remainingMonths = Math.floor((days % 365) / 30);
+  if (remainingMonths === 0) return years === 1 ? "1 year" : `${years} years`;
+  return `${years}y ${remainingMonths}m`;
 }
 
 export default function TeamPage() {
@@ -162,6 +189,50 @@ export default function TeamPage() {
   } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteWithData, setDeleteWithData] = useState(false);
+  
+  // Subordinate details dialog state
+  const [selectedSubordinate, setSelectedSubordinate] = useState<{
+    id: string;
+    name: string;
+    rank: Rank | null;
+    afsc: string | null;
+    unit: string | null;
+    email: string | null;
+    isManagedMember: boolean;
+    supervision_start_date: string | null;
+    supervision_end_date: string | null;
+  } | null>(null);
+  const [editStartDate, setEditStartDate] = useState("");
+  const [editEndDate, setEditEndDate] = useState("");
+  const [isSavingDates, setIsSavingDates] = useState(false);
+  
+  // Real subordinate supervision dates (from teams table)
+  const [teamSupervisionDates, setTeamSupervisionDates] = useState<Record<string, {
+    start: string | null;
+    end: string | null;
+  }>>({});
+  
+  // Supervision history state
+  const [subordinateHistory, setSubordinateHistory] = useState<{
+    id: string;
+    relationship_type: string;
+    member_id: string | null;
+    team_member_id: string | null;
+    member_name: string;
+    member_rank: string | null;
+    supervision_start_date: string | null;
+    supervision_end_date: string | null;
+    status: string;
+  }[]>([]);
+  const [mySupervisionHistory, setMySupervisionHistory] = useState<{
+    id: string;
+    supervisor_name: string;
+    supervisor_rank: string | null;
+    supervision_start_date: string | null;
+    supervision_end_date: string | null;
+    status: string;
+  }[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
   const supabase = createClient();
 
@@ -243,12 +314,40 @@ export default function TeamPage() {
 
       // Load subordinate chain for tree visualization
       await loadSubordinateChain();
+      
+      // Load supervision dates for real subordinates
+      await loadTeamSupervisionDates();
 
     } catch (error) {
       console.error("Error loading team data:", error);
       toast.error("Failed to load team data");
     } finally {
       setIsLoading(false);
+    }
+  }
+  
+  async function loadTeamSupervisionDates() {
+    if (!profile) return;
+    
+    const { data, error } = await supabase
+      .from("teams")
+      .select("subordinate_id, supervision_start_date, supervision_end_date")
+      .eq("supervisor_id", profile.id);
+    
+    if (!error && data) {
+      const dates: Record<string, { start: string | null; end: string | null }> = {};
+      const typedData = data as unknown as Array<{
+        subordinate_id: string;
+        supervision_start_date: string | null;
+        supervision_end_date: string | null;
+      }>;
+      for (const team of typedData) {
+        dates[team.subordinate_id] = {
+          start: team.supervision_start_date,
+          end: team.supervision_end_date,
+        };
+      }
+      setTeamSupervisionDates(dates);
     }
   }
 
@@ -385,10 +484,13 @@ export default function TeamPage() {
           isPlaceholder: member.is_placeholder,
           email: member.email,
           member_status: member.member_status,
+          supervision_start_date: member.supervision_start_date,
+          supervision_end_date: member.supervision_end_date,
         };
       } else {
         const nodeProfile = allProfiles.find((p) => p.id === nodeId);
         if (!nodeProfile) return null;
+        const dates = teamSupervisionDates[nodeProfile.id];
         nodeData = {
           id: nodeProfile.id,
           full_name: nodeProfile.full_name,
@@ -396,6 +498,8 @@ export default function TeamPage() {
           afsc: nodeProfile.afsc,
           unit: nodeProfile.unit,
           isManagedMember: false,
+          supervision_start_date: dates?.start || null,
+          supervision_end_date: dates?.end || null,
         };
       }
 
@@ -440,7 +544,7 @@ export default function TeamPage() {
     };
 
     return buildTree(profile.id, false);
-  }, [profile, allProfiles, teamRelations, managedMembers, expandedNodes]);
+  }, [profile, allProfiles, teamRelations, managedMembers, expandedNodes, teamSupervisionDates]);
 
   function toggleExpand(nodeId: string) {
     setExpandedNodes((prev) => {
@@ -697,6 +801,138 @@ export default function TeamPage() {
     }
   }
 
+  async function saveSupervisionDates() {
+    if (!selectedSubordinate) return;
+    
+    setIsSavingDates(true);
+    try {
+      const startDate = editStartDate || null;
+      const endDate = editEndDate || null;
+      
+      if (selectedSubordinate.isManagedMember) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase.rpc as any)("update_managed_member_dates", {
+          p_team_member_id: selectedSubordinate.id,
+          p_start_date: startDate,
+          p_end_date: endDate,
+        });
+        if (error) throw error;
+        
+        // Update local state
+        const updatedMembers = managedMembers.map((m) =>
+          m.id === selectedSubordinate.id 
+            ? { ...m, supervision_start_date: startDate, supervision_end_date: endDate } 
+            : m
+        );
+        useUserStore.getState().setManagedMembers(updatedMembers);
+      } else {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase.rpc as any)("update_supervision_dates", {
+          p_subordinate_id: selectedSubordinate.id,
+          p_start_date: startDate,
+          p_end_date: endDate,
+        });
+        if (error) throw error;
+        
+        // Update local state for real subordinates
+        setTeamSupervisionDates(prev => ({
+          ...prev,
+          [selectedSubordinate.id]: { start: startDate, end: endDate }
+        }));
+      }
+      
+      toast.success("Supervision dates updated");
+      setSelectedSubordinate(null);
+    } catch (error) {
+      console.error("Error saving dates:", error);
+      toast.error("Failed to update supervision dates");
+    } finally {
+      setIsSavingDates(false);
+    }
+  }
+
+  async function openSubordinateDetails(node: TreeNodeData) {
+    // Set initial values from local data
+    setSelectedSubordinate({
+      id: node.id,
+      name: node.full_name || "Unknown",
+      rank: node.rank,
+      afsc: node.afsc,
+      unit: node.unit,
+      email: node.email || null,
+      isManagedMember: node.isManagedMember,
+      supervision_start_date: node.supervision_start_date || null,
+      supervision_end_date: node.supervision_end_date || null,
+    });
+    
+    // For managed members, use local data
+    if (node.isManagedMember) {
+      setEditStartDate(node.supervision_start_date || "");
+      setEditEndDate(node.supervision_end_date || "");
+    } else {
+      // For real subordinates, fetch dates from teams table
+      const { data, error } = await supabase
+        .from("teams")
+        .select("supervision_start_date, supervision_end_date")
+        .eq("supervisor_id", profile?.id || "")
+        .eq("subordinate_id", node.id)
+        .single();
+      
+      if (!error && data) {
+        const typedData = data as unknown as {
+          supervision_start_date: string | null;
+          supervision_end_date: string | null;
+        };
+        setEditStartDate(typedData.supervision_start_date || "");
+        setEditEndDate(typedData.supervision_end_date || "");
+        // Update the selected subordinate with fetched dates
+        setSelectedSubordinate(prev => prev ? {
+          ...prev,
+          supervision_start_date: typedData.supervision_start_date,
+          supervision_end_date: typedData.supervision_end_date,
+        } : null);
+      } else {
+        setEditStartDate("");
+        setEditEndDate("");
+      }
+    }
+  }
+
+  async function loadSupervisionHistory() {
+    if (!profile?.id) return;
+    
+    setIsLoadingHistory(true);
+    try {
+      // Load history of people I've supervised
+      const { data: subHistory, error: subError } = await supabase
+        .from("my_subordinate_history")
+        .select("*")
+        .order("supervision_start_date", { ascending: false });
+      
+      if (subError) {
+        console.error("Error loading subordinate history:", subError);
+      } else {
+        setSubordinateHistory(subHistory || []);
+      }
+
+      // Load history of my supervisors
+      const { data: supHistory, error: supError } = await supabase
+        .from("my_supervision_history")
+        .select("*")
+        .order("supervision_start_date", { ascending: false });
+      
+      if (supError) {
+        console.error("Error loading supervision history:", supError);
+      } else {
+        setMySupervisionHistory(supHistory || []);
+      }
+    } catch (error) {
+      console.error("Error loading history:", error);
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  }
+
   function getRankOrder(rank: string): number {
     const order: Record<string, number> = {
       CMSgt: 9, SMSgt: 8, MSgt: 7, TSgt: 6, SSgt: 5,
@@ -854,13 +1090,60 @@ export default function TeamPage() {
                 </div>
               )}
             </div>
+            {/* Days supervised badge */}
+            {!isCurrentUser && node.data.supervision_start_date && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge variant="outline" className="shrink-0 text-[9px] px-1.5 gap-0.5 cursor-help">
+                      <Clock className="size-2.5" />
+                      {formatDaysSupervised(calculateDaysSupervised(node.data.supervision_start_date, node.data.supervision_end_date))}
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="text-xs max-w-[200px]">
+                    <p className="font-medium">Time Supervised</p>
+                    <p>
+                      {node.data.supervision_start_date && new Date(node.data.supervision_start_date).toLocaleDateString()}
+                      {" → "}
+                      {node.data.supervision_end_date 
+                        ? new Date(node.data.supervision_end_date).toLocaleDateString()
+                        : "Present"
+                      }
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+            {/* Subordinate count with tooltip */}
             {hasChildren && (
-              <Badge variant="secondary" className="shrink-0 text-[10px] px-1.5">
-                {node.children.length}
-              </Badge>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge variant="secondary" className="shrink-0 text-[10px] px-1.5 cursor-help">
+                      {node.children.length}
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="text-xs">
+                    {node.children.length} direct subordinate{node.children.length !== 1 ? "s" : ""}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             )}
             {!isCurrentUser && (
-              node.data.member_status === "prior_subordinate" ? (
+              <>
+                {/* Info button for subordinates */}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-7 shrink-0 opacity-0 group-hover:opacity-100 hover:opacity-100"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openSubordinateDetails(node.data);
+                  }}
+                >
+                  <Info className="size-3.5 text-muted-foreground" />
+                </Button>
+                {node.data.member_status === "prior_subordinate" ? (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
@@ -873,6 +1156,10 @@ export default function TeamPage() {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => openSubordinateDetails(node.data)}>
+                      <Info className="size-4 mr-2" />
+                      Details
+                    </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => archivePriorSubordinate(node.data.id)}>
                       <Archive className="size-4 mr-2" />
                       Archive
@@ -924,7 +1211,8 @@ export default function TeamPage() {
                 >
                   <UserX className="size-3.5" />
                 </Button>
-              )
+              )}
+              </>
             )}
           </div>
         </div>
@@ -1210,6 +1498,101 @@ export default function TeamPage() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+        
+        {/* Subordinate Details Dialog */}
+        <Dialog open={!!selectedSubordinate} onOpenChange={() => setSelectedSubordinate(null)}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Subordinate Details</DialogTitle>
+              <DialogDescription>
+                View and edit supervision information for {selectedSubordinate?.rank} {selectedSubordinate?.name}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              {/* Member Info */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+                  <Avatar className="size-12">
+                    <AvatarFallback className="text-lg font-medium">
+                      {selectedSubordinate?.name?.split(" ").map((n) => n[0]).join("") || "U"}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <p className="font-semibold">
+                      {selectedSubordinate?.rank} {selectedSubordinate?.name}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {selectedSubordinate?.afsc || "No AFSC"} • {selectedSubordinate?.unit || "No Unit"}
+                    </p>
+                    {selectedSubordinate?.email && (
+                      <p className="text-xs text-muted-foreground">{selectedSubordinate.email}</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Supervision Dates */}
+              <div className="space-y-3">
+                <h4 className="text-sm font-medium flex items-center gap-2">
+                  <Calendar className="size-4" />
+                  Supervision Period
+                </h4>
+                
+                {/* Duration summary */}
+                {editStartDate && (
+                  <div className="flex items-center gap-2 p-2 rounded-lg bg-primary/10 border border-primary/20">
+                    <Clock className="size-4 text-primary" />
+                    <span className="text-sm font-medium">
+                      {formatDaysSupervised(calculateDaysSupervised(editStartDate, editEndDate || null))}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      ({calculateDaysSupervised(editStartDate, editEndDate || null)} days)
+                    </span>
+                  </div>
+                )}
+                
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="startDate" className="text-xs">Start Date</Label>
+                    <Input
+                      id="startDate"
+                      type="date"
+                      value={editStartDate}
+                      onChange={(e) => setEditStartDate(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="endDate" className="text-xs">End Date (optional)</Label>
+                    <Input
+                      id="endDate"
+                      type="date"
+                      value={editEndDate}
+                      onChange={(e) => setEditEndDate(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  These dates help track how long you supervised this member. The end date is automatically set when they are removed from your team.
+                </p>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setSelectedSubordinate(null)}>
+                Cancel
+              </Button>
+              <Button onClick={saveSupervisionDates} disabled={isSavingDates}>
+                {isSavingDates ? (
+                  <>
+                    <Loader2 className="mr-2 size-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  "Save Changes"
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {/* Pending Requests */}
@@ -1275,7 +1658,7 @@ export default function TeamPage() {
       <div className="relative -mx-4 px-4 md:mx-0 md:px-0">
         <div className="flex gap-2 sm:gap-3 overflow-x-auto pb-2 md:grid md:grid-cols-3 lg:grid-cols-4 md:overflow-visible md:pb-0 snap-x snap-mandatory scrollbar-hide">
           <Card className="shrink-0 w-28 sm:w-32 md:w-auto snap-start">
-            <CardContent className="p-2 pl-2 md:pt-4 md:pb-4">
+            <CardContent className="p-2 pl-2 md:p-4">
               <div className="flex items-center gap-2 md:gap-3">
                 <Users className="size-4 md:size-5 text-muted-foreground shrink-0" />
                 <div className="min-w-0">
@@ -1286,7 +1669,7 @@ export default function TeamPage() {
             </CardContent>
           </Card>
           <Card className="shrink-0 w-28 sm:w-32 md:w-auto snap-start">
-            <CardContent className="p-2 pl-2 md:pt-4 md:pb-4">
+            <CardContent className="p-2 pl-2 md:p-4">
               <div className="flex items-center gap-2 md:gap-3">
                 <ChevronDown className="size-4 md:size-5 text-muted-foreground shrink-0" />
                 <div className="min-w-0">
@@ -1296,23 +1679,13 @@ export default function TeamPage() {
               </div>
             </CardContent>
           </Card>
-          <Card className="shrink-0 w-28 sm:w-32 md:w-auto snap-start">
-            <CardContent className="p-2 pl-2 md:pt-4 md:pb-4">
-              <div className="flex items-center gap-2 md:gap-3">
-                <ChevronUp className="size-4 md:size-5 text-muted-foreground shrink-0" />
-                <div className="min-w-0">
-                  <p className="text-lg md:text-2xl font-bold">{supervisors.length}</p>
-                  <p className="text-[10px] md:text-xs text-muted-foreground">Supervisors</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+   
           {Object.entries(stats)
             .sort(([a], [b]) => RANK_ORDER.indexOf(a) - RANK_ORDER.indexOf(b))
             .slice(0, 3)
             .map(([rank, count]) => (
               <Card key={rank} className="shrink-0 w-24 sm:w-28 md:w-auto snap-start">
-                <CardContent className="p-2 pl-2 md:pt-4 md:pb-4">
+                <CardContent className="p-2 pl-2 md:p-4">
                   <div className="flex items-center gap-2 md:gap-3">
                     <User className="size-4 md:size-5 text-muted-foreground shrink-0" />
                     <div className="min-w-0">
@@ -1340,13 +1713,21 @@ export default function TeamPage() {
           </TabsTrigger>
           <TabsTrigger value="supervisors" className="flex-1 gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-3 py-1.5 sm:py-2">
             <ChevronUp className="size-3 sm:size-4 shrink-0" />
-            <span className="hidden xs:inline">My </span>Supervisors
+            <span className="hidden xs:inline">My </span>Supervisor
             <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-[10px] sm:text-xs">{supervisors.length}</Badge>
           </TabsTrigger>
           <TabsTrigger value="sent" className="flex-1 gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-3 py-1.5 sm:py-2">
             <Send className="size-3 sm:size-4 shrink-0" />
             <span className="hidden sm:inline">Sent </span>Requests
             <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-[10px] sm:text-xs">{sentRequests.length}</Badge>
+          </TabsTrigger>
+          <TabsTrigger 
+            value="history" 
+            className="flex-1 gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-3 py-1.5 sm:py-2"
+            onClick={() => loadSupervisionHistory()}
+          >
+            <History className="size-3 sm:size-4 shrink-0" />
+            <span className="hidden sm:inline">Supervision </span>History
           </TabsTrigger>
         </TabsList>
 
@@ -1699,12 +2080,13 @@ export default function TeamPage() {
         </TabsContent>
 
         {/* Supervisors Tab */}
-        <TabsContent value="supervisors" className="mt-3 sm:mt-4">
+        <TabsContent value="supervisors" className="mt-3 sm:mt-4 space-y-4">
+          {/* Current Supervisors */}
           <Card>
             <CardHeader className="p-4 sm:p-6">
-              <CardTitle className="text-base sm:text-lg">My Supervisors</CardTitle>
+              <CardTitle className="text-base sm:text-lg">Current Supervisors</CardTitle>
               <CardDescription className="text-xs sm:text-sm">
-                People who supervise you
+                People who currently supervise you
               </CardDescription>
             </CardHeader>
             <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
@@ -1744,10 +2126,93 @@ export default function TeamPage() {
                           variant="ghost"
                           size="icon"
                           className="size-8 text-destructive shrink-0"
-                          onClick={() => removeTeamMember(sup.id, true)}
+                          onClick={() => setConfirmDeleteMember({
+                            id: sup.id,
+                            name: sup.full_name || "Unknown",
+                            type: "real",
+                            isSupervisor: true
+                          })}
                         >
                           <UserX className="size-4" />
                         </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+          
+          {/* Supervision History */}
+          <Card>
+            <CardHeader className="p-4 sm:p-6 pb-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-base sm:text-lg flex items-center gap-2">
+                    <History className="size-4" />
+                    Supervision History
+                  </CardTitle>
+                  <CardDescription className="text-xs sm:text-sm">
+                    Record of all supervisors who have supervised you
+                  </CardDescription>
+                </div>
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={loadSupervisionHistory}
+                  disabled={isLoadingHistory}
+                >
+                  {isLoadingHistory ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    "Load History"
+                  )}
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
+              {mySupervisionHistory.length === 0 ? (
+                <p className="text-center text-sm text-muted-foreground py-4">
+                  {isLoadingHistory ? "Loading..." : "No supervision history found. Click 'Load History' to fetch."}
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {mySupervisionHistory.map((record) => (
+                    <div
+                      key={record.id}
+                      className="flex items-center justify-between p-3 rounded-lg border bg-muted/30"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-medium text-sm">
+                            {record.supervisor_rank} {record.supervisor_name}
+                          </p>
+                          <Badge 
+                            variant={record.status === "current" ? "default" : "secondary"}
+                            className="text-[10px] px-1.5"
+                          >
+                            {record.status === "current" ? "Active" : "Past"}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
+                          <Calendar className="size-3" />
+                          <span>
+                            {record.supervision_start_date 
+                              ? new Date(record.supervision_start_date).toLocaleDateString()
+                              : "Unknown"
+                            }
+                            {" → "}
+                            {record.supervision_end_date 
+                              ? new Date(record.supervision_end_date).toLocaleDateString()
+                              : "Present"
+                            }
+                          </span>
+                          {record.supervision_start_date && (
+                            <span className="text-muted-foreground/60">
+                              ({formatDaysSupervised(calculateDaysSupervised(record.supervision_start_date, record.supervision_end_date))})
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -1813,6 +2278,130 @@ export default function TeamPage() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Supervision History Tab */}
+        <TabsContent value="history" className="mt-3 sm:mt-4 space-y-4">
+          {isLoadingHistory ? (
+            <div className="flex items-center justify-center p-8">
+              <Loader2 className="size-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2">
+              {/* My Subordinate History (for supervisors) */}
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Users className="size-4" />
+                    People I&apos;ve Supervised
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    History of all subordinates you have supervised
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {subordinateHistory.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      No supervision history yet
+                    </p>
+                  ) : (
+                    subordinateHistory.map((record) => (
+                      <div
+                        key={record.id}
+                        className="flex items-center justify-between p-3 rounded-lg border bg-muted/30"
+                      >
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium text-sm truncate">
+                              {record.member_rank} {record.member_name}
+                            </p>
+                            <Badge 
+                              variant={record.status === "current" ? "default" : "secondary"}
+                              className="text-[10px] px-1.5"
+                            >
+                              {record.status === "current" ? "Active" : record.status}
+                            </Badge>
+                          </div>
+                          <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
+                            <Calendar className="size-3" />
+                            <span>
+                              {record.supervision_start_date 
+                                ? new Date(record.supervision_start_date).toLocaleDateString()
+                                : "Unknown"
+                              }
+                              {" → "}
+                              {record.supervision_end_date 
+                                ? new Date(record.supervision_end_date).toLocaleDateString()
+                                : "Present"
+                              }
+                            </span>
+                          </div>
+                        </div>
+                        <Badge variant="outline" className="text-[10px] shrink-0">
+                          {record.relationship_type}
+                        </Badge>
+                      </div>
+                    ))
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* My Supervisor History (for subordinates) */}
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <User className="size-4" />
+                    My Supervisors
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    History of supervisors who have supervised you
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {mySupervisionHistory.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      No supervisor history yet
+                    </p>
+                  ) : (
+                    mySupervisionHistory.map((record) => (
+                      <div
+                        key={record.id}
+                        className="flex items-center justify-between p-3 rounded-lg border bg-muted/30"
+                      >
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium text-sm truncate">
+                              {record.supervisor_rank} {record.supervisor_name}
+                            </p>
+                            <Badge 
+                              variant={record.status === "current" ? "default" : "secondary"}
+                              className="text-[10px] px-1.5"
+                            >
+                              {record.status === "current" ? "Active" : record.status}
+                            </Badge>
+                          </div>
+                          <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
+                            <Calendar className="size-3" />
+                            <span>
+                              {record.supervision_start_date 
+                                ? new Date(record.supervision_start_date).toLocaleDateString()
+                                : "Unknown"
+                              }
+                              {" → "}
+                              {record.supervision_end_date 
+                                ? new Date(record.supervision_end_date).toLocaleDateString()
+                                : "Present"
+                              }
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          )}
         </TabsContent>
       </Tabs>
     </div>

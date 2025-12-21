@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useUserStore } from "@/stores/user-store";
 import { TermsAgreementDialog } from "@/components/layout/terms-agreement-dialog";
 import { UpdatePrompt } from "@/components/layout/update-prompt";
@@ -29,13 +29,28 @@ export function AppInitializer({
     setIsLoading,
     profile: storeProfile 
   } = useUserStore();
+  
+  // Track if we've done initial hydration
+  const hasHydrated = useRef(false);
 
   useEffect(() => {
-    setProfile(profile);
-    setSubordinates(subordinates);
-    setManagedMembers(managedMembers);
-    setEpbConfig(epbConfig);
-    setIsLoading(false);
+    // Only set server data on initial hydration
+    // After that, prefer client-side updates in the store
+    if (!hasHydrated.current) {
+      setProfile(profile);
+      setSubordinates(subordinates);
+      setManagedMembers(managedMembers);
+      setEpbConfig(epbConfig);
+      setIsLoading(false);
+      hasHydrated.current = true;
+    } else {
+      // On subsequent navigations, only update subordinates/managed members
+      // since those might have changed on the server (new requests, etc.)
+      // but keep the profile from the store (client-side updates)
+      setSubordinates(subordinates);
+      setManagedMembers(managedMembers);
+      setEpbConfig(epbConfig);
+    }
   }, [profile, subordinates, managedMembers, epbConfig, setProfile, setSubordinates, setManagedMembers, setEpbConfig, setIsLoading]);
 
   // Use store profile for reactivity (updates when terms are accepted)
