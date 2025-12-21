@@ -62,11 +62,18 @@ import {
 } from "lucide-react";
 import type { Profile, TeamRequest, TeamRequestType, Rank, ManagedMember } from "@/types/database";
 import { AddManagedMemberDialog } from "@/components/team/add-managed-member-dialog";
+import { MPA_ABBREVIATIONS, STANDARD_MGAS } from "@/lib/constants";
 
 // Ranks that can supervise others
 const SUPERVISOR_RANKS: Rank[] = ["SSgt", "TSgt", "MSgt", "SMSgt", "CMSgt"];
 const RANK_ORDER = ["CMSgt", "SMSgt", "MSgt", "TSgt", "SSgt", "SrA", "A1C", "Amn", "AB"];
 const STORAGE_KEY = "chain-rank-colors";
+
+// Metrics for a member
+interface MemberMetrics {
+  entries: Record<string, number>; // MPA key -> count
+  statements: Record<string, number>; // MPA key -> count
+}
 
 interface ChainMember extends Profile {
   depth: number;
@@ -98,10 +105,11 @@ function canSupervise(rank: Rank | null | undefined): boolean {
 }
 
 export default function TeamPage() {
-  const { profile, subordinates, setSubordinates, managedMembers, removeManagedMember } = useUserStore();
+  const { profile, subordinates, setSubordinates, managedMembers, removeManagedMember, epbConfig } = useUserStore();
   const [isLoading, setIsLoading] = useState(true);
   const [supervisors, setSupervisors] = useState<Profile[]>([]);
   const [pendingRequests, setPendingRequests] = useState<TeamRequest[]>([]);
+  const [memberMetrics, setMemberMetrics] = useState<Record<string, MemberMetrics>>({});
   const [sentRequests, setSentRequests] = useState<TeamRequest[]>([]);
   const [subordinateChain, setSubordinateChain] = useState<ChainMember[]>([]);
   
@@ -258,6 +266,72 @@ export default function TeamPage() {
       setExpandedNodes(new Set([profile.id]));
     }
   }
+
+  // Load metrics (entry and statement counts) for all members
+  async function loadMemberMetrics() {
+    if (!profile) return;
+
+    const cycleYear = epbConfig?.current_cycle_year || new Date().getFullYear();
+    const metrics: Record<string, MemberMetrics> = {};
+
+    // Collect all member IDs (profiles + managed members)
+    const allMemberIds = [
+      profile.id,
+      ...subordinates.map((s) => s.id),
+      ...managedMembers.map((m) => m.id),
+    ];
+
+    // Initialize metrics for all members (including HLR)
+    for (const id of allMemberIds) {
+      metrics[id] = {
+        entries: { executing_mission: 0, leading_people: 0, managing_resources: 0, improving_unit: 0, hlr_assessment: 0 },
+        statements: { executing_mission: 0, leading_people: 0, managing_resources: 0, improving_unit: 0, hlr_assessment: 0 },
+      };
+    }
+
+    try {
+      // Fetch accomplishments for all members in current cycle
+      const { data: accomplishments } = await supabase
+        .from("accomplishments")
+        .select("user_id, mpa")
+        .in("user_id", allMemberIds)
+        .eq("cycle_year", cycleYear) as { data: { user_id: string; mpa: string }[] | null };
+
+      if (accomplishments) {
+        for (const acc of accomplishments) {
+          if (metrics[acc.user_id] && metrics[acc.user_id].entries[acc.mpa] !== undefined) {
+            metrics[acc.user_id].entries[acc.mpa]++;
+          }
+        }
+      }
+
+      // Fetch refined statements for all members in current cycle
+      const { data: statements } = await supabase
+        .from("refined_statements")
+        .select("user_id, mpa")
+        .in("user_id", allMemberIds)
+        .eq("cycle_year", cycleYear) as { data: { user_id: string; mpa: string }[] | null };
+
+      if (statements) {
+        for (const stmt of statements) {
+          if (metrics[stmt.user_id] && metrics[stmt.user_id].statements[stmt.mpa] !== undefined) {
+            metrics[stmt.user_id].statements[stmt.mpa]++;
+          }
+        }
+      }
+
+      setMemberMetrics(metrics);
+    } catch (error) {
+      console.error("Error loading member metrics:", error);
+    }
+  }
+
+  // Load metrics when subordinates or managed members change
+  useEffect(() => {
+    if (profile && !isLoading) {
+      loadMemberMetrics();
+    }
+  }, [profile, subordinates, managedMembers, epbConfig, isLoading]);
 
   // Build tree structure that includes both real profiles and managed members
   const tree = useMemo(() => {
@@ -651,6 +725,37 @@ export default function TeamPage() {
               <p className="text-[10px] sm:text-[11px] md:text-xs text-muted-foreground truncate">
                 {node.data.afsc || "No AFSC"} • {node.data.unit || "No Unit"}
               </p>
+              {/* MPA Metrics */}
+              {memberMetrics[node.data.id] && (
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {STANDARD_MGAS.map((mpa) => {
+                    const entryCount = memberMetrics[node.data.id]?.entries[mpa.key] || 0;
+                    const stmtCount = memberMetrics[node.data.id]?.statements[mpa.key] || 0;
+                    const abbr = MPA_ABBREVIATIONS[mpa.key];
+                    return (
+                      <TooltipProvider key={mpa.key}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span 
+                              className={cn(
+                                "inline-flex items-center gap-0.5 text-[9px] px-1 py-0.5 rounded bg-muted/50 cursor-help",
+                                entryCount === 0 && stmtCount === 0 && "opacity-40"
+                              )}
+                            >
+                              <span className="font-medium">{abbr}</span>
+                              <span className="text-muted-foreground">{entryCount}/{stmtCount}</span>
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom" className="text-xs">
+                            <p className="font-medium">{mpa.label}</p>
+                            <p>{entryCount} entries • {stmtCount} statements</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    );
+                  })}
+                </div>
+              )}
             </div>
             {hasChildren && (
               <Badge variant="secondary" className="shrink-0 text-[10px] px-1.5">

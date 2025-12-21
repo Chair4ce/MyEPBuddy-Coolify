@@ -17,6 +17,15 @@ export const STANDARD_MGAS: MajorGradedArea[] = [
   { key: "hlr_assessment", label: "Higher Level Reviewer Assessment" },
 ];
 
+// MPA key to abbreviation mapping
+export const MPA_ABBREVIATIONS: Record<string, string> = {
+  executing_mission: "EM",
+  leading_people: "LP",
+  managing_resources: "MR",
+  improving_unit: "IU",
+  hlr_assessment: "HLR",
+};
+
 export const RANKS: { value: Rank; label: string }[] = [
   { value: "AB", label: "AB (Airman Basic)" },
   { value: "Amn", label: "Amn (Airman)" },
