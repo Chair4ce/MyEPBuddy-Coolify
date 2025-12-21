@@ -55,7 +55,7 @@ export interface TeamRequest {
 export interface Accomplishment {
   id: string;
   user_id: string;
-  created_by: string;
+  created_by: string; // Who entered this (supervisor or self)
   team_member_id: string | null; // For managed members
   date: string;
   action_verb: string;
@@ -121,6 +121,7 @@ export interface StatementHistory {
 export interface RefinedStatement {
   id: string;
   user_id: string;
+  created_by: string | null; // Who created this (supervisor or self)
   history_id: string | null;
   team_member_id: string | null; // For managed members
   mpa: string;
@@ -186,21 +187,59 @@ export interface Abbreviation {
   abbreviation: string;
 }
 
+// Team history - tracks supervisor changes over time
+export interface TeamHistory {
+  id: string;
+  subordinate_id: string;
+  supervisor_id: string;
+  started_at: string;
+  ended_at: string | null; // NULL = active/current relationship
+  created_at: string;
+}
+
+// Pending managed account links - when user signs up with matching email
+export interface PendingManagedLink {
+  id: string;
+  user_id: string;
+  team_member_id: string;
+  status: "pending" | "accepted" | "rejected";
+  created_at: string;
+  responded_at: string | null;
+}
+
 // Managed Team Member (placeholder subordinate without an account)
+export type ManagedMemberStatus = "active" | "prior_subordinate" | "archived";
+
 export interface ManagedMember {
   id: string;
   supervisor_id: string;
   parent_profile_id: string | null; // Who this member reports to (real profile)
   parent_team_member_id: string | null; // Who this member reports to (managed member)
   linked_user_id: string | null;
+  original_profile_id: string | null; // If prior_subordinate, the original real user
   full_name: string;
   email: string | null;
   rank: Rank | null;
   afsc: string | null;
   unit: string | null;
   is_placeholder: boolean;
+  member_status: ManagedMemberStatus;
   created_at: string;
   updated_at: string;
+}
+
+export interface PendingPriorDataReview {
+  id: string;
+  subordinate_id: string;
+  supervisor_id: string;
+  prior_team_member_id: string;
+  entry_count: number;
+  statement_count: number;
+  status: "pending" | "accepted" | "rejected";
+  created_at: string;
+  resolved_at: string | null;
+  // Joined data
+  supervisor?: Profile;
 }
 
 export interface UserLLMSettings {
@@ -598,6 +637,46 @@ export interface Database {
         };
         Update: never;
       };
+      pending_managed_links: {
+        Row: {
+          id: string;
+          user_id: string;
+          team_member_id: string;
+          status: "pending" | "accepted" | "rejected";
+          created_at: string;
+          responded_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          team_member_id: string;
+          status?: "pending" | "accepted" | "rejected";
+        };
+        Update: {
+          status?: "pending" | "accepted" | "rejected";
+          responded_at?: string | null;
+        };
+      };
+      team_history: {
+        Row: {
+          id: string;
+          subordinate_id: string;
+          supervisor_id: string;
+          started_at: string;
+          ended_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          subordinate_id: string;
+          supervisor_id: string;
+          started_at?: string;
+          ended_at?: string | null;
+        };
+        Update: {
+          ended_at?: string | null;
+        };
+      };
     };
     Views: {
       [_ in never]: never;
@@ -610,6 +689,65 @@ export interface Database {
       get_supervisor_chain: {
         Args: { subordinate_uuid: string };
         Returns: { supervisor_id: string; depth: number }[];
+      };
+      accept_pending_managed_link: {
+        Args: { link_id: string };
+        Returns: boolean;
+      };
+      reject_pending_managed_link: {
+        Args: { link_id: string };
+        Returns: boolean;
+      };
+      get_all_managed_members: {
+        Args: { supervisor_uuid: string };
+        Returns: {
+          id: string;
+          supervisor_id: string;
+          parent_profile_id: string | null;
+          parent_team_member_id: string | null;
+          linked_user_id: string | null;
+          full_name: string;
+          email: string | null;
+          rank: string | null;
+          afsc: string | null;
+          unit: string | null;
+          is_placeholder: boolean;
+          member_status: ManagedMemberStatus;
+          created_at: string;
+          updated_at: string;
+        }[];
+      };
+      archive_prior_subordinate: {
+        Args: { team_member_id: string };
+        Returns: { success: boolean };
+      };
+      delete_prior_subordinate: {
+        Args: { p_team_member_id: string; p_delete_data?: boolean };
+        Returns: { success: boolean; entries_deleted: number; statements_deleted: number };
+      };
+      sync_managed_account_data: {
+        Args: { link_id: string };
+        Returns: { success: boolean };
+      };
+      accept_supervisor_from_link: {
+        Args: { link_id: string };
+        Returns: { success: boolean };
+      };
+      dismiss_pending_link: {
+        Args: { link_id: string };
+        Returns: { success: boolean };
+      };
+      complete_pending_link: {
+        Args: { link_id: string };
+        Returns: { success: boolean };
+      };
+      accept_prior_data_review: {
+        Args: { p_review_id: string };
+        Returns: { success: boolean; entries_transferred: number; statements_transferred: number };
+      };
+      reject_prior_data_review: {
+        Args: { p_review_id: string };
+        Returns: { success: boolean };
       };
     };
     Enums: {

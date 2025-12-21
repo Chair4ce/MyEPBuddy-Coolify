@@ -22,7 +22,7 @@ export async function createAccomplishment(
     .from("accomplishments")
     .insert({
       ...data,
-      created_by: user.id,
+      created_by: data.created_by || user.id,
     })
     .select()
     .single();

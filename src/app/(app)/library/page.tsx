@@ -74,6 +74,9 @@ export default function LibraryPage() {
   const [copyCycleYear, setCopyCycleYear] = useState<number>(new Date().getFullYear());
   const [isCopyingSaving, setIsCopyingSaving] = useState(false);
 
+  // Creator profiles for supervisor-created statements
+  const [creatorProfiles, setCreatorProfiles] = useState<Record<string, { full_name: string | null; rank: string | null }>>({});
+
   // Share dialog
   const [sharingStatement, setSharingStatement] = useState<RefinedStatement | null>(null);
 
@@ -99,7 +102,32 @@ export default function LibraryPage() {
         .eq("user_id", profile.id)
         .order("created_at", { ascending: false });
 
-      setMyStatements((myData as RefinedStatement[]) || []);
+      const typedMyData = (myData as RefinedStatement[]) || [];
+      setMyStatements(typedMyData);
+
+      // Fetch creator profiles for supervisor-created statements
+      const creatorIds = [...new Set(
+        typedMyData
+          .filter((s) => s.created_by && s.created_by !== s.user_id)
+          .map((s) => s.created_by)
+          .filter((id): id is string => id !== null)
+      )];
+      
+      if (creatorIds.length > 0) {
+        const { data: creators } = await supabase
+          .from("profiles")
+          .select("id, full_name, rank")
+          .in("id", creatorIds);
+        
+        if (creators) {
+          type CreatorProfile = { id: string; full_name: string | null; rank: string | null };
+          const profileMap: Record<string, { full_name: string | null; rank: string | null }> = {};
+          (creators as CreatorProfile[]).forEach((c) => {
+            profileMap[c.id] = { full_name: c.full_name, rank: c.rank };
+          });
+          setCreatorProfiles(profileMap);
+        }
+      }
 
       // Load shares for my statements
       if (myData && myData.length > 0) {
@@ -600,6 +628,7 @@ export default function LibraryPage() {
                   type="my"
                   statement={statement}
                   shares={myStatementShares[statement.id]}
+                  creatorInfo={statement.created_by && statement.created_by !== statement.user_id ? creatorProfiles[statement.created_by] : null}
                   mpaLabel={getMpaLabel(statement.mpa)}
                   onToggleFavorite={toggleFavorite}
                   onEdit={(s) => {

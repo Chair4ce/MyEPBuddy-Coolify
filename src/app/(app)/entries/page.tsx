@@ -38,7 +38,14 @@ import { toast } from "@/components/ui/sonner";
 import { deleteAccomplishment } from "@/app/actions/accomplishments";
 import { Plus, Pencil, Trash2, Filter, FileText } from "lucide-react";
 import { ENTRY_MGAS } from "@/lib/constants";
-import type { Accomplishment, ManagedMember } from "@/types/database";
+import type { Accomplishment, ManagedMember, Profile } from "@/types/database";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { UserCheck } from "lucide-react";
 
 function EntriesContent() {
   const searchParams = useSearchParams();
@@ -56,6 +63,7 @@ function EntriesContent() {
   const [selectedUser, setSelectedUser] = useState<string>("self");
   const [selectedMPA, setSelectedMPA] = useState<string>("all");
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [creatorProfiles, setCreatorProfiles] = useState<Record<string, { full_name: string | null; rank: string | null }>>({});
 
   const supabase = createClient();
   const cycleYear = epbConfig?.current_cycle_year || new Date().getFullYear();
@@ -103,7 +111,32 @@ function EntriesContent() {
       const { data, error } = await query;
 
       if (!error && data) {
-        setAccomplishments(data);
+        const typedData = data as unknown as Accomplishment[];
+        setAccomplishments(typedData);
+        
+        // Find entries created by someone other than the owner (supervisor-created)
+        const creatorIds = [...new Set(
+          typedData
+            .filter((a) => a.created_by && a.created_by !== a.user_id)
+            .map((a) => a.created_by)
+        )];
+        
+        if (creatorIds.length > 0) {
+          // Fetch creator profiles
+          const { data: creators } = await supabase
+            .from("profiles")
+            .select("id, full_name, rank")
+            .in("id", creatorIds);
+          
+          if (creators) {
+            type CreatorProfile = { id: string; full_name: string | null; rank: string | null };
+            const profileMap: Record<string, { full_name: string | null; rank: string | null }> = {};
+            (creators as CreatorProfile[]).forEach((c) => {
+              profileMap[c.id] = { full_name: c.full_name, rank: c.rank };
+            });
+            setCreatorProfiles(profileMap);
+          }
+        }
       }
 
       setIsLoading(false);
@@ -262,6 +295,22 @@ function EntriesContent() {
                           day: "numeric",
                         })}
                       </span>
+                      {/* Show creator badge if entry was created by supervisor */}
+                      {entry.created_by && entry.created_by !== entry.user_id && creatorProfiles[entry.created_by] && (
+                        <TooltipProvider delayDuration={200}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Badge variant="secondary" className="text-xs gap-1">
+                                <UserCheck className="size-3" />
+                                {creatorProfiles[entry.created_by].rank} {creatorProfiles[entry.created_by].full_name?.split(" ")[0]}
+                              </Badge>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              Entry created by {creatorProfiles[entry.created_by].rank} {creatorProfiles[entry.created_by].full_name}
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
                     </div>
                     <CardTitle className="text-lg leading-tight">
                       {entry.action_verb}

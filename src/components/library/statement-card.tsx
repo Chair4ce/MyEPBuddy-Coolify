@@ -21,7 +21,14 @@ import {
   Users as UsersIcon,
   User,
   Download,
+  UserCheck,
 } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { toast } from "@/components/ui/sonner";
 import type { RefinedStatement, SharedStatementView, CommunityStatement, StatementShare } from "@/types/database";
 
@@ -34,6 +41,7 @@ interface MyStatementCardProps extends BaseStatementCardProps {
   type: "my";
   statement: RefinedStatement;
   shares?: StatementShare[];
+  creatorInfo?: { full_name: string | null; rank: string | null } | null;
   onToggleFavorite: (statement: RefinedStatement) => void;
   onEdit: (statement: RefinedStatement) => void;
   onShare: (statement: RefinedStatement) => void;
@@ -76,7 +84,7 @@ export function StatementCard(props: StatementCardProps) {
   }
 
   if (props.type === "my") {
-    const { statement, shares, onToggleFavorite, onEdit, onShare, onDelete, mpaLabel } = props;
+    const { statement, shares, creatorInfo, onToggleFavorite, onEdit, onShare, onDelete, mpaLabel } = props;
     const hasShares = shares && shares.length > 0;
 
     return (
@@ -104,6 +112,22 @@ export function StatementCard(props: StatementCardProps) {
                       <User className="size-3.5 text-purple-500" />
                     )}
                   </div>
+                )}
+                {/* Show creator badge if statement was created by supervisor */}
+                {creatorInfo && (
+                  <TooltipProvider delayDuration={200}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Badge variant="secondary" className="text-xs gap-1 shrink-0">
+                          <UserCheck className="size-3" />
+                          {creatorInfo.rank} {creatorInfo.full_name?.split(" ")[0]}
+                        </Badge>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        Created by {creatorInfo.rank} {creatorInfo.full_name}
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 )}
               </div>
             </div>

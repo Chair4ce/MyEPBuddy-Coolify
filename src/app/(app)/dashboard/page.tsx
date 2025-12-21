@@ -27,6 +27,8 @@ import {
   Plus,
 } from "lucide-react";
 import { ENTRY_MGAS } from "@/lib/constants";
+import { PendingLinksCard } from "@/components/dashboard/pending-links-card";
+import { PendingPriorDataCard } from "@/components/dashboard/pending-prior-data-card";
 
 export default function DashboardPage() {
   const { profile, subordinates, epbConfig } = useUserStore();
@@ -127,6 +129,12 @@ export default function DashboardPage() {
           </Button>
         )}
       </div>
+
+      {/* Pending Account Links */}
+      <PendingLinksCard />
+
+      {/* Pending Prior Data Reviews */}
+      <PendingPriorDataCard />
 
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">

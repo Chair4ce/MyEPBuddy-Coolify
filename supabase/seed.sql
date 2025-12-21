@@ -1,0 +1,12 @@
+-- Seed file for testing team hierarchies and RLS permissions
+-- 
+-- IMPORTANT: This file is run AFTER db reset. It sets up test data
+-- but cannot create auth users. Run the TypeScript script after:
+--   npx tsx scripts/seed-test-users.ts
+--
+-- The seed.sql is intentionally empty for initial db reset because
+-- profiles require auth.users to exist first (foreign key constraint).
+-- All seeding is done via the TypeScript script which uses the Admin API.
+
+-- This file is left empty to prevent foreign key errors during db reset.
+-- All test data is created by scripts/seed-test-users.ts

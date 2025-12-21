@@ -35,7 +35,7 @@ const navItems = [
     roles: ["member", "admin"],
   },
   {
-    title: "Entries",
+    title: "My Performance",
     href: "/entries",
     icon: FileText,
     roles: ["member", "admin"],

@@ -59,7 +59,27 @@ import {
   Clock,
   Send,
   UserX,
+  MoreHorizontal,
+  Archive,
+  Trash2,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import type { Profile, TeamRequest, TeamRequestType, Rank, ManagedMember } from "@/types/database";
 import { AddManagedMemberDialog } from "@/components/team/add-managed-member-dialog";
 import { MPA_ABBREVIATIONS, STANDARD_MGAS } from "@/lib/constants";
@@ -90,6 +110,7 @@ interface TreeNodeData {
   isManagedMember: boolean;
   isPlaceholder?: boolean;
   email?: string | null;
+  member_status?: "active" | "prior_subordinate" | "archived";
 }
 
 interface TreeNode {
@@ -131,6 +152,16 @@ export default function TeamPage() {
   const [isInviting, setIsInviting] = useState(false);
   const [searchedProfile, setSearchedProfile] = useState<Profile | null>(null);
   const [isSearching, setIsSearching] = useState(false);
+  
+  // Member removal confirmation state
+  const [confirmDeleteMember, setConfirmDeleteMember] = useState<{ 
+    id: string; 
+    name: string; 
+    type: "managed" | "real" | "prior_subordinate";
+    isSupervisor?: boolean;
+  } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteWithData, setDeleteWithData] = useState(false);
 
   const supabase = createClient();
 
@@ -353,6 +384,7 @@ export default function TeamPage() {
           isManagedMember: true,
           isPlaceholder: member.is_placeholder,
           email: member.email,
+          member_status: member.member_status,
         };
       } else {
         const nodeProfile = allProfiles.find((p) => p.id === nodeId);
@@ -589,8 +621,10 @@ export default function TeamPage() {
       toast.success("Team member removed");
       loadTeamData();
       
-      // Update store
-      if (!isSupervisor) {
+      // Update local state immediately
+      if (isSupervisor) {
+        setSupervisors(supervisors.filter((s) => s.id !== memberId));
+      } else {
         setSubordinates(subordinates.filter((s) => s.id !== memberId));
       }
     } catch (error) {
@@ -609,6 +643,57 @@ export default function TeamPage() {
       toast.success("Team member removed");
     } catch (error) {
       toast.error("Failed to remove team member");
+    }
+  }
+
+  async function archivePriorSubordinate(memberId: string) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase.rpc as any)("archive_prior_subordinate", {
+        team_member_id: memberId,
+      });
+
+      if (error) throw error;
+
+      // Update local state
+      const updatedMembers = managedMembers.map((m) =>
+        m.id === memberId ? { ...m, member_status: "archived" as const } : m
+      );
+      useUserStore.getState().setManagedMembers(updatedMembers);
+      toast.success("Member archived");
+    } catch (error) {
+      console.error("Error archiving member:", error);
+      toast.error("Failed to archive member");
+    }
+  }
+
+  async function deletePriorSubordinate(memberId: string, deleteData: boolean) {
+    setIsDeleting(true);
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase.rpc as any)("delete_prior_subordinate", {
+        p_team_member_id: memberId,
+        p_delete_data: deleteData,
+      });
+
+      if (error) throw error;
+
+      removeManagedMember(memberId);
+      
+      const result = data as { entries_deleted?: number; statements_deleted?: number };
+      if (deleteData && (result.entries_deleted || result.statements_deleted)) {
+        toast.success(`Deleted ${result.entries_deleted || 0} entries and ${result.statements_deleted || 0} statements`);
+      } else {
+        toast.success("Member removed");
+      }
+      
+      setConfirmDeleteMember(null);
+      setDeleteWithData(false);
+    } catch (error) {
+      console.error("Error deleting member:", error);
+      toast.error("Failed to delete member");
+    } finally {
+      setIsDeleting(false);
     }
   }
 
@@ -704,16 +789,28 @@ export default function TeamPage() {
                           variant="outline" 
                           className={cn(
                             "text-[8px] px-1 py-0 h-4 shrink-0 cursor-help",
-                            isPlaceholder 
+                            node.data.member_status === "prior_subordinate"
+                              ? "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-300"
+                              : node.data.member_status === "archived"
+                              ? "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 border-gray-300"
+                              : isPlaceholder 
                               ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border-amber-300"
                               : "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 border-green-300"
                           )}
                         >
-                          {isPlaceholder ? "Managed" : "Linked"}
+                          {node.data.member_status === "prior_subordinate" 
+                            ? "Prior" 
+                            : node.data.member_status === "archived"
+                            ? "Archived"
+                            : isPlaceholder ? "Managed" : "Linked"}
                         </Badge>
                       </TooltipTrigger>
                       <TooltipContent side="top" className="max-w-[200px] text-center">
-                        {isPlaceholder 
+                        {node.data.member_status === "prior_subordinate"
+                          ? "This is a former subordinate. You still have access to their entries for EPB completion."
+                          : node.data.member_status === "archived"
+                          ? "This member has been archived. Their data is preserved for reference."
+                          : isPlaceholder 
                           ? "This member doesn't have an account yet. Their entries are managed by you."
                           : "This member has signed up and their account is now linked."
                         }
@@ -763,21 +860,71 @@ export default function TeamPage() {
               </Badge>
             )}
             {!isCurrentUser && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-7 text-destructive shrink-0 opacity-0 group-hover:opacity-100 hover:opacity-100"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (isManagedMember) {
-                    removeManagedTeamMember(node.data.id);
-                  } else {
-                    removeTeamMember(node.data.id, false);
-                  }
-                }}
-              >
-                <UserX className="size-3.5" />
-              </Button>
+              node.data.member_status === "prior_subordinate" ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-7 shrink-0 opacity-0 group-hover:opacity-100 hover:opacity-100"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <MoreHorizontal className="size-3.5" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => archivePriorSubordinate(node.data.id)}>
+                      <Archive className="size-4 mr-2" />
+                      Archive
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem 
+                      className="text-destructive"
+                      onClick={() => setConfirmDeleteMember({ 
+                        id: node.data.id, 
+                        name: node.data.full_name || "Unknown",
+                        type: "prior_subordinate"
+                      })}
+                    >
+                      <Trash2 className="size-4 mr-2" />
+                      Delete...
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : node.data.member_status === "archived" ? (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-7 text-destructive shrink-0 opacity-0 group-hover:opacity-100 hover:opacity-100"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setConfirmDeleteMember({ 
+                      id: node.data.id, 
+                      name: node.data.full_name || "Unknown",
+                      type: "prior_subordinate"
+                    });
+                  }}
+                >
+                  <Trash2 className="size-3.5" />
+                </Button>
+              ) : (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-7 text-destructive shrink-0 opacity-0 group-hover:opacity-100 hover:opacity-100"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setConfirmDeleteMember({ 
+                      id: node.data.id, 
+                      name: node.data.full_name || "Unknown",
+                      type: isManagedMember ? "managed" : "real",
+                      isSupervisor: !isManagedMember && supervisors.some(s => s.id === node.data.id)
+                    });
+                  }}
+                >
+                  <UserX className="size-3.5" />
+                </Button>
+              )
             )}
           </div>
         </div>
@@ -971,6 +1118,98 @@ export default function TeamPage() {
           open={showAddMemberDialog} 
           onOpenChange={setShowAddMemberDialog} 
         />
+        
+        {/* Remove/Delete Member Confirmation Dialog */}
+        <AlertDialog open={!!confirmDeleteMember} onOpenChange={() => { setConfirmDeleteMember(null); setDeleteWithData(false); }}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                {confirmDeleteMember?.type === "prior_subordinate" 
+                  ? "Delete Prior Subordinate" 
+                  : confirmDeleteMember?.type === "managed"
+                  ? "Remove Managed Member"
+                  : confirmDeleteMember?.isSupervisor
+                  ? "Remove Supervisor"
+                  : "Remove Team Member"}
+              </AlertDialogTitle>
+              <AlertDialogDescription asChild>
+                <div className="space-y-3">
+                  <p>
+                    Are you sure you want to {confirmDeleteMember?.type === "prior_subordinate" ? "delete" : "remove"}{" "}
+                    <strong>{confirmDeleteMember?.name}</strong>
+                    {confirmDeleteMember?.type === "real" && !confirmDeleteMember?.isSupervisor && (
+                      <> from your team? They will be retained as a prior subordinate so you can still access their entries.</>
+                    )}
+                    {confirmDeleteMember?.type === "real" && confirmDeleteMember?.isSupervisor && (
+                      <> as your supervisor?</>
+                    )}
+                    {confirmDeleteMember?.type === "managed" && (
+                      <>? This will permanently remove this managed member.</>
+                    )}
+                    {confirmDeleteMember?.type === "prior_subordinate" && "?"}
+                  </p>
+                  
+                  {confirmDeleteMember?.type === "prior_subordinate" && (
+                    <>
+                      <div className="flex items-center gap-2 p-3 rounded-lg bg-muted">
+                        <input
+                          type="checkbox"
+                          id="deleteWithData"
+                          checked={deleteWithData}
+                          onChange={(e) => setDeleteWithData(e.target.checked)}
+                          className="rounded border-gray-300"
+                        />
+                        <label htmlFor="deleteWithData" className="text-sm cursor-pointer">
+                          Also delete all entries and statements for this member
+                        </label>
+                      </div>
+                      {!deleteWithData && (
+                        <p className="text-xs text-muted-foreground">
+                          If unchecked, the member will be removed but their entries and statements will be preserved.
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={async () => {
+                  if (!confirmDeleteMember) return;
+                  
+                  setIsDeleting(true);
+                  try {
+                    if (confirmDeleteMember.type === "prior_subordinate") {
+                      await deletePriorSubordinate(confirmDeleteMember.id, deleteWithData);
+                    } else if (confirmDeleteMember.type === "managed") {
+                      await removeManagedTeamMember(confirmDeleteMember.id);
+                      setConfirmDeleteMember(null);
+                    } else {
+                      await removeTeamMember(confirmDeleteMember.id, confirmDeleteMember.isSupervisor || false);
+                      setConfirmDeleteMember(null);
+                    }
+                  } finally {
+                    setIsDeleting(false);
+                    setDeleteWithData(false);
+                  }
+                }}
+                disabled={isDeleting}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="mr-2 size-4 animate-spin" />
+                    {confirmDeleteMember?.type === "prior_subordinate" ? "Deleting..." : "Removing..."}
+                  </>
+                ) : (
+                  confirmDeleteMember?.type === "prior_subordinate" ? "Delete" : "Remove"
+                )}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
 
       {/* Pending Requests */}
@@ -1246,12 +1485,55 @@ export default function TeamPage() {
             </CardHeader>
             <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
               {!canSupervise(profile?.rank) ? (
-                <div className="text-center py-6 sm:py-8">
-                  <p className="text-sm sm:text-base text-muted-foreground">
-                    Only SSgt and above can have subordinates.
-                  </p>
-                  <p className="text-xs sm:text-sm text-muted-foreground mt-2">
-                    Current rank: {profile?.rank || "Unknown"}
+                <div className="space-y-4 py-4">
+                  {/* Show supervisor if they have one */}
+                  {supervisors.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Your Supervisor</p>
+                      {supervisors.map((sup) => (
+                        <div
+                          key={sup.id}
+                          className="flex items-center gap-3 p-3 rounded-lg border bg-muted/30"
+                        >
+                          <Avatar className="size-10 shrink-0">
+                            <AvatarFallback>{sup.full_name?.charAt(0) || "?"}</AvatarFallback>
+                          </Avatar>
+                          <div className="min-w-0 flex-1">
+                            <p className="font-medium text-sm truncate">
+                              {sup.rank} {sup.full_name}
+                            </p>
+                            <p className="text-xs text-muted-foreground truncate">{sup.unit}</p>
+                          </div>
+                          <Badge variant="outline" className="shrink-0">Supervisor</Badge>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  
+                  {/* Show current user */}
+                  <div className="space-y-2">
+                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">You</p>
+                    <div className="flex items-center gap-3 p-3 rounded-lg border-2 border-primary/50 bg-primary/5">
+                      <Avatar className="size-10 shrink-0">
+                        <AvatarFallback>{profile?.full_name?.charAt(0) || "?"}</AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-sm truncate">
+                          {profile?.rank} {profile?.full_name}
+                        </p>
+                        <p className="text-xs text-muted-foreground truncate">{profile?.unit}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {supervisors.length === 0 && (
+                    <p className="text-center text-sm text-muted-foreground pt-2">
+                      You don&apos;t have a supervisor yet. Use the &quot;My Supervisors&quot; tab to request one.
+                    </p>
+                  )}
+                  
+                  <p className="text-center text-xs text-muted-foreground border-t pt-4 mt-4">
+                    SSgt and above can add subordinates to their team
                   </p>
                 </div>
               ) : subordinates.length === 0 ? (
@@ -1398,7 +1680,11 @@ export default function TeamPage() {
                               variant="ghost"
                               size="icon"
                               className="size-8 text-destructive shrink-0"
-                              onClick={() => removeManagedTeamMember(member.id)}
+                              onClick={() => setConfirmDeleteMember({
+                                id: member.id,
+                                name: member.full_name || "Unknown",
+                                type: member.member_status === "prior_subordinate" ? "prior_subordinate" : "managed"
+                              })}
                             >
                               <UserX className="size-4" />
                             </Button>

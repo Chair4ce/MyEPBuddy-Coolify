@@ -59,11 +59,12 @@ export default async function AppLayout({
       subordinates = (subProfiles as unknown as Profile[]) || [];
     }
     
-    // Fetch managed members (placeholder subordinates)
+    // Fetch managed members (placeholder subordinates) - exclude archived by default
     const { data: managedData } = await supabase
       .from("team_members")
       .select("*")
       .eq("supervisor_id", user.id)
+      .neq("member_status", "archived")
       .order("full_name", { ascending: true });
     
     managedMembers = (managedData as unknown as ManagedMember[]) || [];
