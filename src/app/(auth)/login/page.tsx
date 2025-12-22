@@ -234,6 +234,7 @@ export default function LoginPage() {
                 required
                 disabled={isLoading}
                 aria-label="Email address"
+                autoComplete="email"
               />
             </div>
             <div className="space-y-2">
@@ -247,6 +248,7 @@ export default function LoginPage() {
                 required
                 disabled={isLoading}
                 aria-label="Password"
+                autoComplete="current-password"
               />
             </div>
             <Button

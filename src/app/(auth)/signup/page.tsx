@@ -280,6 +280,7 @@ export default function SignupPage() {
                   required
                   disabled={isLoading}
                   aria-label="Full name"
+                  autoComplete="name"
                 />
               </div>
               <div className="space-y-2">
@@ -339,6 +340,7 @@ export default function SignupPage() {
                 required
                 disabled={isLoading}
                 aria-label="Email address"
+                autoComplete="email"
               />
             </div>
 
@@ -354,6 +356,7 @@ export default function SignupPage() {
                 minLength={8}
                 disabled={isLoading}
                 aria-label="Password"
+                autoComplete="new-password"
               />
               <p className="text-xs text-muted-foreground">
                 Minimum 8 characters
