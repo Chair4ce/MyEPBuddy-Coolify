@@ -593,22 +593,22 @@ export default function LibraryPage() {
         <TabsList className="w-full grid grid-cols-3 h-auto p-1">
           <TabsTrigger value="my" className="gap-1.5 sm:gap-2 text-xs sm:text-sm py-2">
             <BookMarked className="size-3.5 sm:size-4 shrink-0" />
-            <span className="hidden sm:inline">My </span>Statements
-            <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
+            <span className="hidden sm:inline">My </span>Library
+            <Badge variant="secondary" className="ml-.5 h-5 px-1.5 text-xs">
               {myStatements.length}
             </Badge>
           </TabsTrigger>
           <TabsTrigger value="shared" className="gap-1.5 sm:gap-2 text-xs sm:text-sm py-2">
             <Share2 className="size-3.5 sm:size-4 shrink-0" />
             Shared
-            <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
+            <Badge variant="secondary" className=" h-5 px-1.5 text-xs">
               {sharedStatements.length}
             </Badge>
           </TabsTrigger>
           <TabsTrigger value="community" className="gap-1.5 sm:gap-2 text-xs sm:text-sm py-2">
             <Globe className="size-3.5 sm:size-4 shrink-0" />
             Community
-            <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
+            <Badge variant="secondary" className=" h-5 px-1.5 text-xs">
               {communityStatements.length}
             </Badge>
           </TabsTrigger>
