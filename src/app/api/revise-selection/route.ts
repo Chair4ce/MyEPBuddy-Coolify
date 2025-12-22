@@ -14,7 +14,33 @@ interface ReviseSelectionRequest {
   model: string;
   mode?: "expand" | "compress" | "general"; // expand = longer words, compress = shorter words
   context?: string; // Additional context for revision
+  usedVerbs?: string[]; // Verbs already used in this cycle - avoid repeating
 }
+
+// Overused/cliché verbs that should be avoided unless user explicitly requests them
+const BANNED_VERBS = [
+  "spearheaded",
+  "orchestrated", 
+  "synergized",
+  "leveraged",
+  "impacted",
+  "utilized",
+  "facilitated",
+];
+
+// Strong action verbs to encourage variety
+const RECOMMENDED_VERBS = [
+  "led", "directed", "managed", "executed", "drove", "commanded", "guided",
+  "pioneered", "championed", "transformed", "revolutionized", "modernized",
+  "accelerated", "streamlined", "optimized", "enhanced", "elevated", "strengthened",
+  "secured", "safeguarded", "protected", "defended", "fortified", "hardened",
+  "trained", "mentored", "developed", "coached", "cultivated", "empowered",
+  "resolved", "eliminated", "eradicated", "mitigated", "prevented", "reduced",
+  "delivered", "produced", "generated", "created", "built", "established",
+  "coordinated", "synchronized", "integrated", "unified", "consolidated",
+  "analyzed", "assessed", "evaluated", "identified", "diagnosed", "investigated",
+  "negotiated", "secured", "acquired", "procured", "saved", "recovered",
+];
 
 function getModelProvider(
   modelId: string,
@@ -74,7 +100,10 @@ export async function POST(request: Request) {
     }
 
     const body: ReviseSelectionRequest = await request.json();
-    const { fullStatement, selectedText, selectionStart, selectionEnd, model, mode = "general", context } = body;
+    const { fullStatement, selectedText, selectionStart, selectionEnd, model, mode = "general", context, usedVerbs = [] } = body;
+    
+    // Combine banned verbs with already-used verbs for this session
+    const verbsToAvoid = [...new Set([...BANNED_VERBS, ...usedVerbs.map(v => v.toLowerCase())])];
 
     if (!fullStatement || !selectedText) {
       return NextResponse.json(
@@ -106,7 +135,7 @@ export async function POST(request: Request) {
     const modeInstructions = {
       expand: `**MODE: EXPAND (use longer words to fill more space)**
 Your goal is to make the selected text LONGER by:
-- Using longer, more descriptive words (e.g., "led" → "spearheaded", "cut" → "eliminated", "helped" → "facilitated")
+- Using longer, more descriptive words (e.g., "led" → "directed", "cut" → "eliminated", "made" → "established")
 - Adding impactful adjectives and adverbs where natural
 - Expanding any abbreviations to full words
 - Using more elaborate phrasing while maintaining meaning
@@ -114,27 +143,35 @@ Your goal is to make the selected text LONGER by:
       
       compress: `**MODE: COMPRESS (use shorter words to save space)**
 Your goal is to make the selected text SHORTER by:
-- Using shorter, punchier words (e.g., "spearheaded" → "led", "facilitated" → "helped", "eliminated" → "cut", "approximately" → "about")
+- Using shorter, punchier words (e.g., "orchestrated" → "led", "established" → "built", "eliminated" → "cut", "approximately" → "~")
 - Removing unnecessary filler words while keeping meaning
 - Using more concise phrasing
 - Combining phrases where possible
-- DO NOT use abbreviations - use full words only, just shorter ones
 - Target length: ${Math.round(selectedText.length * 0.65)}-${Math.round(selectedText.length * 0.85)} characters (15-35% shorter)`,
       
-      general: `**MODE: IMPROVE (general quality improvement)**
-Your goal is to improve the selected text while keeping similar length:
-- Strengthen action verbs
+      general: `**MODE: IMPROVE (completely rewrite with fresh perspective)**
+Your goal is to SIGNIFICANTLY transform the selected text:
+- Use a COMPLETELY DIFFERENT opening verb - do not keep the same structure
+- Reframe the accomplishment from a new angle
 - Improve quantification and impact
-- Enhance clarity and flow
-- DO NOT use abbreviations unless they were in the original
+- Each of your 3 alternatives should use DIFFERENT verbs from each other
 - Target length: ~${selectedText.length} characters (within 20% of original)`,
     };
+    
+    // Get available verbs (exclude used ones)
+    const availableVerbs = RECOMMENDED_VERBS.filter(v => !verbsToAvoid.includes(v.toLowerCase()));
 
     const systemPrompt = `You are an expert Air Force writer helping to revise a portion of an award statement (AF Form 1206).
 
-Your task is to rewrite ONLY the selected portion of text while maintaining coherence with the surrounding context.
+Your task is to COMPLETELY REWRITE the selected portion of text with FRESH, VARIED language while maintaining coherence with the surrounding context.
 
 ${modeInstructions[mode]}
+
+**BANNED VERBS - NEVER USE THESE (overused clichés):**
+${verbsToAvoid.map(v => `- "${v}"`).join("\n")}
+
+**RECOMMENDED STRONG VERBS (use these instead):**
+${availableVerbs.slice(0, 20).join(", ")}
 
 **FORBIDDEN PUNCTUATION (DO NOT USE UNDER ANY CIRCUMSTANCES):**
 - Em-dashes: -- (ABSOLUTELY NEVER use these)
@@ -144,12 +181,13 @@ ${modeInstructions[mode]}
 **USE ONLY:** Commas (,) to connect clauses
 
 CRITICAL RULES:
-1. Output ONLY the revised text for the selected portion - no quotes, no explanation
-2. Maintain the same general meaning and tone
-3. Maintain grammatical coherence with surrounding text
-4. NEVER use em-dashes (--) - use COMMAS instead to connect clauses
-5. NEVER use semicolons or slashes
-6. If the selection starts at the beginning of the statement and includes "- ", preserve the "- " prefix`;
+1. NEVER use any verb from the BANNED list - these are overused Air Force clichés
+2. Each of your 3 alternatives MUST use DIFFERENT opening verbs from each other
+3. Output ONLY the revised text for the selected portion - no quotes, no explanation
+4. Maintain the same general meaning but with FRESH phrasing
+5. Maintain grammatical coherence with surrounding text
+6. NEVER use em-dashes (--) - use COMMAS instead to connect clauses
+7. If the selection starts at the beginning of the statement and includes "- ", preserve the "- " prefix`;
 
     const userPrompt = `FULL STATEMENT FOR CONTEXT:
 "${fullStatement}"

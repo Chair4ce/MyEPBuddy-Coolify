@@ -7,7 +7,8 @@ import { generateText } from "ai";
 import { NextResponse } from "next/server";
 import { DEFAULT_ACRONYMS, formatAcronymsList } from "@/lib/default-acronyms";
 import { formatAbbreviationsList } from "@/lib/default-abbreviations";
-import { STANDARD_MGAS } from "@/lib/constants";
+import { STANDARD_MGAS, DEFAULT_MPA_DESCRIPTIONS, formatMPAContext } from "@/lib/constants";
+import type { MPADescriptions } from "@/types/database";
 import type { Rank, WritingStyle, UserLLMSettings, MajorGradedArea, Acronym, Abbreviation } from "@/types/database";
 
 interface AccomplishmentData {
@@ -16,6 +17,15 @@ interface AccomplishmentData {
   details: string;
   impact: string;
   metrics?: string | null;
+}
+
+interface CustomContextOptions {
+  statementCount: 1 | 2;
+  impactFocus?: "time" | "cost" | "resources";
+  customDirection?: string;
+  // For 2 statements mode
+  customContext2?: string;
+  impactFocus2?: "time" | "cost" | "resources";
 }
 
 interface GenerateRequest {
@@ -29,7 +39,36 @@ interface GenerateRequest {
   communityAfscFilter?: string | null; // null = use ratee's AFSC, or specific AFSC
   accomplishments: AccomplishmentData[];
   selectedMPAs?: string[]; // Optional - if not provided, generate for all MPAs with entries
+  customContext?: string; // Optional - raw text to generate from instead of accomplishments
+  customContextOptions?: CustomContextOptions; // Options for custom context generation
+  usedVerbs?: string[]; // Verbs already used in this cycle - avoid repeating
+  generatePerAccomplishment?: boolean; // When true, generate one full statement per accomplishment
 }
+
+// Overused/cliché verbs that should be avoided
+const BANNED_VERBS = [
+  "spearheaded",
+  "orchestrated", 
+  "synergized",
+  "leveraged",
+  "impacted",
+  "utilized",
+  "facilitated",
+];
+
+// Strong action verbs organized by category for variety
+const VERB_POOL = {
+  leadership: ["led", "directed", "managed", "commanded", "guided", "championed", "drove"],
+  transformation: ["transformed", "revolutionized", "modernized", "pioneered", "innovated", "overhauled"],
+  improvement: ["accelerated", "streamlined", "optimized", "enhanced", "elevated", "strengthened", "bolstered"],
+  security: ["secured", "safeguarded", "protected", "defended", "fortified", "hardened", "shielded"],
+  development: ["trained", "mentored", "developed", "coached", "cultivated", "empowered", "groomed"],
+  problemSolving: ["resolved", "eliminated", "eradicated", "mitigated", "prevented", "reduced", "corrected"],
+  creation: ["delivered", "produced", "generated", "created", "built", "established", "launched"],
+  coordination: ["coordinated", "synchronized", "integrated", "unified", "consolidated", "aligned"],
+  analysis: ["analyzed", "assessed", "evaluated", "identified", "diagnosed", "investigated", "audited"],
+  acquisition: ["negotiated", "acquired", "procured", "saved", "recovered", "reclaimed", "captured"],
+};
 
 interface ExampleStatement {
   mpa: string;
@@ -50,10 +89,10 @@ const DEFAULT_SETTINGS: Partial<UserLLMSettings> = {
     A1C: { primary: ["Executed", "Performed", "Supported"], secondary: ["Assisted", "Contributed", "Maintained"] },
     SrA: { primary: ["Executed", "Coordinated", "Managed"], secondary: ["Led", "Supervised", "Trained"] },
     SSgt: { primary: ["Led", "Managed", "Directed"], secondary: ["Supervised", "Coordinated", "Developed"] },
-    TSgt: { primary: ["Led", "Managed", "Directed"], secondary: ["Spearheaded", "Orchestrated", "Championed"] },
-    MSgt: { primary: ["Directed", "Spearheaded", "Orchestrated"], secondary: ["Championed", "Transformed", "Pioneered"] },
-    SMSgt: { primary: ["Spearheaded", "Orchestrated", "Championed"], secondary: ["Transformed", "Pioneered", "Revolutionized"] },
-    CMSgt: { primary: ["Championed", "Transformed", "Pioneered"], secondary: ["Revolutionized", "Institutionalized", "Shaped"] },
+    TSgt: { primary: ["Led", "Managed", "Directed"], secondary: ["Drove", "Championed", "Guided"] },
+    MSgt: { primary: ["Directed", "Championed", "Drove"], secondary: ["Transformed", "Pioneered", "Modernized"] },
+    SMSgt: { primary: ["Directed", "Championed", "Drove"], secondary: ["Transformed", "Pioneered", "Revolutionized"] },
+    CMSgt: { primary: ["Championed", "Transformed", "Pioneered"], secondary: ["Revolutionized", "Shaped", "Architected"] },
   },
   style_guidelines: "MAXIMIZE character usage (aim for 280-350 chars). Write in active voice. Chain impacts: action → immediate result → organizational benefit. Always quantify: numbers, percentages, dollars, time, personnel. Connect to mission readiness, compliance, or strategic goals. Use standard AF abbreviations for efficiency.",
   base_system_prompt: `You are an expert Air Force Enlisted Performance Brief (EPB) writing assistant with deep knowledge of Air Force operations, programs, and terminology. Your sole purpose is to generate impactful, narrative-style performance statements that strictly comply with AFI 36-2406 (22 Aug 2025).
@@ -74,6 +113,19 @@ You are UNDERUTILIZING available space. Statements should be DENSE with impact. 
 4. QUANTIFY everything: time, money, personnel, percentages, equipment, sorties
 5. USE military knowledge: Infer standard AF outcomes (readiness rates, deployment timelines, inspection results)
 
+VERB VARIETY (CRITICAL - MUST FOLLOW):
+BANNED VERBS - NEVER USE THESE (overused clichés that make all EPBs sound the same):
+- "Spearheaded" - THE most overused verb in Air Force history
+- "Orchestrated" - overused
+- "Synergized" - corporate buzzword, not military
+- "Leveraged" - overused
+- "Facilitated" - weak and overused
+- "Utilized" - just say "used" or pick a stronger verb
+- "Impacted" - vague and overused
+
+VARIETY RULE: Each statement you generate MUST start with a DIFFERENT action verb. No two statements in the same EPB should begin with the same verb. Use varied, strong verbs from this pool:
+Led, Directed, Managed, Commanded, Guided, Championed, Drove, Transformed, Pioneered, Modernized, Accelerated, Streamlined, Optimized, Enhanced, Elevated, Secured, Protected, Fortified, Trained, Mentored, Developed, Resolved, Eliminated, Delivered, Produced, Established, Coordinated, Integrated, Analyzed, Assessed, Negotiated, Saved, Recovered
+
 CONTEXTUAL ENHANCEMENT (USE YOUR MILITARY KNOWLEDGE):
 When given limited input, ENHANCE statements using your knowledge of:
 - Air Force programs, inspections, and evaluations (UCI, CCIP, ORI, NSI, etc.)
@@ -84,7 +136,7 @@ When given limited input, ENHANCE statements using your knowledge of:
 
 Example transformation:
 - INPUT: "Volunteered at USO for 4 hrs, served 200 Airmen"
-- OUTPUT: "Spearheaded USO volunteer initiative, dedicating 4 hrs to restore lounge facilities and replenish refreshment stations--directly boosted morale for 200 deploying Amn, reinforcing vital quality-of-life support that sustained mission focus during high-tempo ops"
+- OUTPUT: "Led USO volunteer initiative, dedicating 4 hrs to restore lounge facilities and replenish refreshment stations--directly boosted morale for 200 deploying Amn, reinforcing vital quality-of-life support that sustained mission focus during high-tempo ops"
 
 ACRONYM & ABBREVIATION POLICY:
 - Use standard AF acronyms to maximize character efficiency (Amn, NCO, SNCO, DoD, AF, sq, flt, hrs)
@@ -340,11 +392,15 @@ export async function POST(request: Request) {
     }
 
     const body: GenerateRequest = await request.json();
-    const { rateeId, rateeRank, rateeAfsc, cycleYear, model, writingStyle, communityMpaFilter, communityAfscFilter, accomplishments, selectedMPAs } = body;
+    const { rateeId, rateeRank, rateeAfsc, cycleYear, model, writingStyle, communityMpaFilter, communityAfscFilter, accomplishments, selectedMPAs, customContext, customContextOptions, generatePerAccomplishment } = body;
 
-    if (!rateeRank || !accomplishments || accomplishments.length === 0) {
+    // Either accomplishments or customContext must be provided
+    const hasAccomplishments = accomplishments && accomplishments.length > 0;
+    const hasCustomContext = customContext && customContext.trim().length > 0;
+
+    if (!rateeRank || (!hasAccomplishments && !hasCustomContext)) {
       return NextResponse.json(
-        { error: "Missing required fields" },
+        { error: "Missing required fields - provide accomplishments or custom context" },
         { status: 400 }
       );
     }
@@ -391,8 +447,8 @@ export async function POST(request: Request) {
     const systemPrompt = buildSystemPrompt(settings, rateeRank, examples);
     const modelProvider = getModelProvider(model, userKeys);
 
-    // Group accomplishments by MPA
-    const accomplishmentsByMPA = accomplishments.reduce(
+    // Group accomplishments by MPA (only if not using custom context)
+    const accomplishmentsByMPA = hasCustomContext ? {} : accomplishments.reduce(
       (acc, a) => {
         if (!acc[a.mpa]) acc[a.mpa] = [];
         acc[a.mpa].push(a);
@@ -403,7 +459,9 @@ export async function POST(request: Request) {
 
     // Always use standard MPAs for all users
     const maxChars = settings.max_characters_per_statement || 350;
-    const results: { mpa: string; statements: string[]; historyIds: string[] }[] = [];
+    const maxHlrChars = 250; // HLR has a smaller character limit
+    const mpaDescriptions: MPADescriptions = (settings as { mpa_descriptions?: MPADescriptions }).mpa_descriptions || DEFAULT_MPA_DESCRIPTIONS;
+    const results: { mpa: string; statements: string[]; historyIds: string[]; relevancyScore?: number }[] = [];
 
     // Determine which MPAs to generate for
     const mpasToGenerate = selectedMPAs && selectedMPAs.length > 0 
@@ -412,25 +470,218 @@ export async function POST(request: Request) {
 
     // Generate statements for each selected MPA
     for (const mpa of mpasToGenerate) {
-      // Special handling for HLR Assessment - uses ALL accomplishments
+      // Special handling for HLR Assessment - uses ALL accomplishments or custom context
       const isHLR = mpa.key === "hlr_assessment";
       const mpaAccomplishments = isHLR ? accomplishments : (accomplishmentsByMPA[mpa.key] || []);
 
-      if (mpaAccomplishments.length === 0 && !isHLR) {
+      // Skip if no source material (unless using custom context)
+      if (!hasCustomContext && mpaAccomplishments.length === 0 && !isHLR) {
         continue;
       }
 
-      // Skip HLR if no accomplishments at all
-      if (isHLR && accomplishments.length === 0) {
+      // Skip HLR if no accomplishments at all (but allow with custom context)
+      if (!hasCustomContext && isHLR && accomplishments.length === 0) {
         continue;
       }
 
       const mpaExamples = examples.filter((e) => e.mpa === mpa.key);
 
-      // Build different prompts for HLR vs regular MPAs
+      // Build different prompts based on source type (custom context vs accomplishments) and MPA type
       let userPrompt: string;
       
-      if (isHLR) {
+      // Calculate character limits (HLR has smaller limit)
+      const effectiveMaxChars = isHLR ? maxHlrChars : maxChars;
+      
+      if (hasCustomContext) {
+        // Custom context mode - use the raw text as source material
+        // Get options with defaults
+        const stmtCount = customContextOptions?.statementCount || 1;
+        const impactFocus = customContextOptions?.impactFocus;
+        const impactFocus2 = customContextOptions?.impactFocus2;
+        const customContext2 = customContextOptions?.customContext2;
+        const customDir = customContextOptions?.customDirection;
+        
+        // Helper function to build impact instruction
+        const buildImpactInstruction = (focus: string | undefined, stmtNum?: number) => {
+          const prefix = stmtNum ? `STATEMENT ${stmtNum} ` : "";
+          if (focus === "time") {
+            return `
+${prefix}IMPACT FOCUS - TIME SAVINGS (REQUIRED):
+The primary impact MUST emphasize TIME SAVINGS. Frame around:
+- Hours/days/weeks saved, faster processing, efficiency gains
+- Use phrases like: "cut processing by X hrs", "accelerated timeline by X days"`;
+          } else if (focus === "cost") {
+            return `
+${prefix}IMPACT FOCUS - COST SAVINGS (REQUIRED):
+The primary impact MUST emphasize COST SAVINGS. Frame around:
+- Dollar amounts saved, budget optimization, cost avoidance
+- Use phrases like: "saved $X", "avoided $X in costs", "optimized $X budget"`;
+          } else if (focus === "resources") {
+            return `
+${prefix}IMPACT FOCUS - RESOURCE EFFICIENCY (REQUIRED):
+The primary impact MUST emphasize RESOURCE EFFICIENCY. Frame around:
+- Manpower optimization, asset utilization, capacity improvements
+- Use phrases like: "optimized X assets", "reduced manpower by X%", "consolidated X into Y"`;
+          }
+          return "";
+        };
+        
+        // Build custom direction instruction
+        const customDirInstruction = customDir 
+          ? `\nUSER DIRECTION (FOLLOW THIS GUIDANCE):\n${customDir}\n`
+          : "";
+        
+        // Calculate character limits for 2 statement mode
+        const charLimitPerStatement = stmtCount === 2 ? Math.floor(effectiveMaxChars / 2) : effectiveMaxChars;
+        const charLimitText = stmtCount === 2 
+          ? `CRITICAL: Both statements SHARE a ${effectiveMaxChars} character limit. Each statement should be ~${charLimitPerStatement} characters (max ${charLimitPerStatement + 20} each).`
+          : `TARGET: Statement should be ${Math.floor(effectiveMaxChars * 0.8)}-${effectiveMaxChars} characters.`;
+        
+        // Get MPA context for relevancy guidance
+        const mpaContext = formatMPAContext(mpa.key, mpaDescriptions);
+        const mpaContextSection = mpaContext ? `
+=== MPA CONTEXT (${mpa.label}) ===
+${mpaContext}
+
+Assess how well the input aligns with this MPA. After generating statements, provide a RELEVANCY_SCORE (0-100) indicating how well the accomplishment fits this MPA.
+` : "";
+        
+        if (stmtCount === 2 && customContext2) {
+          // TWO STATEMENTS MODE - Separate contexts with shared character limit
+          const impact1Instruction = buildImpactInstruction(impactFocus, 1);
+          const impact2Instruction = buildImpactInstruction(impactFocus2, 2);
+          
+          if (isHLR) {
+            userPrompt = `REWRITE and TRANSFORM 2 pieces of raw input into HIGH-DENSITY Higher Level Reviewer (HLR) Assessment statements from the Commander's perspective.
+
+RATEE: ${rateeRank} | AFSC: ${rateeAfsc || "N/A"}
+
+${charLimitText}
+
+=== RAW INPUT 1 (REWRITE THIS - DO NOT COPY VERBATIM) ===
+${customContext}
+${impact1Instruction}
+
+=== RAW INPUT 2 (REWRITE THIS - DO NOT COPY VERBATIM) ===
+${customContext2}
+${impact2Instruction}
+${customDirInstruction}
+HLR TRANSFORMATION REQUIREMENTS:
+1. DO NOT copy input verbatim - REWRITE with Commander's voice and improved structure
+2. Generate 2 DISTINCT statements - one from each source context
+3. Both statements COMBINED must fit within ${effectiveMaxChars} characters (~${charLimitPerStatement} each)
+4. Write from the Commander's perspective - strategic endorsement
+5. Use definitive language: "My top performer", "Ready for immediate promotion"
+6. Convert any dashes (--) to commas for proper format
+7. Each statement: [Strategic assessment] + [Accomplishment] + [Impact] + [Recommendation]
+
+Format as JSON array:
+["Rewritten statement 1", "Rewritten statement 2"]`;
+          } else {
+            // Regular MPA with 2 statements
+            userPrompt = `REWRITE and TRANSFORM 2 pieces of raw input into HIGH-DENSITY EPB narrative statements for the "${mpa.label}" Major Performance Area.
+
+RATEE: ${rateeRank} | AFSC: ${rateeAfsc || "N/A"}
+
+${charLimitText}
+${mpaContextSection}
+=== RAW INPUT 1 (REWRITE THIS - DO NOT COPY VERBATIM) ===
+${customContext}
+${impact1Instruction}
+
+=== RAW INPUT 2 (REWRITE THIS - DO NOT COPY VERBATIM) ===
+${customContext2}
+${impact2Instruction}
+${customDirInstruction}
+${mpaExamples.length > 0 ? `
+EXAMPLE STATEMENTS (match this density and transformation style):
+${mpaExamples.slice(0, 2).map((e, i) => `${i + 1}. ${e.statement}`).join("\n")}
+` : ""}
+
+CRITICAL TRANSFORMATION REQUIREMENTS:
+1. DO NOT copy the input verbatim - you MUST rewrite and improve each statement
+2. TRANSFORM the raw input into polished EPB narrative format
+3. Both statements COMBINED must fit within ${effectiveMaxChars} characters (~${charLimitPerStatement} each)
+4. Restructure content: [Strong action verb] + [Specific scope/scale] + [Immediate result] + [Strategic mission impact]
+5. Replace weak phrasing with powerful action-oriented language
+6. Convert any dashes (--) to commas for proper EPB format
+7. Enhance metrics presentation and impact quantification
+8. Even if input looks polished, REWRITE it with improved structure and flow
+
+BANNED VERBS - NEVER USE:
+"Spearheaded", "Orchestrated", "Synergized", "Leveraged", "Facilitated", "Utilized", "Impacted"
+Use strong alternatives: Led, Directed, Managed, Drove, Championed, Transformed, Pioneered, Accelerated, Streamlined, Secured, Fortified
+
+VERB VARIETY: Each statement MUST start with a DIFFERENT action verb. Never repeat verbs.
+
+RELEVANCY: Rate how well this accomplishment fits "${mpa.label}" on a scale of 0-100.
+
+Format as JSON object:
+{"statements": ["Rewritten statement 1", "Rewritten statement 2"], "relevancy_score": 85}`;
+          }
+        } else {
+          // SINGLE STATEMENT MODE
+          const impactInstruction = buildImpactInstruction(impactFocus);
+          
+          if (isHLR) {
+            userPrompt = `REWRITE and TRANSFORM the raw input into a HIGH-DENSITY Higher Level Reviewer (HLR) Assessment statement from the Commander's perspective.
+
+RATEE: ${rateeRank} | AFSC: ${rateeAfsc || "N/A"}
+
+=== RAW INPUT (REWRITE THIS - DO NOT COPY VERBATIM) ===
+${customContext}
+${impactInstruction}
+${customDirInstruction}
+HLR TRANSFORMATION REQUIREMENTS:
+1. DO NOT copy input verbatim - REWRITE with Commander's voice and improved structure
+2. ${charLimitText}
+3. Write from the Commander's perspective - strategic endorsement
+4. Synthesize performance into a cohesive narrative
+5. Use definitive language: "My top performer", "Ready for immediate promotion"
+6. Convert any dashes (--) to commas for proper format
+
+BANNED: "Spearheaded", "Orchestrated", "Synergized", "Leveraged", "Facilitated"
+
+STRUCTURE:
+[Strategic assessment] + [Key accomplishment synthesis] + [Cascading impact] + [Promotion recommendation]
+
+Format as JSON array:
+["Rewritten HLR statement"]`;
+          } else {
+            // Regular MPA with single statement
+            userPrompt = `REWRITE and TRANSFORM the raw input into a HIGH-DENSITY EPB narrative statement for the "${mpa.label}" Major Performance Area.
+
+RATEE: ${rateeRank} | AFSC: ${rateeAfsc || "N/A"}
+${mpaContextSection}
+=== RAW INPUT (REWRITE THIS - DO NOT COPY VERBATIM) ===
+${customContext}
+${impactInstruction}
+${customDirInstruction}
+
+${mpaExamples.length > 0 ? `
+EXAMPLE STATEMENT (match this transformation quality):
+${mpaExamples[0].statement}
+` : ""}
+
+TRANSFORMATION REQUIREMENTS:
+1. ${charLimitText}
+2. DO NOT copy input verbatim - REWRITE with improved structure and stronger action verbs
+3. Convert any dashes (--) to commas for proper EPB format
+4. Focus on accomplishments that relate to "${mpa.label}"
+5. STRUCTURE: [Strong action verb] + [Specific scope/scale] + [Immediate result] + [Strategic mission impact]
+6. CHAIN impacts: "achieved X, enabling Y, which drove Z"
+7. Enhance metrics presentation and quantify impact
+
+BANNED VERBS - NEVER USE: "Spearheaded", "Orchestrated", "Synergized", "Leveraged", "Facilitated", "Utilized"
+Use strong alternatives: Led, Directed, Drove, Championed, Transformed, Pioneered, Accelerated, Streamlined
+
+RELEVANCY: Rate how well this accomplishment fits "${mpa.label}" on a scale of 0-100.
+
+Format as JSON object:
+{"statements": ["Rewritten statement"], "relevancy_score": 85}`;
+          }
+        }
+      } else if (isHLR) {
         // HLR-specific prompt - Commander's perspective, holistic assessment
         userPrompt = `Generate 2-3 HIGH-DENSITY Higher Level Reviewer (HLR) Assessment statements from the Commander's perspective.
 
@@ -447,7 +698,7 @@ ${accomplishments
   .join("")}
 
 HLR ASSESSMENT REQUIREMENTS:
-1. TARGET: Each statement should be 280-${maxChars} characters. MAXIMIZE character usage.
+1. TARGET: Each statement should be ${Math.floor(effectiveMaxChars * 0.8)}-${effectiveMaxChars} characters. MAXIMIZE character usage.
 2. Write from the Commander's perspective - this is the senior leader's strategic endorsement
 3. Synthesize OVERALL performance across all MPAs into a cohesive narrative
 4. Use your Air Force knowledge to:
@@ -460,14 +711,109 @@ STRUCTURE EACH STATEMENT:
 [Strategic assessment] + [Key accomplishment synthesis] + [Cascading organizational impact] + [Promotion recommendation]
 
 EXAMPLE (328 chars):
-"My #1 of 47 SSgts--unmatched technical expertise and leadership acumen drove 100% mission success rate across 12 contingency ops; mentored 8 Amn to BTZ while spearheading $2.3M equipment modernization that enhanced sq combat capability 40%--my strongest recommendation for TSgt, ready to lead at flight level"
+"My #1 of 47 SSgts--unmatched technical expertise and leadership acumen drove 100% mission success rate across 12 contingency ops; mentored 8 Amn to BTZ while directing $2.3M equipment modernization that enhanced sq combat capability 40%--my strongest recommendation for TSgt, ready to lead at flight level"
 
-Generate EXACTLY 2-3 statements. Each MUST be 280-${maxChars} characters.
+BANNED: "Spearheaded", "Orchestrated", "Synergized", "Leveraged", "Facilitated" - Use varied alternatives
+
+Generate EXACTLY 2-3 statements. Each MUST be ${Math.floor(effectiveMaxChars * 0.8)}-${effectiveMaxChars} characters.
 
 Format as JSON array only:
 ["Statement 1", "Statement 2", "Statement 3"]`;
+      } else if (generatePerAccomplishment) {
+        // PER-ACCOMPLISHMENT MODE: Generate ONE full statement per accomplishment
+        // This allows users to select which statements to combine later
+        const allStatements: string[] = [];
+        const allHistoryIds: string[] = [];
+        const accomplishmentSources: { index: number; actionVerb: string; details: string }[] = [];
+        
+        for (let accIdx = 0; accIdx < mpaAccomplishments.length; accIdx++) {
+          const acc = mpaAccomplishments[accIdx];
+          
+          const perAccPrompt = `Generate ONE HIGH-DENSITY EPB narrative statement for the "${mpa.label}" Major Performance Area.
+
+RATEE: ${rateeRank} | AFSC: ${rateeAfsc || "N/A"}
+
+SOURCE ACCOMPLISHMENT:
+Action: ${acc.action_verb}
+Details: ${acc.details}
+Impact: ${acc.impact}
+${acc.metrics ? `Metrics: ${acc.metrics}` : ""}
+
+${mpaExamples.length > 0 ? `
+EXAMPLE STATEMENTS (match this density and style):
+${mpaExamples.slice(0, 2).map((e, i) => `${i + 1}. ${e.statement}`).join("\n")}
+` : ""}
+
+CRITICAL REQUIREMENTS:
+1. TARGET: Statement MUST be ${Math.floor(effectiveMaxChars * 0.45)}-${Math.floor(effectiveMaxChars * 0.55)} characters (aim for ~${Math.floor(effectiveMaxChars / 2)} chars).
+   This statement may be combined with another, so keep it focused but complete.
+2. EXPAND the input using your Air Force knowledge:
+   - Infer standard military outcomes (readiness, compliance, mission success)
+   - Add organizational context (flight, squadron, wing impact)
+   - Include reasonable metrics if none provided
+3. STRUCTURE: [Action] + [Accomplishment with context] + [Impact chain]
+4. This is a COMPLETE statement on its own - not a fragment
+
+BANNED VERBS: "Spearheaded", "Orchestrated", "Synergized", "Leveraged", "Facilitated"
+Use strong alternatives: Led, Directed, Drove, Championed, Transformed, Pioneered
+
+Output ONLY the statement text, no quotes or JSON.`;
+
+          try {
+            const { text: accText } = await generateText({
+              model: modelProvider,
+              system: systemPrompt,
+              prompt: perAccPrompt,
+              temperature: 0.7,
+              maxTokens: 500,
+            });
+            
+            const cleanedStatement = accText.trim().replace(/^["']|["']$/g, "");
+            if (cleanedStatement.length > 30) {
+              allStatements.push(cleanedStatement);
+              accomplishmentSources.push({
+                index: accIdx,
+                actionVerb: acc.action_verb,
+                details: acc.details.substring(0, 50) + (acc.details.length > 50 ? "..." : ""),
+              });
+              
+              // Save to history
+              const { data: historyData } = await supabase
+                .from("statement_history")
+                .insert({
+                  user_id: user.id,
+                  ratee_id: rateeId,
+                  mpa: mpa.key,
+                  afsc: rateeAfsc || "UNKNOWN",
+                  rank: rateeRank,
+                  statement: cleanedStatement,
+                  model_used: model,
+                  cycle_year: cycleYear,
+                  is_draft: true,
+                })
+                .select("id")
+                .single();
+              
+              if (historyData) {
+                allHistoryIds.push(historyData.id);
+              }
+            }
+          } catch (accError) {
+            console.error(`Error generating for accomplishment ${accIdx}:`, accError);
+          }
+        }
+        
+        if (allStatements.length > 0) {
+          results.push({
+            mpa: mpa.key,
+            statements: allStatements,
+            historyIds: allHistoryIds,
+            accomplishmentSources, // Include source info for UI display
+          } as { mpa: string; statements: string[]; historyIds: string[]; relevancyScore?: number });
+        }
+        continue; // Skip the normal generation flow below
       } else {
-        // Regular MPA prompt
+        // Regular MPA prompt - combine accomplishments into 2-3 statements
         userPrompt = `Generate 2-3 HIGH-DENSITY EPB narrative statements for the "${mpa.label}" Major Performance Area.
 
 RATEE: ${rateeRank} | AFSC: ${rateeAfsc || "N/A"}
@@ -490,7 +836,7 @@ ${mpaExamples.map((e, i) => `${i + 1}. ${e.statement}`).join("\n")}
 ` : ""}
 
 CRITICAL REQUIREMENTS:
-1. TARGET: Each statement should be 280-${maxChars} characters. DO NOT write short statements.
+1. TARGET: Each statement should be ${Math.floor(effectiveMaxChars * 0.8)}-${effectiveMaxChars} characters. DO NOT write short statements.
 2. EXPAND limited inputs using your Air Force knowledge:
    - Infer standard military outcomes (readiness, compliance, mission success)
    - Add organizational context (flight, squadron, wing impact)
@@ -503,7 +849,7 @@ TRANSFORMATION EXAMPLE:
 - Input: "Volunteered at USO, served snacks"
 - Output (320 chars): "Orchestrated USO volunteer support operations, dedicating off-duty hours to revitalize lounge facilities and replenish refreshment stations--bolstered morale for 200+ transiting Amn during peak deployment cycle, directly supporting installation's quality-of-life mission"
 
-Generate EXACTLY 2-3 statements. Each MUST be 280-${maxChars} characters.
+Generate EXACTLY 2-3 statements. Each MUST be ${Math.floor(effectiveMaxChars * 0.8)}-${effectiveMaxChars} characters.
 
 Format as JSON array only:
 ["Statement 1", "Statement 2", "Statement 3"]`;
@@ -519,17 +865,29 @@ Format as JSON array only:
         });
 
         let statements: string[] = [];
+        let relevancyScore: number | undefined;
+        
         try {
-          const jsonMatch = text.match(/\[[\s\S]*\]/);
-          if (jsonMatch) {
-            statements = JSON.parse(jsonMatch[0]);
+          // Try to parse as JSON object with statements and relevancy_score
+          const jsonObjMatch = text.match(/\{[\s\S]*"statements"[\s\S]*\}/);
+          if (jsonObjMatch) {
+            const parsed = JSON.parse(jsonObjMatch[0]);
+            statements = parsed.statements || [];
+            relevancyScore = typeof parsed.relevancy_score === "number" ? parsed.relevancy_score : undefined;
           } else {
-            statements = text
-              .split("\n")
-              .filter((line) => line.trim().length > 50)
-              .slice(0, 3);
+            // Fallback: try to parse as array
+            const jsonArrayMatch = text.match(/\[[\s\S]*\]/);
+            if (jsonArrayMatch) {
+              statements = JSON.parse(jsonArrayMatch[0]);
+            } else {
+              statements = text
+                .split("\n")
+                .filter((line) => line.trim().length > 50)
+                .slice(0, 3);
+            }
           }
         } catch {
+          // Final fallback: extract lines
           statements = text
             .split("\n")
             .filter((line) => line.trim().length > 50)
@@ -560,7 +918,7 @@ Format as JSON array only:
             }
           }
 
-          results.push({ mpa: mpa.key, statements, historyIds });
+          results.push({ mpa: mpa.key, statements, historyIds, relevancyScore });
         }
       } catch (error) {
         console.error(`Error generating for ${mpa.key}:`, error);

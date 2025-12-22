@@ -258,6 +258,19 @@ export interface AwardSentencesPerCategory {
   managing_resources: number;
 }
 
+// MPA Description with sub-competencies for relevancy scoring
+export interface MPASubCompetency {
+  [key: string]: string;
+}
+
+export interface MPADescription {
+  title: string;
+  description: string;
+  sub_competencies: MPASubCompetency;
+}
+
+export type MPADescriptions = Record<string, MPADescription>;
+
 export interface UserLLMSettings {
   id: string;
   user_id: string;
@@ -271,6 +284,8 @@ export interface UserLLMSettings {
   base_system_prompt: string;
   acronyms: Acronym[];
   abbreviations: Abbreviation[];
+  // MPA descriptions with sub-competencies for AI guidance
+  mpa_descriptions: MPADescriptions;
   // Award-specific settings (AF Form 1206)
   award_system_prompt: string;
   award_abbreviations: Abbreviation[];

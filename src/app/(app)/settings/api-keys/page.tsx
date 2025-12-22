@@ -268,23 +268,7 @@ export default function APIKeysPage() {
               </p>
               <p className="text-sm text-blue-700 dark:text-blue-300">
                 API keys are encrypted before storage and only used server-side during
-                generation requests. They are never logged, displayed, or sent to your browser.
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="border-amber-200 dark:border-amber-900/50 bg-amber-50/50 dark:bg-amber-950/20">
-        <CardContent className="">
-          <div className="flex gap-3">
-            <ShieldAlert className="size-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-amber-900 dark:text-amber-100">
-                Keys cannot be viewed after saving
-              </p>
-              <p className="text-sm text-amber-700 dark:text-amber-300">
-                For security, saved API keys are never displayed or retrieved. If you need to change a key, delete it first and add a new one.
+                generation requests. They are never logged, displayed, or sent to your browser. If you need to change a key, delete it first and add a new one.
               </p>
             </div>
           </div>

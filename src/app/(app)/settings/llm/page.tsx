@@ -68,9 +68,10 @@ import {
   Wand2,
   Search,
   ArrowRight,
+  Target,
 } from "lucide-react";
-import type { UserLLMSettings, Acronym, Abbreviation, RankVerbProgression, AwardSentencesPerCategory } from "@/types/database";
-import { RANKS, STANDARD_MGAS, AWARD_1206_CATEGORIES, DEFAULT_AWARD_SENTENCES } from "@/lib/constants";
+import type { UserLLMSettings, Acronym, Abbreviation, RankVerbProgression, AwardSentencesPerCategory, MPADescriptions } from "@/types/database";
+import { RANKS, STANDARD_MGAS, AWARD_1206_CATEGORIES, DEFAULT_AWARD_SENTENCES, DEFAULT_MPA_DESCRIPTIONS, ENTRY_MGAS } from "@/lib/constants";
 import { Award } from "lucide-react";
 
 const DEFAULT_SYSTEM_PROMPT = `You are an expert Air Force Enlisted Performance Brief (EPB) writing assistant with deep knowledge of Air Force operations, programs, and terminology. Your sole purpose is to generate impactful, narrative-style performance statements that strictly comply with AFI 36-2406 (22 Aug 2025).
@@ -686,6 +687,8 @@ interface SettingsState {
   rankVerbs: RankVerbProgression;
   acronyms: Acronym[];
   abbreviations: Abbreviation[];
+  // MPA descriptions for relevancy scoring
+  mpaDescriptions: MPADescriptions;
   // Award settings
   awardSystemPrompt: string;
   awardAbbreviations: Abbreviation[];
@@ -711,6 +714,9 @@ export default function LLMSettingsPage() {
   const [rankVerbs, setRankVerbs] = useState<RankVerbProgression>(DEFAULT_RANK_VERBS);
   const [acronyms, setAcronyms] = useState<Acronym[]>(DEFAULT_ACRONYMS);
   const [abbreviations, setAbbreviations] = useState<Abbreviation[]>([]);
+  
+  // MPA descriptions for relevancy scoring
+  const [mpaDescriptions, setMpaDescriptions] = useState<MPADescriptions>(DEFAULT_MPA_DESCRIPTIONS);
   
   // Award-specific settings
   const [awardSystemPrompt, setAwardSystemPrompt] = useState(DEFAULT_AWARD_SYSTEM_PROMPT);
@@ -746,12 +752,13 @@ export default function LLMSettingsPage() {
       JSON.stringify(rankVerbs) !== JSON.stringify(initialState.rankVerbs) ||
       JSON.stringify(acronyms) !== JSON.stringify(initialState.acronyms) ||
       JSON.stringify(abbreviations) !== JSON.stringify(initialState.abbreviations) ||
+      JSON.stringify(mpaDescriptions) !== JSON.stringify(initialState.mpaDescriptions) ||
       awardSystemPrompt !== initialState.awardSystemPrompt ||
       JSON.stringify(awardAbbreviations) !== JSON.stringify(initialState.awardAbbreviations) ||
       awardStyleGuidelines !== initialState.awardStyleGuidelines ||
       JSON.stringify(awardSentencesPerCategory) !== JSON.stringify(initialState.awardSentencesPerCategory)
     );
-  }, [maxChars, scodDate, cycleYear, styleGuidelines, systemPrompt, rankVerbs, acronyms, abbreviations, awardSystemPrompt, awardAbbreviations, awardStyleGuidelines, awardSentencesPerCategory, isLoading, initialState]);
+  }, [maxChars, scodDate, cycleYear, styleGuidelines, systemPrompt, rankVerbs, acronyms, abbreviations, mpaDescriptions, awardSystemPrompt, awardAbbreviations, awardStyleGuidelines, awardSentencesPerCategory, isLoading, initialState]);
 
   // Warn user before leaving with unsaved changes (browser close/refresh)
   useEffect(() => {
@@ -846,6 +853,10 @@ export default function LLMSettingsPage() {
         setAcronyms(loadedAcronyms);
         setAbbreviations(loadedAbbreviations);
 
+        // Load MPA descriptions
+        const loadedMpaDescriptions = settings.mpa_descriptions || DEFAULT_MPA_DESCRIPTIONS;
+        setMpaDescriptions(loadedMpaDescriptions);
+
         // Load award settings
         const loadedAwardPrompt = settings.award_system_prompt || DEFAULT_AWARD_SYSTEM_PROMPT;
         const loadedAwardAbbreviations = settings.award_abbreviations || [];
@@ -867,6 +878,7 @@ export default function LLMSettingsPage() {
           rankVerbs: JSON.parse(JSON.stringify(loadedRankVerbs)),
           acronyms: JSON.parse(JSON.stringify(loadedAcronyms)),
           abbreviations: JSON.parse(JSON.stringify(loadedAbbreviations)),
+          mpaDescriptions: JSON.parse(JSON.stringify(loadedMpaDescriptions)),
           awardSystemPrompt: loadedAwardPrompt,
           awardAbbreviations: JSON.parse(JSON.stringify(loadedAwardAbbreviations)),
           awardStyleGuidelines: loadedAwardStyleGuidelines,
@@ -883,6 +895,7 @@ export default function LLMSettingsPage() {
           rankVerbs: JSON.parse(JSON.stringify(DEFAULT_RANK_VERBS)),
           acronyms: JSON.parse(JSON.stringify(DEFAULT_ACRONYMS)),
           abbreviations: [],
+          mpaDescriptions: JSON.parse(JSON.stringify(DEFAULT_MPA_DESCRIPTIONS)),
           awardSystemPrompt: DEFAULT_AWARD_SYSTEM_PROMPT,
           awardAbbreviations: [],
           awardStyleGuidelines: DEFAULT_AWARD_STYLE_GUIDELINES,
@@ -913,6 +926,8 @@ export default function LLMSettingsPage() {
         base_system_prompt: systemPrompt,
         acronyms: acronyms,
         abbreviations: abbreviations,
+        // MPA descriptions for relevancy scoring
+        mpa_descriptions: mpaDescriptions,
         // Award settings
         award_system_prompt: awardSystemPrompt,
         award_abbreviations: awardAbbreviations,
@@ -943,6 +958,7 @@ export default function LLMSettingsPage() {
         rankVerbs: JSON.parse(JSON.stringify(rankVerbs)),
         acronyms: JSON.parse(JSON.stringify(acronyms)),
         abbreviations: JSON.parse(JSON.stringify(abbreviations)),
+        mpaDescriptions: JSON.parse(JSON.stringify(mpaDescriptions)),
         awardSystemPrompt,
         awardAbbreviations: JSON.parse(JSON.stringify(awardAbbreviations)),
         awardStyleGuidelines,
@@ -1044,27 +1060,27 @@ export default function LLMSettingsPage() {
       <Tabs defaultValue="general" className="w-full space-y-3 sm:space-y-4">
         <TabsList className="w-full h-auto p-1 grid grid-cols-6 gap-0.5">
           <TabsTrigger value="general" className="flex-col sm:flex-row gap-0.5 sm:gap-1.5 text-[10px] sm:text-xs px-1 sm:px-2.5 py-1.5 sm:py-2 data-[state=active]:text-foreground">
-            <Settings className="size-4 sm:size-3.5 flex-shrink-0" />
+            <Settings className="size-4 sm:size-3.5 shrink-0" />
             <span className="hidden sm:inline">General</span>
           </TabsTrigger>
           <TabsTrigger value="epb-prompt" className="flex-col sm:flex-row gap-0.5 sm:gap-1.5 text-[10px] sm:text-xs px-1 sm:px-2.5 py-1.5 sm:py-2 data-[state=active]:text-foreground">
-            <Wand2 className="size-4 sm:size-3.5 flex-shrink-0" />
+            <Wand2 className="size-4 sm:size-3.5 shrink-0" />
             <span className="hidden sm:inline">EPB</span>
           </TabsTrigger>
           <TabsTrigger value="award-prompt" className="flex-col sm:flex-row gap-0.5 sm:gap-1.5 text-[10px] sm:text-xs px-1 sm:px-2.5 py-1.5 sm:py-2 data-[state=active]:text-foreground">
-            <Award className="size-4 sm:size-3.5 flex-shrink-0" />
+            <Award className="size-4 sm:size-3.5 shrink-0" />
             <span className="hidden sm:inline">Award</span>
           </TabsTrigger>
           <TabsTrigger value="verbs" className="flex-col sm:flex-row gap-0.5 sm:gap-1.5 text-[10px] sm:text-xs px-1 sm:px-2.5 py-1.5 sm:py-2 data-[state=active]:text-foreground">
-            <FileText className="size-4 sm:size-3.5 flex-shrink-0" />
+            <FileText className="size-4 sm:size-3.5 shrink-0" />
             <span className="hidden sm:inline">Verbs</span>
           </TabsTrigger>
           <TabsTrigger value="abbreviations" className="flex-col sm:flex-row gap-0.5 sm:gap-1.5 text-[10px] sm:text-xs px-1 sm:px-2.5 py-1.5 sm:py-2 data-[state=active]:text-foreground">
-            <ArrowRight className="size-4 sm:size-3.5 flex-shrink-0" />
+            <ArrowRight className="size-4 sm:size-3.5 shrink-0" />
             <span className="hidden sm:inline">Abbr</span>
           </TabsTrigger>
           <TabsTrigger value="acronyms" className="flex-col sm:flex-row gap-0.5 sm:gap-1.5 text-[10px] sm:text-xs px-1 sm:px-2.5 py-1.5 sm:py-2 data-[state=active]:text-foreground">
-            <BookOpen className="size-4 sm:size-3.5 flex-shrink-0" />
+            <BookOpen className="size-4 sm:size-3.5 shrink-0" />
             <span className="hidden sm:inline">Acronyms</span>
           </TabsTrigger>
         </TabsList>
@@ -1173,7 +1189,7 @@ export default function LLMSettingsPage() {
         </TabsContent>
 
         {/* EPB System Prompt */}
-        <TabsContent value="epb-prompt" className="w-full min-h-[580px]">
+        <TabsContent value="epb-prompt" className="w-full space-y-4">
           <Card>
             <CardHeader className="px-3 py-3 sm:px-6 sm:py-4">
               <CardTitle className="text-base sm:text-lg flex items-center gap-2">
@@ -1193,6 +1209,96 @@ export default function LLMSettingsPage() {
                 className="font-mono text-xs sm:text-sm min-h-[200px] sm:min-h-[400px]"
                 placeholder="Enter your custom EPB system prompt..."
               />
+            </CardContent>
+          </Card>
+
+          {/* MPA Descriptions */}
+          <Card>
+            <CardHeader className="px-3 py-3 sm:px-6 sm:py-4">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <CardTitle className="text-base sm:text-lg flex items-center gap-2">
+                    <Target className="size-4" />
+                    MPA Descriptions
+                  </CardTitle>
+                  <CardDescription className="text-xs sm:text-sm mt-1">
+                    Define what each Major Performance Area covers. The AI uses these to assess accomplishment relevancy.
+                  </CardDescription>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setMpaDescriptions(DEFAULT_MPA_DESCRIPTIONS)}
+                  className="h-8 shrink-0"
+                >
+                  <RotateCcw className="size-3 mr-1.5" />
+                  Reset
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="px-3 pb-4 sm:px-6 sm:pb-6">
+              <div className="space-y-3">
+                {ENTRY_MGAS.map((mpa) => {
+                  const desc = mpaDescriptions[mpa.key] || DEFAULT_MPA_DESCRIPTIONS[mpa.key];
+                  const subComps = Object.entries(desc?.sub_competencies || {});
+                  
+                  return (
+                    <details key={mpa.key} className="group border rounded-lg">
+                      <summary className="flex items-center justify-between p-3 cursor-pointer hover:bg-muted/50 transition-colors">
+                        <Badge variant="secondary" className="text-xs">{mpa.label}</Badge>
+                        <span className="text-xs text-muted-foreground group-open:hidden">Click to edit</span>
+                      </summary>
+                      <div className="p-3 pt-0 space-y-3 border-t">
+                        <div className="space-y-2">
+                          <Label className="text-xs">Core Description</Label>
+                          <Textarea
+                            value={desc?.description || ""}
+                            onChange={(e) => setMpaDescriptions({
+                              ...mpaDescriptions,
+                              [mpa.key]: {
+                                ...desc,
+                                description: e.target.value,
+                              },
+                            })}
+                            rows={2}
+                            className="text-sm resize-none"
+                            placeholder="Describe what this MPA covers..."
+                          />
+                        </div>
+                        
+                        {subComps.length > 0 && (
+                          <div className="space-y-2 pl-3 border-l-2 border-muted">
+                            <Label className="text-xs text-muted-foreground">Sub-competencies</Label>
+                            {subComps.map(([key, value]) => {
+                              const label = key.split("_").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+                              return (
+                                <div key={key} className="space-y-1">
+                                  <Label className="text-[10px] font-medium">{label}</Label>
+                                  <Textarea
+                                    value={value}
+                                    onChange={(e) => setMpaDescriptions({
+                                      ...mpaDescriptions,
+                                      [mpa.key]: {
+                                        ...desc,
+                                        sub_competencies: {
+                                          ...desc.sub_competencies,
+                                          [key]: e.target.value,
+                                        },
+                                      },
+                                    })}
+                                    rows={2}
+                                    className="text-xs resize-none"
+                                  />
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </details>
+                  );
+                })}
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
