@@ -402,7 +402,7 @@ export function PendingLinksCard() {
 
   if (isLoading) {
     return (
-      <Card className="border-amber-500/50 bg-amber-500/5">
+      <Card className="border-amber-300 dark:border-amber-600/50 bg-amber-50/50 dark:bg-amber-900/10">
         <CardHeader className="pb-3">
           <Skeleton className="h-5 w-48" />
           <Skeleton className="h-4 w-64" />
@@ -420,7 +420,7 @@ export function PendingLinksCard() {
 
   return (
     <TooltipProvider>
-      <Card className="border-amber-500/50 bg-amber-500/5">
+      <Card className="border-amber-300 dark:border-amber-600/50 bg-amber-50/50 dark:bg-amber-900/10">
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
             <LinkIcon className="size-5" />

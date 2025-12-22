@@ -706,8 +706,8 @@ export function StatementWorkspaceDialog({
         onOpenChange(value);
       }}
     >
-      <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-5xl mx-auto max-h-[90vh] overflow-hidden flex flex-col p-0">
-        <DialogHeader className="flex-shrink-0 px-6 pt-6 pb-4 border-b">
+      <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-5xl mx-auto h-[85vh] max-h-[85vh] p-0 gap-0" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <DialogHeader className="shrink-0 px-6 pt-6 pb-4 border-b">
           <DialogTitle className="text-lg flex items-center gap-2">
             <Wand2 className="size-5" />
             Statement Workspace
@@ -717,9 +717,11 @@ export function StatementWorkspaceDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-hidden flex flex-col lg:flex-row min-h-0">
-          {/* Left Panel: Source Selection */}
-          <div className="w-full lg:w-[340px] border-b lg:border-b-0 lg:border-r flex flex-col min-h-0 max-h-[300px] lg:max-h-none">
+        {/* Scrollable content area */}
+        <div className="flex-1 overflow-y-auto overscroll-contain">
+          <div className="flex flex-col lg:flex-row">
+            {/* Left Panel: Source Selection */}
+            <div className="w-full lg:w-[340px] border-b lg:border-b-0 lg:border-r flex flex-col">
             <div className="p-4 border-b space-y-3 flex-shrink-0">
               <Label className="text-sm font-medium">Select Source Statements</Label>
               <Input
@@ -747,7 +749,7 @@ export function StatementWorkspaceDialog({
                 </TabsTrigger>
               </TabsList>
 
-              <ScrollArea className="flex-1 min-h-0">
+              <div className="flex-1 overflow-y-auto max-h-[200px] lg:max-h-[400px]">
                 <TabsContent value="my" className="m-0 p-2">
                   <div className="space-y-1.5">
                     {filteredMy.length === 0 ? (
@@ -808,14 +810,13 @@ export function StatementWorkspaceDialog({
                     )}
                   </div>
                 </TabsContent>
-              </ScrollArea>
+              </div>
             </Tabs>
-          </div>
+            </div>
 
           {/* Right Panel: Workspace */}
-          <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-            <ScrollArea className="flex-1">
-              <div className="p-4 space-y-4">
+          <div className="flex-1 flex flex-col min-h-0">
+            <div className="p-4 space-y-4">
                 {/* Selected Sources - Full text display with own scroll */}
                 <div
                   className={cn(
@@ -1301,36 +1302,36 @@ export function StatementWorkspaceDialog({
                   </div>
                 </div>
               </div>
-            </ScrollArea>
-
-            {/* Footer Actions */}
-            <div className="flex-shrink-0 p-4 border-t flex items-center justify-between gap-3">
-              <div className="text-xs text-muted-foreground hidden sm:block">
-                {draftStatement.trim()
-                  ? `Draft ready • ${draftStatement.length} chars`
-                  : "Start by selecting sources or typing directly"}
-              </div>
-              <div className="flex items-center gap-2 ml-auto">
-                <Button
-                  variant="outline"
-                  onClick={() => onOpenChange(false)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={saveDraft}
-                  disabled={isSaving || !draftStatement.trim() || !selectedMpa}
-                  className="gap-2"
-                >
-                  {isSaving ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <BookmarkPlus className="size-4" />
-                  )}
-                  Save to Library
-                </Button>
-              </div>
             </div>
+          </div>
+        </div>
+
+        {/* Footer Actions - Fixed at bottom */}
+        <div className="flex-shrink-0 p-4 border-t flex items-center justify-between gap-3">
+          <div className="text-xs text-muted-foreground hidden sm:block">
+            {draftStatement.trim()
+              ? `Draft ready • ${draftStatement.length} chars`
+              : "Start by selecting sources or typing directly"}
+          </div>
+          <div className="flex items-center gap-2 ml-auto">
+            <Button
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={saveDraft}
+              disabled={isSaving || !draftStatement.trim() || !selectedMpa}
+              className="gap-2"
+            >
+              {isSaving ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <BookmarkPlus className="size-4" />
+              )}
+              Save to Library
+            </Button>
           </div>
         </div>
       </DialogContent>

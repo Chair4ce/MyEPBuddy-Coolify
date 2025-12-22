@@ -1744,7 +1744,7 @@ export default function TeamPage() {
 
       {/* Pending Requests */}
       {pendingRequests.length > 0 && (
-        <Card className="border-amber-500/50 bg-amber-50/50 dark:bg-amber-900/10">
+        <Card className="border-amber-300 dark:border-amber-600/50 bg-amber-50/50 dark:bg-amber-900/10">
           <CardHeader className="p-4 sm:p-6">
             <CardTitle className="flex items-center gap-2 text-amber-700 dark:text-amber-400 text-base sm:text-lg">
               <Clock className="size-4 sm:size-5 shrink-0" />

@@ -367,7 +367,7 @@ export function EditManagedMemberDialog({
               </div>
 
               {existingUser && (
-                <div className="flex items-start gap-2 p-2 rounded-md bg-amber-500/10 text-amber-700 dark:text-amber-400 text-sm">
+                <div className="flex items-start gap-2 p-2 rounded-md bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 text-sm">
                   <AlertCircle className="size-4 mt-0.5 shrink-0" />
                   <div>
                     <p className="font-medium">Existing account found!</p>

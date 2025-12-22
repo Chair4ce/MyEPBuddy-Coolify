@@ -141,32 +141,26 @@ export default function LoginPage() {
 
       {/* Warning banner for in-app browsers */}
       {restrictedBrowser.restricted && (
-        <Card className="mb-4 border-amber-500/50 bg-amber-500/10">
-          <CardContent className="pt-4 pb-4">
-            <div className="flex items-start gap-3">
-              <ExternalLink className="size-5 text-amber-500 shrink-0 mt-0.5" />
-              <div className="space-y-2 flex-1">
-                <p className="text-sm font-medium text-amber-500">
-                  Open in Safari or Chrome
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Google sign-in doesn&apos;t work in {restrictedBrowser.browserName}&apos;s browser. 
-                  Copy this link and paste it in Safari or Chrome.
-                </p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleCopyUrl}
-                  className="mt-2 w-full border-amber-500/50 hover:bg-amber-500/20"
-                >
-                  {copied ? (
-                    <Check className="size-4 text-green-500" />
-                  ) : (
-                    <Copy className="size-4" />
-                  )}
-                  {copied ? "Copied!" : "Copy URL"}
-                </Button>
-              </div>
+        <Card className="mb-4 border-yellow-400 dark:border-yellow-600/50 bg-yellow-50 dark:bg-yellow-900/20">
+          <CardContent className="py-3 px-4">
+            <div className="flex items-center gap-3">
+              <ExternalLink className="size-4 text-yellow-600 dark:text-yellow-400 shrink-0" />
+              <p className="text-sm font-medium text-yellow-700 dark:text-yellow-300 flex-1">
+                Open in Safari or Chrome for full features
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCopyUrl}
+                className="shrink-0 h-7 px-2.5 text-xs border-yellow-500 dark:border-yellow-600 text-yellow-700 dark:text-yellow-300 hover:bg-yellow-100 dark:hover:bg-yellow-900/40"
+              >
+                {copied ? (
+                  <Check className="size-3.5 text-green-600 dark:text-green-400" />
+                ) : (
+                  <Copy className="size-3.5" />
+                )}
+                {copied ? "Copied!" : "Copy URL"}
+              </Button>
             </div>
           </CardContent>
         </Card>
