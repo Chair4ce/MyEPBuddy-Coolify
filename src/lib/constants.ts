@@ -134,15 +134,16 @@ export const MAX_STATEMENT_CHARACTERS = 350;
 export type RankTier = "airman" | "ssgt" | "tsgt" | "msgt" | "smsgt" | "cmsgt";
 
 export const RANK_TO_TIER: Record<Rank, RankTier | null> = {
-  AB: null,      // No EPB for AB
-  Amn: null,     // No EPB for Amn
-  A1C: "airman", // First EPB at SrA, but includes A1C entries
+  AB: null,       // No EPB for AB
+  Amn: null,      // No EPB for Amn
+  A1C: "airman",  // First EPB at SrA, but includes A1C entries
   SrA: "airman",
   SSgt: "ssgt",
   TSgt: "tsgt",
   MSgt: "msgt",
   SMSgt: "smsgt",
   CMSgt: "cmsgt",
+  Civilian: null, // No EPB for civilians
 };
 
 // Static close-out dates (month and day) for each rank tier
