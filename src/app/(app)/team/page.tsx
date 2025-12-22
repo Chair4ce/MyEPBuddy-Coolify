@@ -68,6 +68,7 @@ import {
   Trophy,
   Medal,
   Plus,
+  Pencil,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -88,6 +89,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import type { Profile, TeamRequest, TeamRequestType, Rank, ManagedMember, Award, AwardRequest } from "@/types/database";
 import { AddManagedMemberDialog } from "@/components/team/add-managed-member-dialog";
+import { EditManagedMemberDialog } from "@/components/team/edit-managed-member-dialog";
 import { AddAwardDialog } from "@/components/team/add-award-dialog";
 import { AwardBadges } from "@/components/team/award-badges";
 import { AwardsPanel } from "@/components/team/awards-panel";
@@ -257,6 +259,9 @@ export default function TeamPage() {
     teamMemberId?: string;
     name: string;
   } | null>(null);
+  
+  // Edit managed member state
+  const [editManagedMember, setEditManagedMember] = useState<ManagedMember | null>(null);
 
   const supabase = createClient();
 
@@ -1285,6 +1290,18 @@ export default function TeamPage() {
                         <Info className="size-4 mr-2" />
                         View Details
                       </DropdownMenuItem>
+                      {isManagedMember && (
+                        <DropdownMenuItem onClick={() => {
+                          // Find the full managed member data
+                          const member = managedMembers.find(m => m.id === node.data.id);
+                          if (member) {
+                            setEditManagedMember(member);
+                          }
+                        }}>
+                          <Pencil className="size-4 mr-2" />
+                          Edit
+                        </DropdownMenuItem>
+                      )}
                       {canSupervise(profile?.rank) && (
                         <DropdownMenuItem onClick={() => {
                           setAwardRecipient({
@@ -1527,6 +1544,14 @@ export default function TeamPage() {
         <AddManagedMemberDialog 
           open={showAddMemberDialog} 
           onOpenChange={setShowAddMemberDialog} 
+        />
+        
+        {/* Edit Managed Member Dialog */}
+        <EditManagedMemberDialog
+          open={!!editManagedMember}
+          onOpenChange={(open) => !open && setEditManagedMember(null)}
+          member={editManagedMember}
+          onSuccess={() => setEditManagedMember(null)}
         />
         
         {/* Remove/Delete Member Confirmation Dialog */}
