@@ -69,6 +69,7 @@ import {
   Medal,
   Plus,
   Pencil,
+  FileText,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -94,6 +95,7 @@ import { AddAwardDialog } from "@/components/team/add-award-dialog";
 import { AwardBadges } from "@/components/team/award-badges";
 import { AwardsPanel } from "@/components/team/awards-panel";
 import { AwardRequestsPanel } from "@/components/team/award-requests-panel";
+import { MemberStatementsDialog } from "@/components/team/member-statements-dialog";
 import { 
   MPA_ABBREVIATIONS, 
   STANDARD_MGAS, 
@@ -1290,6 +1292,20 @@ export default function TeamPage() {
                         <Info className="size-4 mr-2" />
                         View Details
                       </DropdownMenuItem>
+                      <MemberStatementsDialog
+                        memberId={node.data.id}
+                        memberName={node.data.full_name || "Unknown"}
+                        memberRank={node.data.rank}
+                        isManagedMember={isManagedMember}
+                        cycleYear={epbConfig?.current_cycle_year || new Date().getFullYear()}
+                        currentUserId={profile?.id || ""}
+                        trigger={
+                          <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                            <FileText className="size-4 mr-2" />
+                            View Statements
+                          </DropdownMenuItem>
+                        }
+                      />
                       {isManagedMember && (
                         <DropdownMenuItem onClick={() => {
                           // Find the full managed member data

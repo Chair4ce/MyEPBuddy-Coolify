@@ -525,91 +525,86 @@ export default function GeneratePage() {
             </div>
           </div>
 
-          {/* MPA Selection */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <Label className="text-sm font-medium">Generate Statements For</Label>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-7 text-xs"
-                onClick={() => {
-                  const allSelected = ENTRY_MGAS.every(m => selectedMPAs.includes(m.key));
-                  if (allSelected) {
-                    setSelectedMPAs([]);
-                  } else {
-                    setSelectedMPAs(ENTRY_MGAS.map(m => m.key));
-                  }
-                }}
-              >
-                {ENTRY_MGAS.every(m => selectedMPAs.includes(m.key)) ? "Deselect All" : "Select All"}
-              </Button>
-            </div>
-            
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {ENTRY_MGAS.map((mpa) => {
-                const count = accomplishments.filter(a => a.mpa === mpa.key).length;
-                const isSelected = selectedMPAs.includes(mpa.key);
-                
-                return (
-                  <label
-                    key={mpa.key}
-                    className={cn(
-                      "flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors",
-                      isSelected ? "bg-primary/5 border-primary/30" : "bg-card hover:bg-muted/50",
-                      !useCustomContext && count === 0 && "opacity-50"
-                    )}
-                  >
-                    <Checkbox
-                      checked={isSelected}
-                      onCheckedChange={(checked) => {
-                        if (checked) {
-                          setSelectedMPAs([...selectedMPAs, mpa.key]);
-                        } else {
-                          setSelectedMPAs(selectedMPAs.filter(m => m !== mpa.key));
-                        }
-                      }}
-                      aria-label={`Generate for ${mpa.label}`}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <span className="text-sm font-medium truncate block">{mpa.label}</span>
-                      {!useCustomContext && (
-                        <span className="text-xs text-muted-foreground">
-                          {count} {count === 1 ? "entry" : "entries"}
-                        </span>
+          {/* MPA Selection - Only for Custom Context */}
+          {useCustomContext && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-medium">Generate Statements For</Label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => {
+                    const allSelected = ENTRY_MGAS.every(m => selectedMPAs.includes(m.key));
+                    if (allSelected) {
+                      setSelectedMPAs([]);
+                    } else {
+                      setSelectedMPAs(ENTRY_MGAS.map(m => m.key));
+                    }
+                  }}
+                >
+                  {ENTRY_MGAS.every(m => selectedMPAs.includes(m.key)) ? "Deselect All" : "Select All"}
+                </Button>
+              </div>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {ENTRY_MGAS.map((mpa) => {
+                  const isSelected = selectedMPAs.includes(mpa.key);
+                  
+                  return (
+                    <label
+                      key={mpa.key}
+                      className={cn(
+                        "flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors",
+                        isSelected ? "bg-primary/5 border-primary/30" : "bg-card hover:bg-muted/50"
                       )}
-                    </div>
-                  </label>
-                );
-              })}
-            </div>
+                    >
+                      <Checkbox
+                        checked={isSelected}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setSelectedMPAs([...selectedMPAs, mpa.key]);
+                          } else {
+                            setSelectedMPAs(selectedMPAs.filter(m => m !== mpa.key));
+                          }
+                        }}
+                        aria-label={`Generate for ${mpa.label}`}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm font-medium truncate block">{mpa.label}</span>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
 
-            {/* HLR Toggle - separate from entry MPAs */}
-            <div className="pt-2 border-t">
-              <label
-                className={cn(
-                  "flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors",
-                  includeHLR ? "bg-amber-50 dark:bg-amber-900/20 border-amber-300/50" : "bg-card hover:bg-muted/50"
-                )}
-              >
-                <Checkbox
-                  checked={includeHLR}
-                  onCheckedChange={(checked) => setIncludeHLR(!!checked)}
-                  aria-label="Include HLR Assessment"
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <Crown className="size-4 text-amber-600" />
-                    <span className="text-sm font-medium">Higher Level Reviewer Assessment</span>
+              {/* HLR Toggle - separate from entry MPAs */}
+              <div className="pt-2 border-t">
+                <label
+                  className={cn(
+                    "flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors",
+                    includeHLR ? "bg-amber-50 dark:bg-amber-900/20 border-amber-300/50" : "bg-card hover:bg-muted/50"
+                  )}
+                >
+                  <Checkbox
+                    checked={includeHLR}
+                    onCheckedChange={(checked) => setIncludeHLR(!!checked)}
+                    aria-label="Include HLR Assessment"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <Crown className="size-4 text-amber-600" />
+                      <span className="text-sm font-medium">Higher Level Reviewer Assessment</span>
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      Commander&apos;s holistic assessment
+                    </span>
                   </div>
-                  <span className="text-xs text-muted-foreground">
-                    Commander&apos;s holistic assessment {!useCustomContext && "(generated from all entries)"}
-                  </span>
-                </div>
-              </label>
+                </label>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Custom Context Workspace - full workspace when using custom context */}
           {useCustomContext && rateeInfo && (
@@ -711,36 +706,36 @@ export default function GeneratePage() {
       </Collapsible>
 
       {/* Statement Workspace - Assign accomplishments and generate */}
-      {!useCustomContext && selectedMPAs.length > 0 && accomplishments.length > 0 && (
+      {!useCustomContext && profile && (
         <StatementSelectionWorkspace
-          accomplishmentsByMPA={selectedMPAs
-            .filter(mpaKey => mpaKey !== "hlr_assessment")
-            .map(mpaKey => ({
-              mpa: mpaKey,
-              accomplishments: accomplishments
-                .filter(a => a.mpa === mpaKey)
-                .map(a => ({
-                  id: a.id,
-                  action_verb: a.action_verb,
-                  details: a.details,
-                  impact: a.impact,
-                  metrics: a.metrics,
-                })),
-            }))
-            .filter(item => item.accomplishments.length > 0)
-          }
+          accomplishments={accomplishments.map(a => ({
+            id: a.id,
+            mpa: a.mpa,
+            action_verb: a.action_verb,
+            details: a.details,
+            impact: a.impact,
+            metrics: a.metrics,
+          }))}
           maxChars={maxChars}
           maxHlrChars={maxHlrChars}
           rateeInfo={rateeInfo}
           cycleYear={cycleYear}
           model={selectedModel}
+          currentUserId={profile.id}
           onSaveStatement={async (mpa, statement) => {
             if (!profile || !rateeInfo) return;
+            
+            // For real subordinates: use their user_id so they can see the statement
+            // For managed members: use supervisor's user_id + team_member_id
+            // For self: use own user_id
+            const isRealSubordinate = !rateeInfo.isManagedMember && rateeInfo.id !== profile.id;
+            
             const { error } = await supabase
               .from("refined_statements")
               .insert({
-                user_id: profile.id,
+                user_id: isRealSubordinate ? rateeInfo.id : profile.id,
                 team_member_id: rateeInfo.isManagedMember ? rateeInfo.id : null,
+                created_by: profile.id, // Track who created it
                 mpa,
                 afsc: rateeInfo.afsc || "UNKNOWN",
                 rank: rateeInfo.rank || "AB",
