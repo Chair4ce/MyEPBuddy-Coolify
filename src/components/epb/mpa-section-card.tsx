@@ -60,6 +60,8 @@ interface MPASectionCardProps {
   lockedByInfo?: { name: string; rank: string | null } | null;
   onAcquireLock?: () => Promise<{ success: boolean; lockedBy?: string }>;
   onReleaseLock?: () => Promise<void>;
+  // Collaboration mode - sync text to Zustand more frequently
+  isCollaborating?: boolean;
 }
 
 interface GenerateOptions {
@@ -228,6 +230,8 @@ export function MPASectionCard({
   lockedByInfo,
   onAcquireLock,
   onReleaseLock,
+  // Collaboration mode
+  isCollaborating = false,
 }: MPASectionCardProps) {
   const { mpa, isHLR, maxChars } = getMPAInfo(section.mpa);
   
@@ -394,19 +398,50 @@ export function MPASectionCard({
     toast.success("Restored from snapshot");
   };
 
-  // Handle text change - UPDATE LOCAL STATE ONLY (like /award page)
-  // Zustand is updated on blur to prevent constant re-renders
+  // Ref for collaboration sync timer
+  const collabSyncTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Handle text change - UPDATE LOCAL STATE ONLY normally
+  // In collaboration mode, also debounce sync to Zustand for real-time sharing
   const handleTextChange = (value: string) => {
     setLocalText(value);
+    
+    // In collaboration mode, debounce sync to Zustand (300ms)
+    if (isCollaborating) {
+      if (collabSyncTimerRef.current) {
+        clearTimeout(collabSyncTimerRef.current);
+      }
+      collabSyncTimerRef.current = setTimeout(() => {
+        updateSectionState(section.mpa, {
+          draftText: value,
+          isDirty: value !== section.statement_text,
+        });
+        collabSyncTimerRef.current = null;
+      }, 300);
+    }
   };
 
-  // Sync local text to Zustand on blur
+  // Sync local text to Zustand on blur (always, regardless of collaboration mode)
   const handleTextBlur = () => {
+    // Clear any pending collab sync
+    if (collabSyncTimerRef.current) {
+      clearTimeout(collabSyncTimerRef.current);
+      collabSyncTimerRef.current = null;
+    }
     updateSectionState(section.mpa, {
       draftText: localText,
       isDirty: localText !== section.statement_text,
     });
   };
+
+  // Cleanup collab sync timer on unmount
+  useEffect(() => {
+    return () => {
+      if (collabSyncTimerRef.current) {
+        clearTimeout(collabSyncTimerRef.current);
+      }
+    };
+  }, []);
 
   // Handle mode change - with lock acquisition in single-user mode
   const handleModeChange = async (newMode: MPAWorkspaceMode) => {

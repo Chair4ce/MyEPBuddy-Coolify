@@ -86,8 +86,12 @@ interface EPBShellState {
   // Collapsed state management
   toggleSectionCollapsed: (mpa: string) => void;
   setSectionCollapsed: (mpa: string, collapsed: boolean) => void;
+  setAllCollapsedSections: (collapsedSections: Record<string, boolean>) => void;
   expandAll: () => void;
   collapseAll: () => void;
+  
+  // Bulk state updates for collaboration sync
+  syncRemoteState: (sections: Record<string, { draftText: string; mode: string }>, collapsedSections: Record<string, boolean>) => void;
   
   // Loading states
   setIsLoadingShell: (loading: boolean) => void;
@@ -268,6 +272,30 @@ export const useEPBShellStore = create<EPBShellState>((set, get) => ({
         collapsed[mpa] = true;
       });
       return { collapsedSections: collapsed };
+    }),
+
+  setAllCollapsedSections: (collapsedSections) =>
+    set({ collapsedSections }),
+
+  // Sync remote state from collaboration - updates section drafts and collapsed state
+  syncRemoteState: (remoteSections, remoteCollapsedSections) =>
+    set((state) => {
+      const newSectionStates = { ...state.sectionStates };
+      
+      // Update each section's draft text and mode from remote
+      Object.entries(remoteSections).forEach(([mpa, remote]) => {
+        const existing = newSectionStates[mpa] || getDefaultSectionState();
+        newSectionStates[mpa] = {
+          ...existing,
+          draftText: remote.draftText,
+          mode: remote.mode as MPAWorkspaceMode,
+        };
+      });
+      
+      return {
+        sectionStates: newSectionStates,
+        collapsedSections: { ...state.collapsedSections, ...remoteCollapsedSections },
+      };
     }),
 
   setIsLoadingShell: (loading) => set({ isLoadingShell: loading }),

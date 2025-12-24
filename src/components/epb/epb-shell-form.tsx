@@ -65,13 +65,16 @@ export function EPBShellForm({
     setCurrentShell,
     sections,
     updateSection,
+    sectionStates,
     snapshots,
     setSnapshots,
     addSnapshot,
     collapsedSections,
     toggleSectionCollapsed,
+    setSectionCollapsed,
     expandAll,
     collapseAll,
+    syncRemoteState,
     isLoadingShell,
     setIsLoadingShell,
     isCreatingShell,
@@ -96,13 +99,21 @@ export function EPBShellForm({
     enabled: !isMultiUserMode,
   });
 
+  // Ref to track if we're receiving remote changes (defined early for use in callback)
+  const isReceivingRemoteRef = useRef(false);
+
+  // Handle incoming state changes from collaboration
+  const handleRemoteStateChange = useCallback((state: import("@/hooks/use-epb-collaboration").EPBWorkspaceState) => {
+    // Mark that we're receiving remote data (to avoid broadcasting it back)
+    isReceivingRemoteRef.current = true;
+    // Sync section text and modes
+    syncRemoteState(state.sections, state.collapsedSections);
+  }, [syncRemoteState]);
+
   // Page-level collaboration hook - only active when multi-user mode is ON
   const collaboration = useEPBCollaboration({
     shellId: isMultiUserMode ? (currentShell?.id || null) : null,
-    onStateChange: useCallback((_state: import("@/hooks/use-epb-collaboration").EPBWorkspaceState) => {
-      // Handle remote state changes (e.g., sync section content)
-      // For now, we'll just use cursor tracking
-    }, []),
+    onStateChange: handleRemoteStateChange,
     onParticipantJoin: useCallback((participant: import("@/hooks/use-epb-collaboration").EPBCollaborator) => {
       toast.success(`${participant.rank ? participant.rank + " " : ""}${participant.fullName} joined`, {
         description: "You can now collaborate in real-time",
@@ -112,6 +123,43 @@ export function EPBShellForm({
       toast.info("A collaborator left the session");
     }, []),
   });
+
+  // Ref to track the last broadcast (to avoid duplicate broadcasts)
+  const lastBroadcastRef = useRef<string>("");
+
+  // Broadcast local state changes when in a collaboration session
+  // Debounced to avoid excessive broadcasts
+  useEffect(() => {
+    if (!collaboration.isInSession) return;
+    if (isReceivingRemoteRef.current) {
+      isReceivingRemoteRef.current = false;
+      return;
+    }
+    
+    // Build sections state from current section states
+    const sectionsData: Record<string, { draftText: string; mode: string }> = {};
+    Object.entries(sectionStates).forEach(([mpa, state]) => {
+      sectionsData[mpa] = {
+        draftText: state.draftText,
+        mode: state.mode,
+      };
+    });
+    
+    // Create a hash to check if state actually changed
+    const stateHash = JSON.stringify({ sections: sectionsData, collapsedSections });
+    if (stateHash === lastBroadcastRef.current) return;
+    lastBroadcastRef.current = stateHash;
+    
+    // Debounce the broadcast
+    const timer = setTimeout(() => {
+      collaboration.broadcastState({
+        sections: sectionsData,
+        collapsedSections,
+      });
+    }, 100);
+    
+    return () => clearTimeout(timer);
+  }, [collaboration, sectionStates, collapsedSections]);
 
   // Toggle multi-user mode
   const handleToggleMultiUserMode = useCallback(async () => {
@@ -960,6 +1008,8 @@ export function EPBShellForm({
                 accomplishments={accomplishments}
                 onOpenAccomplishments={() => onOpenAccomplishments(mpa.key)}
                 cycleYear={cycleYear}
+                // Enable real-time text sync when collaborating
+                isCollaborating={collaboration.isInSession}
               />
             </div>
           );

@@ -26,6 +26,7 @@ export interface EPBCollaborator {
 // EPB workspace state that gets synced
 export interface EPBWorkspaceState {
   sections: Record<string, { draftText: string; mode: string }>;
+  collapsedSections: Record<string, boolean>;
   activeMpa: string | null;
 }
 
@@ -306,6 +307,7 @@ export function useEPBCollaboration(
     try {
       const workspaceState: EPBWorkspaceState = {
         sections: initialState?.sections || {},
+        collapsedSections: initialState?.collapsedSections || {},
         activeMpa: initialState?.activeMpa || null,
       };
 
@@ -506,9 +508,10 @@ export function useEPBCollaboration(
     if (!channelRef.current || !session) return;
 
     // Merge with existing state
-    const currentState = session.workspace_state || { sections: {}, activeMpa: null };
+    const currentState = session.workspace_state || { sections: {}, collapsedSections: {}, activeMpa: null };
     const newState: EPBWorkspaceState = {
       sections: { ...currentState.sections, ...state.sections },
+      collapsedSections: { ...currentState.collapsedSections, ...state.collapsedSections },
       activeMpa: state.activeMpa !== undefined ? state.activeMpa : currentState.activeMpa,
     };
 
