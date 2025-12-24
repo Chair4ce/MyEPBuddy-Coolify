@@ -432,6 +432,57 @@ export interface AwardCatalog {
   created_at: string;
 }
 
+// ============================================
+// EPB SHELL SYSTEM TYPES
+// ============================================
+
+export interface EPBShell {
+  id: string;
+  user_id: string;
+  team_member_id: string | null;
+  created_by: string;
+  cycle_year: number;
+  created_at: string;
+  updated_at: string;
+  // Joined fields
+  sections?: EPBShellSection[];
+  owner_profile?: Profile;
+  owner_team_member?: ManagedMember;
+  creator_profile?: Profile;
+}
+
+export interface EPBShellSection {
+  id: string;
+  shell_id: string;
+  mpa: string;
+  statement_text: string;
+  last_edited_by: string | null;
+  created_at: string;
+  updated_at: string;
+  // Joined fields
+  snapshots?: EPBShellSnapshot[];
+}
+
+export interface EPBShellSnapshot {
+  id: string;
+  section_id: string;
+  statement_text: string;
+  created_by: string | null;
+  note: string | null;
+  created_at: string;
+}
+
+export interface EPBShellShare {
+  id: string;
+  shell_id: string;
+  owner_id: string;
+  share_type: 'user';
+  shared_with_id: string;
+  created_at: string;
+  // Joined fields
+  shared_with_profile?: Profile;
+}
+
 // JSON type for Supabase
 type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
