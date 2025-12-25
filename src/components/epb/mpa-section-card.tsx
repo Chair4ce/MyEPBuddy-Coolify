@@ -34,6 +34,10 @@ import {
   Plus,
   PanelLeftClose,
   PanelLeft,
+  RefreshCw,
+  Lock,
+  CheckCircle2,
+  Circle,
 } from "lucide-react";
 import { useEPBShellStore, type MPAWorkspaceMode, type SourceType } from "@/stores/epb-shell-store";
 import { LoadedActionCard } from "./loaded-action-card";
@@ -62,6 +66,10 @@ interface MPASectionCardProps {
   onReleaseLock?: () => Promise<void>;
   // Collaboration mode - sync text to Zustand more frequently
   isCollaborating?: boolean;
+  // Refresh callback to get latest data
+  onRefresh?: () => Promise<void>;
+  // Completion toggle
+  onToggleComplete?: () => void;
 }
 
 interface GenerateOptions {
@@ -98,12 +106,12 @@ function ModeSelector({
     : "";
 
   return (
-    <div className="flex items-center gap-1 p-0.5 rounded-lg bg-muted/50 border">
+    <div className="flex items-center gap-0.5 sm:gap-1 p-0.5 rounded-lg bg-muted/50 border">
       <button
         onClick={() => onModeChange("view")}
         title="View current statement"
         className={cn(
-          "px-2 py-1 text-xs rounded transition-colors",
+          "px-1.5 sm:px-2 py-1 text-[10px] sm:text-xs rounded transition-colors",
           currentMode === "view"
             ? "bg-background shadow-sm text-foreground"
             : "text-muted-foreground hover:text-foreground"
@@ -117,14 +125,14 @@ function ModeSelector({
         title={isLockedByOther ? lockedTitle : "Manually edit statement"}
         disabled={isLockedByOther}
         className={cn(
-          "px-2 py-1 text-xs rounded transition-colors flex items-center gap-1",
+          "px-1.5 sm:px-2 py-1 text-[10px] sm:text-xs rounded transition-colors flex items-center gap-0.5 sm:gap-1",
           currentMode === "edit"
             ? "bg-background shadow-sm text-foreground"
             : "text-muted-foreground hover:text-foreground",
           isLockedByOther && "opacity-50 cursor-not-allowed"
         )}
       >
-        <Pencil className="size-3" />
+        <Pencil className="size-2.5 sm:size-3" />
         Edit
       </button>
 
@@ -133,15 +141,16 @@ function ModeSelector({
         title={isLockedByOther ? lockedTitle : "Generate or revise with AI"}
         disabled={isLockedByOther}
         className={cn(
-          "px-2 py-1 text-xs rounded transition-colors flex items-center gap-1",
+          "px-1.5 sm:px-2 py-1 text-[10px] sm:text-xs rounded transition-colors flex items-center gap-0.5 sm:gap-1",
           currentMode === "ai-assist"
             ? "bg-background shadow-sm text-foreground"
             : "text-muted-foreground hover:text-foreground",
           isLockedByOther && "opacity-50 cursor-not-allowed"
         )}
       >
-        <Sparkles className="size-3" />
-        AI Assist
+        <Sparkles className="size-2.5 sm:size-3" />
+        <span className="hidden sm:inline">AI Assist</span>
+        <span className="sm:hidden">AI</span>
       </button>
     </div>
   );
@@ -158,20 +167,21 @@ function SourceToggle({
   actionsCount: number;
 }) {
   return (
-    <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/30 border">
+    <div className="flex items-center gap-1.5 sm:gap-2 p-1.5 sm:p-2 rounded-lg bg-muted/30 border">
       <button
         onClick={() => onSourceChange("actions")}
         className={cn(
-          "flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-md text-sm transition-all",
+          "flex-1 flex items-center justify-center gap-1 sm:gap-2 py-1.5 sm:py-2 px-2 sm:px-3 rounded-md text-xs sm:text-sm transition-all",
           sourceType === "actions"
             ? "bg-primary text-primary-foreground shadow-sm"
             : "text-muted-foreground hover:text-foreground hover:bg-muted"
         )}
       >
-        <Zap className="size-4" />
-        <span className="font-medium">Performance Actions</span>
+        <Zap className="size-3.5 sm:size-4" />
+        <span className="font-medium hidden sm:inline">Performance Actions</span>
+        <span className="font-medium sm:hidden">Actions</span>
         {actionsCount > 0 && sourceType === "actions" && (
-          <Badge variant="secondary" className="text-[10px] bg-primary-foreground/20">
+          <Badge variant="secondary" className="text-[9px] sm:text-[10px] bg-primary-foreground/20">
             {actionsCount}
           </Badge>
         )}
@@ -179,14 +189,15 @@ function SourceToggle({
       <button
         onClick={() => onSourceChange("custom")}
         className={cn(
-          "flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-md text-sm transition-all",
+          "flex-1 flex items-center justify-center gap-1 sm:gap-2 py-1.5 sm:py-2 px-2 sm:px-3 rounded-md text-xs sm:text-sm transition-all",
           sourceType === "custom"
             ? "bg-primary text-primary-foreground shadow-sm"
             : "text-muted-foreground hover:text-foreground hover:bg-muted"
         )}
       >
-        <FileText className="size-4" />
-        <span className="font-medium">Custom Context</span>
+        <FileText className="size-3.5 sm:size-4" />
+        <span className="font-medium hidden sm:inline">Custom Context</span>
+        <span className="font-medium sm:hidden">Custom</span>
       </button>
     </div>
   );
@@ -232,6 +243,10 @@ export function MPASectionCard({
   onReleaseLock,
   // Collaboration mode
   isCollaborating = false,
+  // Refresh callback
+  onRefresh,
+  // Completion toggle
+  onToggleComplete,
 }: MPASectionCardProps) {
   const { mpa, isHLR, maxChars } = getMPAInfo(section.mpa);
   
@@ -252,6 +267,7 @@ export function MPASectionCard({
   const [snapshotNote, setSnapshotNote] = useState("");
   const [showHistory, setShowHistory] = useState(false);
   const [isAutosaving, setIsAutosaving] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lastSavedRef = useRef<string>(section.statement_text);
   
@@ -443,6 +459,27 @@ export function MPASectionCard({
     };
   }, []);
 
+  // Handle refresh - get latest data from database
+  const handleRefresh = async () => {
+    if (!onRefresh) return;
+    setIsRefreshing(true);
+    try {
+      await onRefresh();
+      // Update local text with the latest from section
+      setLocalText(section.statement_text);
+      updateSectionState(section.mpa, {
+        draftText: section.statement_text,
+        isDirty: false,
+      });
+      toast.success("Refreshed to latest version");
+    } catch (err) {
+      console.error("Failed to refresh:", err);
+      toast.error("Failed to refresh");
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   // Handle mode change - with lock acquisition in single-user mode
   const handleModeChange = async (newMode: MPAWorkspaceMode) => {
     // If entering edit or ai-assist mode, try to acquire lock (if lock function provided)
@@ -565,59 +602,100 @@ export function MPASectionCard({
   return (
     <Card
       className={cn(
-        "transition-all duration-300 ease-in-out",
+        "transition-all duration-300 ease-in-out overflow-hidden",
         isHLR && "border-amber-300/30 dark:border-amber-700/30",
         hasUnsavedChanges && "ring-1 ring-amber-400/50",
-        hasContent && !hasUnsavedChanges && "border-green-500/30"
+        section.is_complete && "border-green-500/30 bg-green-50/30 dark:bg-green-900/10"
       )}
     >
       {/* Header - NO Collapsible/Radix components to avoid ref issues */}
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between gap-2">
+      <CardHeader className="pb-2 px-3 sm:px-6">
+        <div className="flex items-center justify-between gap-1.5 sm:gap-2">
           <button 
-            className="flex items-center gap-2 min-w-0 flex-1 text-left group"
+            className="flex items-center gap-1 sm:gap-2 min-w-0 flex-1 text-left group"
             onClick={onToggleCollapse}
           >
-            {isHLR && <Crown className="size-4 text-amber-600 shrink-0" />}
-            <span className="font-medium text-sm truncate">
+            {isHLR && <Crown className="size-3.5 sm:size-4 text-amber-600 shrink-0" />}
+            <span className="font-medium text-xs sm:text-sm truncate">
               {mpa?.label || section.mpa}
             </span>
-            {/* Lock indicator for single-user mode */}
+            {/* Lock indicator for single-user mode - hide on mobile */}
             {isLockedByOther && lockedByInfo && (
               <Badge
                 variant="outline"
-                className="text-[10px] shrink-0 bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30"
+                className="text-[9px] sm:text-[10px] shrink-0 bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30 gap-0.5 sm:gap-1 hidden sm:flex"
+                title={`${lockedByInfo.rank || ""} ${lockedByInfo.name} is currently editing this section`}
               >
-                🔒 {lockedByInfo.rank || ""} {lockedByInfo.name.split(" ")[0]} editing
+                <Lock className="size-2.5 sm:size-3" />
+                <span className="hidden md:inline">{lockedByInfo.rank || ""} {lockedByInfo.name.split(" ")[0]} editing</span>
+                <span className="md:hidden">Locked</span>
               </Badge>
+            )}
+            {/* Mobile lock indicator */}
+            {isLockedByOther && (
+              <Lock className="size-3 text-amber-600 shrink-0 sm:hidden" />
             )}
             {hasContent && (
               <Badge
                 variant="secondary"
                 className={cn(
-                  "text-[10px] shrink-0",
+                  "text-[9px] sm:text-[10px] shrink-0 px-1 sm:px-1.5",
                   isOverLimit && "bg-destructive/10 text-destructive"
                 )}
               >
                 {charCount}/{maxChars}
               </Badge>
             )}
+            {/* Completion status badge - icon only on mobile */}
+            {section.is_complete && (
+              <Badge
+                variant="secondary"
+                className="text-[9px] sm:text-[10px] shrink-0 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-300 dark:border-green-700 px-1 sm:px-1.5"
+              >
+                <CheckCircle2 className="size-3" />
+                <span className="hidden sm:inline ml-0.5">Complete</span>
+              </Badge>
+            )}
             {isAutosaving && (
-              <Badge variant="outline" className="text-[10px] text-blue-600 border-blue-600/30 shrink-0 animate-pulse">
-                Saving...
+              <Badge variant="outline" className="text-[9px] sm:text-[10px] text-blue-600 border-blue-600/30 shrink-0 animate-pulse px-1 sm:px-1.5">
+                <span className="hidden sm:inline">Saving...</span>
+                <span className="sm:hidden">...</span>
               </Badge>
             )}
             {hasUnsavedChanges && !isAutosaving && (
-              <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-600/30 shrink-0">
-                {enableAutosave ? "Editing..." : "Unsaved"}
+              <Badge variant="outline" className="text-[9px] sm:text-[10px] text-amber-600 border-amber-600/30 shrink-0 px-1 sm:px-1.5">
+                <span className="hidden sm:inline">{enableAutosave ? "Editing..." : "Unsaved"}</span>
+                <span className="sm:hidden">*</span>
               </Badge>
             )}
             {isCollapsed ? (
-              <ChevronDown className="size-4 text-muted-foreground group-hover:text-foreground transition-colors ml-auto shrink-0" />
+              <ChevronDown className="size-3.5 sm:size-4 text-muted-foreground group-hover:text-foreground transition-colors ml-auto shrink-0" />
             ) : (
-              <ChevronUp className="size-4 text-muted-foreground group-hover:text-foreground transition-colors ml-auto shrink-0" />
+              <ChevronUp className="size-3.5 sm:size-4 text-muted-foreground group-hover:text-foreground transition-colors ml-auto shrink-0" />
             )}
           </button>
+          {/* Completion toggle button */}
+          {onToggleComplete && (
+            <button
+              className={cn(
+                "inline-flex items-center justify-center rounded-md size-6 shrink-0 transition-colors",
+                section.is_complete
+                  ? "text-green-600 hover:bg-green-100 dark:hover:bg-green-900/30"
+                  : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+              )}
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleComplete();
+              }}
+              title={section.is_complete ? "Mark as incomplete" : "Mark as complete"}
+            >
+              {section.is_complete ? (
+                <CheckCircle2 className="size-4" />
+              ) : (
+                <Circle className="size-4" />
+              )}
+            </button>
+          )}
           {/* Copy button */}
           {isCollapsed && hasContent && (
             <button
@@ -637,9 +715,9 @@ export function MPASectionCard({
 
       {/* Content - conditionally rendered instead of using Collapsible */}
       {!isCollapsed && (
-        <CardContent className="pt-0 space-y-4 animate-in slide-in-from-top-2 duration-200">
+        <CardContent className="pt-0 space-y-3 sm:space-y-4 animate-in slide-in-from-top-2 duration-200 px-3 sm:px-6">
             {/* Mode selector and actions */}
-            <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center justify-between gap-1.5 sm:gap-2 flex-wrap">
               <ModeSelector
                 currentMode={state.mode}
                 onModeChange={handleModeChange}
@@ -647,21 +725,42 @@ export function MPASectionCard({
                 lockedByInfo={lockedByInfo}
               />
               <div className="flex items-center gap-1">
-                {/* History button - no Popover to avoid ref issues */}
+                {/* Refresh button - get latest data */}
+                {onRefresh && (
+                  <button
+                    className={cn(
+                      "inline-flex items-center justify-center rounded-md size-7 text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors",
+                      isRefreshing && "animate-spin"
+                    )}
+                    onClick={handleRefresh}
+                    disabled={isRefreshing}
+                    title="Refresh to get latest data"
+                  >
+                    <RefreshCw className="size-3.5" />
+                  </button>
+                )}
+
+                {/* History button with tooltip */}
                 <button
-                  className="inline-flex items-center justify-center rounded-md size-7 text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+                  className={cn(
+                    "inline-flex items-center justify-center rounded-md size-7 text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors",
+                    showHistory && "bg-accent text-accent-foreground"
+                  )}
                   onClick={() => setShowHistory(!showHistory)}
-                  title="View snapshot history"
+                  title="View saved snapshots - browse previous versions of this statement"
                 >
                   <History className="size-3.5" />
                 </button>
 
-                {/* Snapshot button - simplified */}
+                {/* Snapshot button with tooltip */}
                 <button
-                  className="inline-flex items-center justify-center rounded-md size-7 text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors disabled:opacity-50 disabled:pointer-events-none"
+                  className={cn(
+                    "inline-flex items-center justify-center rounded-md size-7 text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors disabled:opacity-50 disabled:pointer-events-none",
+                    showSnapshotNote && "bg-accent text-accent-foreground"
+                  )}
                   disabled={!hasContent}
                   onClick={() => setShowSnapshotNote(!showSnapshotNote)}
-                  title="Save snapshot"
+                  title="Save a snapshot - create a backup of current text"
                 >
                   <Camera className="size-3.5" />
                 </button>

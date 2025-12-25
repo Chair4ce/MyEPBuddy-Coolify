@@ -19,3 +19,4 @@ CREATE POLICY "Users can view teams in their chain"
     OR supervisor_id IN (SELECT subordinate_id FROM get_subordinate_chain(auth.uid()))
   );
 
+

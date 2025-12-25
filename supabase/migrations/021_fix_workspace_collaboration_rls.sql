@@ -56,3 +56,4 @@ CREATE POLICY "workspace_participants_delete_self"
   TO authenticated
   USING (user_id = auth.uid());
 
+

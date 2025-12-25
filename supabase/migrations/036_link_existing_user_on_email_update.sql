@@ -120,3 +120,4 @@ CREATE TRIGGER trigger_check_team_member_email
   WHEN (OLD.email IS DISTINCT FROM NEW.email AND NEW.email IS NOT NULL)
   EXECUTE FUNCTION check_team_member_email_for_existing_user();
 
+

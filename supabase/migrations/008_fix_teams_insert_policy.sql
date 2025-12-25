@@ -22,3 +22,4 @@ CREATE POLICY "Users can remove team relationships they're part of"
     supervisor_id = auth.uid() OR subordinate_id = auth.uid()
   );
 
+

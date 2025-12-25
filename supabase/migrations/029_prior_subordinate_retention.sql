@@ -173,3 +173,4 @@ GRANT EXECUTE ON FUNCTION delete_prior_subordinate(uuid, boolean) TO authenticat
 CREATE INDEX IF NOT EXISTS idx_team_members_status ON team_members(member_status);
 CREATE INDEX IF NOT EXISTS idx_team_members_original_profile ON team_members(original_profile_id);
 
+

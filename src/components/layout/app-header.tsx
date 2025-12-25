@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { createClient } from "@/lib/supabase/client";
+import { useUserStore } from "@/stores/user-store";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -21,10 +22,14 @@ interface AppHeaderProps {
   profile: Profile | null;
 }
 
-export function AppHeader({ profile }: AppHeaderProps) {
+export function AppHeader({ profile: initialProfile }: AppHeaderProps) {
   const router = useRouter();
   const { theme, setTheme } = useTheme();
   const supabase = createClient();
+  
+  // Use store profile for reactivity, fallback to initial prop
+  const storeProfile = useUserStore((state) => state.profile);
+  const profile = storeProfile ?? initialProfile;
 
   async function handleSignOut() {
     const { error } = await supabase.auth.signOut();
@@ -76,7 +81,7 @@ export function AppHeader({ profile }: AppHeaderProps) {
                 className="relative h-9 w-9 rounded-full flex-shrink-0"
                 aria-label="User menu"
               >
-                <Avatar className="size-9 flex-shrink-0">
+                <Avatar key={profile?.avatar_url || "no-avatar"} className="size-9 flex-shrink-0">
                   <AvatarImage
                     src={profile?.avatar_url || undefined}
                     alt={profile?.full_name || "User"}

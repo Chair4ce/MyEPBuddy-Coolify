@@ -554,3 +554,4 @@ CREATE TRIGGER trigger_award_requests_updated_at
   FOR EACH ROW
   EXECUTE FUNCTION update_awards_updated_at();
 
+

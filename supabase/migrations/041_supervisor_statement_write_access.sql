@@ -72,3 +72,4 @@ CREATE INDEX IF NOT EXISTS idx_refined_statements_team_member_cycle
   ON refined_statements(team_member_id, cycle_year) 
   WHERE team_member_id IS NOT NULL;
 
+

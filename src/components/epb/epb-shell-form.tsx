@@ -43,6 +43,7 @@ import { EPBShellShareDialog } from "./epb-shell-share-dialog";
 import { RealtimeCursors } from "./realtime-cursors";
 import { useEPBCollaboration } from "@/hooks/use-epb-collaboration";
 import { useSectionLocks } from "@/hooks/use-section-locks";
+import { useIdleDetection } from "@/hooks/use-idle-detection";
 import type { EPBShell, EPBShellSection, EPBShellSnapshot, Accomplishment, Profile, ManagedMember, UserLLMSettings } from "@/types/database";
 
 interface EPBShellFormProps {
@@ -161,6 +162,41 @@ export function EPBShellForm({
     return () => clearTimeout(timer);
   }, [collaboration, sectionStates, collapsedSections]);
 
+  // Idle detection - 15 minutes timeout
+  const IDLE_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
+  
+  const handleIdleTimeout = useCallback(() => {
+    // If in a collaboration session, leave/end it
+    if (collaboration.isInSession) {
+      if (collaboration.isHost) {
+        toast.warning("Session ended due to inactivity", {
+          description: "The multi-user session was closed after 15 minutes of inactivity",
+        });
+        collaboration.endSession();
+      } else {
+        toast.info("Left session due to inactivity", {
+          description: "You were disconnected after 15 minutes of inactivity",
+        });
+        collaboration.leaveSession();
+      }
+    }
+    
+    // Release any locks we hold
+    if (sectionLocks.hasAnyLock()) {
+      // The locks will auto-expire after 5 mins without heartbeat
+      // but we can't easily release them here without section IDs
+      toast.info("Your edit locks will expire shortly", {
+        description: "Due to inactivity, your locks will be released",
+      });
+    }
+  }, [collaboration, sectionLocks]);
+
+  useIdleDetection({
+    timeout: IDLE_TIMEOUT_MS,
+    onIdle: handleIdleTimeout,
+    enabled: collaboration.isInSession || !isMultiUserMode, // Only track when session active or in single-user mode
+  });
+
   // Toggle multi-user mode
   const handleToggleMultiUserMode = useCallback(async () => {
     if (!currentShell) return;
@@ -192,11 +228,38 @@ export function EPBShellForm({
     }
   }, [currentShell, supabase, setCurrentShell]);
 
-  // Calculate completion status
+  // Calculate completion status - now based on is_complete toggle, not text content
   const completedMPAs = Object.values(sections).filter(
-    (s) => s.statement_text.trim().length > 0
+    (s) => s.is_complete
   ).length;
   const totalMPAs = STANDARD_MGAS.length;
+
+  // Toggle completion status for a section
+  const handleToggleComplete = async (mpa: string) => {
+    const section = sections[mpa];
+    if (!section || !profile) return;
+
+    const newValue = !section.is_complete;
+    
+    // Optimistically update local state
+    updateSection(mpa, { is_complete: newValue });
+
+    const { error } = await supabase
+      .from("epb_shell_sections")
+      .update({
+        is_complete: newValue,
+        last_edited_by: profile.id,
+        updated_at: new Date().toISOString(),
+      } as never)
+      .eq("id", section.id);
+
+    if (error) {
+      // Revert on error
+      updateSection(mpa, { is_complete: !newValue });
+      toast.error("Failed to update completion status");
+      console.error("Toggle complete error:", error);
+    }
+  };
 
   // Build ratee selector options
   const rateeOptions: { value: string; label: string; ratee: SelectedRatee }[] = [
@@ -705,11 +768,11 @@ export function EPBShellForm({
     <div className="space-y-6">
       {/* Member Selector - Always visible */}
       {(subordinates.length > 0 || managedMembers.length > 0) && (
-        <Card className="bg-muted/30">
-          <CardContent className="py-3">
-            <div className="flex items-center gap-4">
-              <span className="text-sm text-muted-foreground shrink-0">Viewing EPB for:</span>
-              <div className="flex-1 max-w-sm">
+        <Card className="bg-muted/30 overflow-hidden">
+          <CardContent className="py-2 sm:py-3 px-3 sm:px-6">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+              <span className="text-xs sm:text-sm text-muted-foreground shrink-0">Viewing EPB for:</span>
+              <div className="flex items-center gap-2 min-w-0 flex-1">
                 <Select
                   value={
                     selectedRatee
@@ -722,7 +785,7 @@ export function EPBShellForm({
                   }
                   onValueChange={handleRateeChange}
                 >
-                  <SelectTrigger className="bg-background">
+                  <SelectTrigger className="bg-background h-8 sm:h-9 text-xs sm:text-sm max-w-[240px] sm:max-w-sm">
                     <SelectValue placeholder="Select member..." />
                   </SelectTrigger>
                   <SelectContent>
@@ -769,65 +832,66 @@ export function EPBShellForm({
                     )}
                   </SelectContent>
                 </Select>
+                <Badge variant="outline" className="shrink-0 text-[10px] sm:text-xs">
+                  {cycleYear}
+                </Badge>
               </div>
-              <Badge variant="outline" className="shrink-0">
-                {cycleYear} Cycle
-              </Badge>
             </div>
           </CardContent>
         </Card>
       )}
 
       {/* Header with ratee info and progress */}
-      <Card>
-        <CardHeader className="pb-4">
-          <div className="flex items-start justify-between gap-4 flex-wrap">
-            <div>
-              <CardTitle className="text-xl flex items-center gap-2">
-                {selectedRatee?.rank} {selectedRatee?.fullName}
+      <Card className="overflow-hidden">
+        <CardHeader className="pb-4 px-3 sm:px-6">
+          <div className="flex flex-col gap-3">
+            {/* Name and badges row */}
+            <div className="min-w-0">
+              <CardTitle className="text-base sm:text-xl flex items-center gap-2 flex-wrap">
+                <span className="truncate max-w-[200px] sm:max-w-none">{selectedRatee?.rank} {selectedRatee?.fullName}</span>
                 {selectedRatee?.isManagedMember && (
-                  <Badge variant="secondary" className="text-xs">Managed</Badge>
+                  <Badge variant="secondary" className="text-[10px] sm:text-xs shrink-0">Managed</Badge>
                 )}
               </CardTitle>
-              <CardDescription className="flex items-center gap-2 mt-1">
-                <Badge variant="outline">{cycleYear} Performance Cycle</Badge>
+              <CardDescription className="flex items-center gap-1.5 sm:gap-2 mt-1 flex-wrap">
+                <Badge variant="outline" className="text-[10px] sm:text-xs">{cycleYear}</Badge>
                 {selectedRatee?.afsc && (
-                  <Badge variant="secondary">{selectedRatee.afsc}</Badge>
+                  <Badge variant="secondary" className="text-[10px] sm:text-xs">{selectedRatee.afsc}</Badge>
                 )}
               </CardDescription>
             </div>
-            <div className="flex items-center gap-2">
+            {/* Action buttons row */}
+            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
               {/* Collaborate Toggle */}
-              <button
+              <Button
+                variant={isMultiUserMode ? "default" : "secondary"}
+                size="sm"
                 onClick={handleToggleMultiUserMode}
                 disabled={isTogglingMode}
                 className={cn(
-                  "relative inline-flex h-8 items-center gap-2 rounded-full px-4 text-sm font-medium transition-all",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                  "disabled:pointer-events-none disabled:opacity-50",
-                  isMultiUserMode
-                    ? "bg-violet-600 text-white hover:bg-violet-700 shadow-sm"
-                    : "bg-muted text-muted-foreground hover:bg-muted/80"
+                  "h-7 sm:h-8 gap-1.5 sm:gap-2 rounded-full px-2 sm:px-4 text-xs sm:text-sm",
+                  isMultiUserMode && "bg-violet-600 hover:bg-violet-700"
                 )}
+                title={isMultiUserMode ? "Collaboration enabled" : "Enable collaboration"}
               >
                 {isTogglingMode ? (
-                  <Loader2 className="size-4 animate-spin" />
+                  <Loader2 className="size-3.5 sm:size-4 animate-spin" />
                 ) : isMultiUserMode ? (
-                  <Users className="size-4" />
+                  <Users className="size-3.5 sm:size-4" />
                 ) : (
-                  <User className="size-4" />
+                  <User className="size-3.5 sm:size-4" />
                 )}
-                <span>Collaborate</span>
+                <span className="hidden sm:inline">Collaborate</span>
                 {isMultiUserMode && collaboration.collaborators.length > 0 && (
-                  <span className="flex items-center justify-center size-5 rounded-full bg-white/20 text-xs font-bold">
+                  <span className="flex items-center justify-center size-4 sm:size-5 rounded-full bg-white/20 text-[10px] sm:text-xs font-bold">
                     {collaboration.collaborators.length}
                   </span>
                 )}
-              </button>
+              </Button>
 
               {/* Session controls - only shown when multi-user is enabled */}
               {isMultiUserMode && (
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1 sm:gap-1.5">
                   {!collaboration.isInSession ? (
                     <>
                       <Button
@@ -835,7 +899,7 @@ export function EPBShellForm({
                         size="sm"
                         onClick={() => collaboration.createSession()}
                         disabled={collaboration.isLoading}
-                        className="h-7 px-2 text-xs"
+                        className="h-6 sm:h-7 px-1.5 sm:px-2 text-[10px] sm:text-xs"
                       >
                         {collaboration.isLoading ? (
                           <Loader2 className="size-3 animate-spin" />
@@ -843,11 +907,10 @@ export function EPBShellForm({
                           "Start"
                         )}
                       </Button>
-                      <span className="text-muted-foreground text-xs">or</span>
                       <input
                         type="text"
                         placeholder="Code"
-                        className="h-7 w-16 rounded border bg-background px-2 text-xs uppercase placeholder:normal-case"
+                        className="h-6 sm:h-7 w-12 sm:w-16 rounded border bg-background px-1.5 sm:px-2 text-[10px] sm:text-xs uppercase placeholder:normal-case"
                         maxLength={6}
                         onKeyDown={(e) => {
                           if (e.key === "Enter") {
@@ -859,14 +922,14 @@ export function EPBShellForm({
                     </>
                   ) : (
                     <>
-                      <Badge variant="secondary" className="h-7 px-2 font-mono text-xs">
+                      <Badge variant="secondary" className="h-6 sm:h-7 px-1.5 sm:px-2 font-mono text-[10px] sm:text-xs">
                         {collaboration.sessionCode}
                       </Badge>
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={collaboration.isHost ? collaboration.endSession : collaboration.leaveSession}
-                        className="h-7 px-2 text-xs text-muted-foreground hover:text-destructive"
+                        className="h-6 sm:h-7 px-1.5 sm:px-2 text-[10px] sm:text-xs text-muted-foreground hover:text-destructive"
                       >
                         {collaboration.isHost ? "End" : "Leave"}
                       </Button>
@@ -875,9 +938,15 @@ export function EPBShellForm({
                 </div>
               )}
               
-              <Button variant="outline" size="sm" onClick={() => setShowShareDialog(true)}>
-                <Share2 className="size-4 mr-1.5" />
-                Share
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => setShowShareDialog(true)} 
+                className="h-7 sm:h-8 px-2 sm:px-3"
+                title="Share EPB"
+              >
+                <Share2 className="size-3.5 sm:size-4" />
+                <span className="hidden sm:inline ml-1.5">Share</span>
               </Button>
             </div>
             
@@ -893,23 +962,26 @@ export function EPBShellForm({
             )}
           </div>
         </CardHeader>
-        <CardContent className="pt-0">
+        <CardContent className="pt-0 px-3 sm:px-6">
           {/* Progress indicator */}
-          <div className="space-y-3">
+          <div className="space-y-2 sm:space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-sm font-medium">Statement Progress</span>
-              <span className="text-sm text-muted-foreground">
-                {completedMPAs}/{totalMPAs} MPAs
+              <span className="text-xs sm:text-sm font-medium">Progress</span>
+              <span className="text-xs sm:text-sm text-muted-foreground">
+                {completedMPAs}/{totalMPAs}
               </span>
             </div>
-            <div className="grid grid-cols-5 gap-2">
+            <div className="grid grid-cols-5 gap-1 sm:gap-2">
               {STANDARD_MGAS.map((mpa) => {
                 const section = sections[mpa.key];
+                const isComplete = section?.is_complete ?? false;
                 const hasContent = section?.statement_text?.trim().length > 0;
                 const isHLR = mpa.key === "hlr_assessment";
                 return (
-                  <button
+                  <Button
                     key={mpa.key}
+                    variant="outline"
+                    size="sm"
                     onClick={() => {
                       // Expand this section and scroll to it
                       if (collapsedSections[mpa.key]) {
@@ -917,49 +989,56 @@ export function EPBShellForm({
                       }
                     }}
                     className={cn(
-                      "p-2 rounded-lg border text-center transition-all hover:shadow-sm",
-                      hasContent
-                        ? "bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-700"
+                      "h-auto p-1.5 sm:p-2 flex-col gap-0.5 text-center transition-all hover:shadow-sm",
+                      isComplete
+                        ? "bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-700 hover:bg-green-100 dark:hover:bg-green-900/30"
+                        : hasContent
+                        ? "bg-amber-50 dark:bg-amber-900/20 border-amber-300/50 dark:border-amber-700/50 hover:bg-amber-100 dark:hover:bg-amber-900/30"
                         : "bg-muted/30 hover:bg-muted/50",
-                      isHLR && !hasContent && "border-amber-300/50"
+                      isHLR && !isComplete && !hasContent && "border-amber-300/50"
                     )}
                   >
-                    <div className="flex items-center justify-center gap-1 mb-0.5">
-                      {hasContent ? (
+                    <div className="flex items-center justify-center gap-0.5 sm:gap-1">
+                      {isComplete ? (
                         <CheckCircle2 className="size-3 text-green-600" />
+                      ) : hasContent ? (
+                        <Circle className="size-3 text-amber-500" />
                       ) : (
                         <Circle className="size-3 text-muted-foreground" />
                       )}
                       {isHLR && <Crown className="size-3 text-amber-600" />}
                     </div>
-                    <span className="text-[10px] font-medium truncate block">
-                      {mpa.key === "executing_mission" && "Mission"}
-                      {mpa.key === "leading_people" && "Leading"}
-                      {mpa.key === "managing_resources" && "Resources"}
-                      {mpa.key === "improving_unit" && "Improving"}
+                    {/* Mobile: show acronyms, Desktop: show full labels */}
+                    <span className="text-[9px] sm:text-[10px] font-medium truncate">
+                      {mpa.key === "executing_mission" && <><span className="sm:hidden">EM</span><span className="hidden sm:inline">Mission</span></>}
+                      {mpa.key === "leading_people" && <><span className="sm:hidden">LP</span><span className="hidden sm:inline">Leading</span></>}
+                      {mpa.key === "managing_resources" && <><span className="sm:hidden">MR</span><span className="hidden sm:inline">Resources</span></>}
+                      {mpa.key === "improving_unit" && <><span className="sm:hidden">IU</span><span className="hidden sm:inline">Improving</span></>}
                       {mpa.key === "hlr_assessment" && "HLR"}
                     </span>
-                  </button>
+                  </Button>
                 );
               })}
             </div>
           </div>
 
-          <Separator className="my-4" />
+          <Separator className="my-3 sm:my-4" />
 
           {/* Quick actions */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <Button variant="outline" size="sm" onClick={expandAll}>
-              <ChevronDown className="size-3.5 mr-1.5" />
-              Expand All
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+            <Button variant="outline" size="sm" onClick={expandAll} className="h-7 sm:h-8 px-2 sm:px-3 text-xs sm:text-sm">
+              <ChevronDown className="size-3 sm:size-3.5" />
+              <span className="hidden sm:inline ml-1.5">Expand All</span>
+              <span className="sm:hidden ml-1">All</span>
             </Button>
-            <Button variant="outline" size="sm" onClick={collapseAll}>
-              <ChevronUp className="size-3.5 mr-1.5" />
-              Collapse All
+            <Button variant="outline" size="sm" onClick={collapseAll} className="h-7 sm:h-8 px-2 sm:px-3 text-xs sm:text-sm">
+              <ChevronUp className="size-3 sm:size-3.5" />
+              <span className="hidden sm:inline ml-1.5">Collapse All</span>
+              <span className="sm:hidden ml-1">None</span>
             </Button>
             <div className="flex-1" />
-            <Badge variant="secondary" className="text-xs">
-              {accomplishments.length} Performance Actions
+            <Badge variant="secondary" className="text-[10px] sm:text-xs">
+              {accomplishments.length} <span className="hidden sm:inline">Performance </span>Actions
             </Badge>
           </div>
         </CardContent>
@@ -1010,6 +1089,8 @@ export function EPBShellForm({
                 cycleYear={cycleYear}
                 // Enable real-time text sync when collaborating
                 isCollaborating={collaboration.isInSession}
+                // Completion toggle
+                onToggleComplete={() => handleToggleComplete(mpa.key)}
               />
             </div>
           );

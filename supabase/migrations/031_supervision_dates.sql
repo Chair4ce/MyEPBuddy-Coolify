@@ -123,3 +123,4 @@ GRANT EXECUTE ON FUNCTION update_managed_member_dates(uuid, date, date) TO authe
 CREATE INDEX IF NOT EXISTS idx_teams_supervision_dates ON teams(supervision_start_date, supervision_end_date);
 CREATE INDEX IF NOT EXISTS idx_team_members_supervision_dates ON team_members(supervision_start_date, supervision_end_date);
 
+

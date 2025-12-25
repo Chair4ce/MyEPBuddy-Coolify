@@ -17,3 +17,4 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- Also update any existing users stuck with 'subordinate' role to 'member'
 UPDATE profiles SET role = 'member' WHERE role = 'subordinate';
 
+

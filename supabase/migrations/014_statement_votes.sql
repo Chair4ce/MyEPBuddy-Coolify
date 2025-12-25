@@ -80,3 +80,4 @@ CREATE INDEX IF NOT EXISTS idx_statement_votes_user ON statement_votes(user_id);
 CREATE INDEX IF NOT EXISTS idx_statement_votes_statement ON statement_votes(statement_id);
 CREATE INDEX IF NOT EXISTS idx_community_statements_votes ON community_statements(upvotes DESC, downvotes ASC);
 
+

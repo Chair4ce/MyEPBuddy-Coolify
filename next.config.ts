@@ -7,6 +7,16 @@ const localSupabaseUrls = isDev
   ? "http://127.0.0.1:54321 http://localhost:54321 ws://127.0.0.1:54321 ws://localhost:54321"
   : "";
 
+// Image sources for avatars (Google profile pics + Supabase storage)
+const imageSources = [
+  "'self'",
+  "data:",
+  "https:",
+  "blob:",
+  "https://*.supabase.co",
+  isDev ? "http://127.0.0.1:54321 http://localhost:54321" : "",
+].filter(Boolean).join(" ");
+
 // Security headers to protect against common attacks
 // These headers help establish trust with enterprise/government proxies
 const securityHeaders = [
@@ -18,7 +28,7 @@ const securityHeaders = [
       "default-src 'self'",
       "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://va.vercel-scripts.com",
       "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: https: blob:",
+      `img-src ${imageSources}`,
       "font-src 'self' https://fonts.gstatic.com",
       `connect-src 'self' https://*.supabase.co https://api.openai.com https://api.anthropic.com https://generativelanguage.googleapis.com https://va.vercel-scripts.com wss://*.supabase.co ${localSupabaseUrls}`.trim(),
       "frame-ancestors 'none'",

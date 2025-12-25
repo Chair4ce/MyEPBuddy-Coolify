@@ -23,10 +23,12 @@ interface UseSectionLocksReturn {
   acquireLock: (sectionId: string) => Promise<{ success: boolean; lockedBy?: string }>;
   releaseLock: (sectionId: string) => Promise<void>;
   refreshLock: (sectionId: string) => Promise<void>;
+  refreshAllLocks: () => Promise<void>; // Manual refresh of all locks
   
   // Helpers
   isLockedByOther: (mpaKey: string) => boolean;
   getLockedByInfo: (mpaKey: string) => { name: string; rank: string | null } | null;
+  hasAnyLock: () => boolean; // Check if we hold any locks
 }
 
 export function useSectionLocks({
@@ -217,14 +219,26 @@ export function useSectionLocks({
     return { name: lock.user_name, rank: lock.user_rank };
   }, [locks, profile?.id]);
 
+  // Check if we hold any locks
+  const hasAnyLock = useCallback((): boolean => {
+    return ownLocksRef.current.size > 0;
+  }, []);
+
+  // Expose fetchLocks as refreshAllLocks for manual refresh
+  const refreshAllLocks = useCallback(async () => {
+    await fetchLocks();
+  }, [fetchLocks]);
+
   return {
     locks,
     isLoading,
     acquireLock,
     releaseLock,
     refreshLock,
+    refreshAllLocks,
     isLockedByOther,
     getLockedByInfo,
+    hasAnyLock,
   };
 }
 

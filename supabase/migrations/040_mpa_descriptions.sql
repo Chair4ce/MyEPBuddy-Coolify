@@ -47,3 +47,4 @@ ADD COLUMN mpa_descriptions JSONB NOT NULL DEFAULT '{
 -- Add comment for documentation
 COMMENT ON COLUMN user_llm_settings.mpa_descriptions IS 'User-customizable MPA descriptions with sub-competencies. Used to guide AI generation and calculate relevancy scores.';
 
+

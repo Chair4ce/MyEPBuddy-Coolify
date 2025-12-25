@@ -45,3 +45,4 @@ CREATE POLICY "Linked users can view their team_member records"
   ON team_members FOR SELECT
   USING (linked_user_id = auth.uid());
 
+

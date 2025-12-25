@@ -150,3 +150,4 @@ CREATE POLICY "Users can manage their own locks"
 -- Enable realtime for locks table
 ALTER PUBLICATION supabase_realtime ADD TABLE epb_section_locks;
 
+

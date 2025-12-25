@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useUserStore } from "@/stores/user-store";
 import { Button } from "@/components/ui/button";
@@ -20,7 +20,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { toast } from "@/components/ui/sonner";
+import { AvatarCropDialog } from "@/components/settings/avatar-crop-dialog";
 import { 
   RANKS, 
   getStaticCloseoutDate, 
@@ -28,13 +30,17 @@ import {
   getCycleProgress,
   RANK_TO_TIER 
 } from "@/lib/constants";
-import { Loader2, User, Calendar, Clock } from "lucide-react";
+import { Loader2, User, Calendar, Clock, Camera, X } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import type { Rank, Profile } from "@/types/database";
 
 export default function SettingsPage() {
   const { profile, setProfile } = useUserStore();
   const [isLoading, setIsLoading] = useState(false);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [cropDialogOpen, setCropDialogOpen] = useState(false);
+  const [selectedImageSrc, setSelectedImageSrc] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState({
     full_name: "",
     rank: "" as Rank | "",
@@ -43,6 +49,159 @@ export default function SettingsPage() {
   });
 
   const supabase = createClient();
+  
+  const initials =
+    profile?.full_name
+      ?.split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase() || profile?.email?.charAt(0).toUpperCase() || "U";
+
+  // When user selects a file, show the crop dialog
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !profile) return;
+
+    // Validate file type
+    const validTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+    if (!validTypes.includes(file.type)) {
+      toast.error("Please upload a valid image file (JPEG, PNG, GIF, or WebP)");
+      return;
+    }
+
+    // Validate file size (2MB max)
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("Image must be less than 2MB");
+      return;
+    }
+
+    // Create object URL for the cropper
+    const imageUrl = URL.createObjectURL(file);
+    setSelectedImageSrc(imageUrl);
+    setCropDialogOpen(true);
+
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }
+
+  // Upload the cropped image
+  async function handleCroppedUpload(croppedBlob: Blob) {
+    if (!profile) return;
+
+    setIsUploadingAvatar(true);
+
+    try {
+      // Generate unique filename
+      const fileName = `${profile.id}/avatar-${Date.now()}.jpeg`;
+
+      // Delete old avatar if it exists in storage (not a Google URL)
+      if (profile.avatar_url && profile.avatar_url.includes("/storage/v1/object/")) {
+        const oldPath = profile.avatar_url.split("/avatars/")[1]?.split("?")[0];
+        if (oldPath) {
+          await supabase.storage.from("avatars").remove([oldPath]);
+        }
+      }
+
+      // Upload cropped avatar
+      const { error: uploadError } = await supabase.storage
+        .from("avatars")
+        .upload(fileName, croppedBlob, { 
+          upsert: true,
+          contentType: "image/jpeg"
+        });
+
+      if (uploadError) {
+        console.error("Upload error:", uploadError);
+        toast.error(`Upload failed: ${uploadError.message}`);
+        return;
+      }
+
+      // Get public URL with cache buster
+      const { data: urlData } = supabase.storage
+        .from("avatars")
+        .getPublicUrl(fileName);
+      
+      const avatarUrlWithCacheBuster = `${urlData.publicUrl}?t=${Date.now()}`;
+
+      // Update profile with new avatar URL
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error: updateError } = await (supabase as any)
+        .from("profiles")
+        .update({ avatar_url: avatarUrlWithCacheBuster })
+        .eq("id", profile.id)
+        .select()
+        .single();
+
+      if (updateError) {
+        console.error("Profile update error:", updateError);
+        toast.error(`Failed to update profile: ${updateError.message}`);
+        return;
+      }
+
+      setProfile(data as Profile);
+      toast.success("Profile photo updated");
+      setCropDialogOpen(false);
+      
+      // Clean up object URL
+      if (selectedImageSrc) {
+        URL.revokeObjectURL(selectedImageSrc);
+        setSelectedImageSrc(null);
+      }
+    } catch (err) {
+      console.error("Unexpected error:", err);
+      toast.error("Failed to upload image");
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  }
+
+  // Handle crop dialog close
+  function handleCropDialogClose(open: boolean) {
+    if (!open && selectedImageSrc) {
+      URL.revokeObjectURL(selectedImageSrc);
+      setSelectedImageSrc(null);
+    }
+    setCropDialogOpen(open);
+  }
+
+  async function handleRemoveAvatar() {
+    if (!profile) return;
+
+    setIsUploadingAvatar(true);
+
+    try {
+      // Delete from storage if it's a storage URL
+      if (profile.avatar_url && profile.avatar_url.includes("/storage/v1/object/")) {
+        const oldPath = profile.avatar_url.split("/avatars/")[1];
+        if (oldPath) {
+          await supabase.storage.from("avatars").remove([oldPath]);
+        }
+      }
+
+      // Update profile to remove avatar
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("profiles")
+        .update({ avatar_url: null })
+        .eq("id", profile.id)
+        .select()
+        .single();
+
+      if (error) {
+        toast.error("Failed to remove photo");
+        return;
+      }
+
+      setProfile(data as Profile);
+      toast.success("Profile photo removed");
+    } catch {
+      toast.error("Failed to remove photo");
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  }
 
   useEffect(() => {
     if (profile) {
@@ -95,6 +254,103 @@ export default function SettingsPage() {
           Manage your personal information and preferences
         </p>
       </div>
+
+      {/* Profile Photo Card */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="size-10 rounded-full bg-primary/10 flex items-center justify-center">
+              <Camera className="size-5 text-primary" />
+            </div>
+            <div>
+              <CardTitle>Profile Photo</CardTitle>
+              <CardDescription>
+                Your photo appears in the navigation and team views
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-6">
+            <div className="relative group">
+              <Avatar key={profile?.avatar_url || "no-avatar"} className="size-24 border-2 border-muted">
+                <AvatarImage
+                  src={profile?.avatar_url || undefined}
+                  alt={profile?.full_name || "User"}
+                />
+                <AvatarFallback className="bg-primary/10 text-primary text-2xl">
+                  {initials}
+                </AvatarFallback>
+              </Avatar>
+              {isUploadingAvatar && (
+                <div className="absolute inset-0 bg-background/80 rounded-full flex items-center justify-center">
+                  <Loader2 className="size-6 animate-spin text-primary" />
+                </div>
+              )}
+            </div>
+            <div className="flex flex-col gap-2">
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isUploadingAvatar}
+                  aria-label="Upload new photo"
+                >
+                  {isUploadingAvatar ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin mr-2" />
+                      Uploading...
+                    </>
+                  ) : (
+                    <>
+                      <Camera className="size-4 mr-2" />
+                      {profile?.avatar_url ? "Change Photo" : "Upload Photo"}
+                    </>
+                  )}
+                </Button>
+                {profile?.avatar_url && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleRemoveAvatar}
+                    disabled={isUploadingAvatar}
+                    className="text-muted-foreground hover:text-destructive"
+                    aria-label="Remove photo"
+                  >
+                    <X className="size-4 mr-1" />
+                    Remove
+                  </Button>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                JPG, PNG, GIF or WebP. Max 2MB.
+              </p>
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/gif,image/webp"
+              onChange={handleFileSelect}
+              className="hidden"
+              aria-label="Upload profile photo"
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Avatar Crop Dialog */}
+      {selectedImageSrc && (
+        <AvatarCropDialog
+          open={cropDialogOpen}
+          onOpenChange={handleCropDialogClose}
+          imageSrc={selectedImageSrc}
+          onCropComplete={handleCroppedUpload}
+          isUploading={isUploadingAvatar}
+        />
+      )}
 
       <Card>
         <CardHeader>

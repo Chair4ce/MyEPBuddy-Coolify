@@ -83,3 +83,4 @@ COMMENT ON COLUMN user_llm_settings.award_system_prompt IS 'System prompt for Aw
 COMMENT ON COLUMN user_llm_settings.abbreviations IS 'Word abbreviations for EPB statement generation';
 COMMENT ON COLUMN user_llm_settings.award_abbreviations IS 'Word abbreviations for Award statement generation';
 
+

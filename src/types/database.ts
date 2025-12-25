@@ -457,6 +457,7 @@ export interface EPBShellSection {
   shell_id: string;
   mpa: string;
   statement_text: string;
+  is_complete: boolean;
   last_edited_by: string | null;
   created_at: string;
   updated_at: string;

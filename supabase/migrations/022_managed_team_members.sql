@@ -217,3 +217,4 @@ CREATE TRIGGER on_team_member_linked
   WHEN (OLD.linked_user_id IS NULL AND NEW.linked_user_id IS NOT NULL)
   EXECUTE FUNCTION migrate_managed_member_data();
 
+
