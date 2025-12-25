@@ -58,7 +58,10 @@ export function EPBShellForm({
   onOpenAccomplishments,
 }: EPBShellFormProps) {
   const supabase = createClient();
-  const { profile, subordinates, managedMembers } = useUserStore();
+  const { profile, subordinates, managedMembers, epbConfig } = useUserStore();
+  
+  // Feature flag for collaboration
+  const isCollaborationEnabled = epbConfig?.enable_collaboration ?? false;
   const {
     selectedRatee,
     setSelectedRatee,
@@ -508,18 +511,38 @@ export function EPBShellForm({
     });
   };
 
-  // Create a snapshot
-  const handleCreateSnapshot = async (mpa: string, text: string, note?: string) => {
+  // Create a snapshot (max 10 per section, oldest gets deleted when 11th is added)
+  const handleCreateSnapshot = async (mpa: string, text: string) => {
     const section = sections[mpa];
     if (!section || !profile) return;
 
+    const existingSnapshots = snapshots[section.id] || [];
+    
+    // If we already have 10 snapshots, delete the oldest one
+    if (existingSnapshots.length >= 10) {
+      // Sort by created_at ascending to find oldest
+      const sortedSnapshots = [...existingSnapshots].sort(
+        (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      );
+      const oldestSnapshot = sortedSnapshots[0];
+      
+      // Delete oldest from database
+      await supabase
+        .from("epb_shell_snapshots")
+        .delete()
+        .eq("id", oldestSnapshot.id);
+      
+      // Remove from local state
+      setSnapshots(section.id, existingSnapshots.filter(s => s.id !== oldestSnapshot.id));
+    }
+
+    // Create new snapshot
     const { data, error } = await supabase
       .from("epb_shell_snapshots")
       .insert({
         section_id: section.id,
         statement_text: text,
         created_by: profile.id,
-        note,
       } as never)
       .select()
       .single();
@@ -862,80 +885,84 @@ export function EPBShellForm({
             </div>
             {/* Action buttons row */}
             <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-              {/* Collaborate Toggle */}
-              <Button
-                variant={isMultiUserMode ? "default" : "secondary"}
-                size="sm"
-                onClick={handleToggleMultiUserMode}
-                disabled={isTogglingMode}
-                className={cn(
-                  "h-7 sm:h-8 gap-1.5 sm:gap-2 rounded-full px-2 sm:px-4 text-xs sm:text-sm",
-                  isMultiUserMode && "bg-violet-600 hover:bg-violet-700"
-                )}
-                title={isMultiUserMode ? "Collaboration enabled" : "Enable collaboration"}
-              >
-                {isTogglingMode ? (
-                  <Loader2 className="size-3.5 sm:size-4 animate-spin" />
-                ) : isMultiUserMode ? (
-                  <Users className="size-3.5 sm:size-4" />
-                ) : (
-                  <User className="size-3.5 sm:size-4" />
-                )}
-                <span className="hidden sm:inline">Collaborate</span>
-                {isMultiUserMode && collaboration.collaborators.length > 0 && (
-                  <span className="flex items-center justify-center size-4 sm:size-5 rounded-full bg-white/20 text-[10px] sm:text-xs font-bold">
-                    {collaboration.collaborators.length}
-                  </span>
-                )}
-              </Button>
+              {/* Collaborate Toggle - Only shown when collaboration feature is enabled */}
+              {isCollaborationEnabled && (
+                <>
+                  <Button
+                    variant={isMultiUserMode ? "default" : "secondary"}
+                    size="sm"
+                    onClick={handleToggleMultiUserMode}
+                    disabled={isTogglingMode}
+                    className={cn(
+                      "h-7 sm:h-8 gap-1.5 sm:gap-2 rounded-full px-2 sm:px-4 text-xs sm:text-sm",
+                      isMultiUserMode && "bg-violet-600 hover:bg-violet-700"
+                    )}
+                    title={isMultiUserMode ? "Collaboration enabled" : "Enable collaboration"}
+                  >
+                    {isTogglingMode ? (
+                      <Loader2 className="size-3.5 sm:size-4 animate-spin" />
+                    ) : isMultiUserMode ? (
+                      <Users className="size-3.5 sm:size-4" />
+                    ) : (
+                      <User className="size-3.5 sm:size-4" />
+                    )}
+                    <span className="hidden sm:inline">Collaborate</span>
+                    {isMultiUserMode && collaboration.collaborators.length > 0 && (
+                      <span className="flex items-center justify-center size-4 sm:size-5 rounded-full bg-white/20 text-[10px] sm:text-xs font-bold">
+                        {collaboration.collaborators.length}
+                      </span>
+                    )}
+                  </Button>
 
-              {/* Session controls - only shown when multi-user is enabled */}
-              {isMultiUserMode && (
-                <div className="flex items-center gap-1 sm:gap-1.5">
-                  {!collaboration.isInSession ? (
-                    <>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => collaboration.createSession()}
-                        disabled={collaboration.isLoading}
-                        className="h-6 sm:h-7 px-1.5 sm:px-2 text-[10px] sm:text-xs"
-                      >
-                        {collaboration.isLoading ? (
-                          <Loader2 className="size-3 animate-spin" />
-                        ) : (
-                          "Start"
-                        )}
-                      </Button>
-                      <input
-                        type="text"
-                        placeholder="Code"
-                        className="h-6 sm:h-7 w-12 sm:w-16 rounded border bg-background px-1.5 sm:px-2 text-[10px] sm:text-xs uppercase placeholder:normal-case"
-                        maxLength={6}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            const code = (e.target as HTMLInputElement).value.trim();
-                            if (code) collaboration.joinSession(code);
-                          }
-                        }}
-                      />
-                    </>
-                  ) : (
-                    <>
-                      <Badge variant="secondary" className="h-6 sm:h-7 px-1.5 sm:px-2 font-mono text-[10px] sm:text-xs">
-                        {collaboration.sessionCode}
-                      </Badge>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={collaboration.isHost ? collaboration.endSession : collaboration.leaveSession}
-                        className="h-6 sm:h-7 px-1.5 sm:px-2 text-[10px] sm:text-xs text-muted-foreground hover:text-destructive"
-                      >
-                        {collaboration.isHost ? "End" : "Leave"}
-                      </Button>
-                    </>
+                  {/* Session controls - only shown when multi-user is enabled */}
+                  {isMultiUserMode && (
+                    <div className="flex items-center gap-1 sm:gap-1.5">
+                      {!collaboration.isInSession ? (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => collaboration.createSession()}
+                            disabled={collaboration.isLoading}
+                            className="h-6 sm:h-7 px-1.5 sm:px-2 text-[10px] sm:text-xs"
+                          >
+                            {collaboration.isLoading ? (
+                              <Loader2 className="size-3 animate-spin" />
+                            ) : (
+                              "Start"
+                            )}
+                          </Button>
+                          <input
+                            type="text"
+                            placeholder="Code"
+                            className="h-6 sm:h-7 w-12 sm:w-16 rounded border bg-background px-1.5 sm:px-2 text-[10px] sm:text-xs uppercase placeholder:normal-case"
+                            maxLength={6}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                const code = (e.target as HTMLInputElement).value.trim();
+                                if (code) collaboration.joinSession(code);
+                              }
+                            }}
+                          />
+                        </>
+                      ) : (
+                        <>
+                          <Badge variant="secondary" className="h-6 sm:h-7 px-1.5 sm:px-2 font-mono text-[10px] sm:text-xs">
+                            {collaboration.sessionCode}
+                          </Badge>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={collaboration.isHost ? collaboration.endSession : collaboration.leaveSession}
+                            className="h-6 sm:h-7 px-1.5 sm:px-2 text-[10px] sm:text-xs text-muted-foreground hover:text-destructive"
+                          >
+                            {collaboration.isHost ? "End" : "Leave"}
+                          </Button>
+                        </>
+                      )}
+                    </div>
                   )}
-                </div>
+                </>
               )}
               
               <Button 
@@ -1049,8 +1076,8 @@ export function EPBShellForm({
         ref={contentContainerRef}
         className="space-y-4 relative"
       >
-        {/* Realtime cursors overlay - only visible in collaboration session */}
-        {collaboration.isInSession && currentShell && (
+        {/* Realtime cursors overlay - only visible in collaboration session when feature is enabled */}
+        {isCollaborationEnabled && collaboration.isInSession && currentShell && (
           <RealtimeCursors
             roomName={`epb-${currentShell.id}`}
             username={profile?.full_name || "Anonymous"}
@@ -1075,7 +1102,7 @@ export function EPBShellForm({
                 isCollapsed={collapsedSections[mpa.key] ?? false}
                 onToggleCollapse={() => toggleSectionCollapsed(mpa.key)}
                 onSave={(text) => handleSaveSection(mpa.key, text)}
-                onCreateSnapshot={(text, note) => handleCreateSnapshot(mpa.key, text, note)}
+                onCreateSnapshot={(text) => handleCreateSnapshot(mpa.key, text)}
                 onGenerateStatement={(opts) => handleGenerateStatement(mpa.key, opts)}
                 onReviseStatement={(text, ctx) => handleReviseStatement(mpa.key, text, ctx)}
                 snapshots={snapshots[section.id] || []}

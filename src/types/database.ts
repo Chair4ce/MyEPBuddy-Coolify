@@ -91,6 +91,7 @@ export interface EPBConfig {
   style_guidelines: string;
   rank_verb_progression: RankVerbProgression;
   base_system_prompt: string;
+  enable_collaboration: boolean;
   updated_at: string;
 }
 

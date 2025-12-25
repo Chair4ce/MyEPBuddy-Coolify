@@ -15,10 +15,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "@/components/ui/sonner";
-import { Loader2, Shield, Plus, X, AlertTriangle } from "lucide-react";
+import { Loader2, Shield, Plus, X, AlertTriangle, Users, ToggleRight } from "lucide-react";
 import type { EPBConfig, MajorGradedArea } from "@/types/database";
 
 export default function AdminConfigPage() {
@@ -74,6 +75,7 @@ export default function AdminConfigPage() {
           style_guidelines: config.style_guidelines,
           rank_verb_progression: config.rank_verb_progression,
           base_system_prompt: config.base_system_prompt,
+          enable_collaboration: config.enable_collaboration,
         })
         .eq("id", 1)
         .select()
@@ -227,6 +229,42 @@ export default function AdminConfigPage() {
                 aria-label="Current evaluation cycle year"
               />
             </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Feature Flags */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <ToggleRight className="size-5" />
+            Feature Flags
+          </CardTitle>
+          <CardDescription>
+            Enable or disable application features
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between p-4 rounded-lg border bg-muted/30">
+            <div className="flex items-center gap-3">
+              <Users className="size-5 text-muted-foreground" />
+              <div>
+                <Label htmlFor="enable_collaboration" className="text-base font-medium">
+                  Multi-User Collaboration
+                </Label>
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  Allow users to collaborate on EPB statements in real-time with session codes
+                </p>
+              </div>
+            </div>
+            <Switch
+              id="enable_collaboration"
+              checked={config.enable_collaboration}
+              onCheckedChange={(checked) =>
+                setConfig({ ...config, enable_collaboration: checked })
+              }
+              aria-label="Enable multi-user collaboration"
+            />
           </div>
         </CardContent>
       </Card>

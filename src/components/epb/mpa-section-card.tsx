@@ -9,9 +9,13 @@ import {
   CardContent,
   CardHeader,
 } from "@/components/ui/card";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 // Collapsible removed - caused ref loop issues with asChild pattern
 // Popover removed - caused ref loop issues with asChild pattern
-// Tooltip removed - caused ref loop issues with asChild pattern
 import { toast } from "@/components/ui/sonner";
 import { cn, getCharacterCountColor } from "@/lib/utils";
 import { STANDARD_MGAS, MAX_STATEMENT_CHARACTERS, MAX_HLR_CHARACTERS } from "@/lib/constants";
@@ -50,7 +54,7 @@ interface MPASectionCardProps {
   isCollapsed: boolean;
   onToggleCollapse: () => void;
   onSave: (text: string) => Promise<void>;
-  onCreateSnapshot: (text: string, note?: string) => Promise<void>;
+  onCreateSnapshot: (text: string) => Promise<void>;
   onGenerateStatement: (options: GenerateOptions) => Promise<string | null>;
   onReviseStatement: (text: string, context?: string) => Promise<string | null>;
   snapshots: EPBShellSnapshot[];
@@ -263,9 +267,8 @@ export function MPASectionCard({
   const state = storedState || DEFAULT_SECTION_STATE;
   
   const [copied, setCopied] = useState(false);
-  const [showSnapshotNote, setShowSnapshotNote] = useState(false);
-  const [snapshotNote, setSnapshotNote] = useState("");
   const [showHistory, setShowHistory] = useState(false);
+  const [isCreatingSnapshot, setIsCreatingSnapshot] = useState(false);
   const [isAutosaving, setIsAutosaving] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -391,16 +394,18 @@ export function MPASectionCard({
     }
   };
 
-  // Create snapshot
+  // Create snapshot instantly
   const handleCreateSnapshot = async () => {
+    if (isCreatingSnapshot || !hasContent) return;
+    setIsCreatingSnapshot(true);
     try {
-      await onCreateSnapshot(state.draftText, snapshotNote || undefined);
-      setSnapshotNote("");
-      setShowSnapshotNote(false);
-      toast.success("Snapshot created");
+      await onCreateSnapshot(state.draftText);
+      toast.success("Snapshot saved");
     } catch (error) {
       console.error(error);
-      toast.error("Failed to create snapshot");
+      toast.error("Failed to save snapshot");
+    } finally {
+      setIsCreatingSnapshot(false);
     }
   };
 
@@ -676,34 +681,47 @@ export function MPASectionCard({
           </button>
           {/* Completion toggle button */}
           {onToggleComplete && (
-            <button
-              className={cn(
-                "inline-flex items-center justify-center rounded-md size-6 shrink-0 transition-colors",
-                section.is_complete
-                  ? "text-green-600 hover:bg-green-100 dark:hover:bg-green-900/30"
-                  : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-              )}
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggleComplete();
-              }}
-              title={section.is_complete ? "Mark as incomplete" : "Mark as complete"}
-            >
-              {section.is_complete ? (
-                <CheckCircle2 className="size-4" />
-              ) : (
-                <Circle className="size-4" />
-              )}
-            </button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  className={cn(
+                    "inline-flex items-center justify-center rounded-md size-6 shrink-0 transition-colors",
+                    section.is_complete
+                      ? "text-green-600 hover:bg-green-100 dark:hover:bg-green-900/30"
+                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                  )}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToggleComplete();
+                  }}
+                >
+                  {section.is_complete ? (
+                    <CheckCircle2 className="size-4" />
+                  ) : (
+                    <Circle className="size-4" />
+                  )}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{section.is_complete ? "Mark as incomplete" : "Mark as complete"}</p>
+              </TooltipContent>
+            </Tooltip>
           )}
           {/* Copy button */}
           {isCollapsed && hasContent && (
-            <button
-              className="inline-flex items-center justify-center rounded-md size-6 shrink-0 text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
-              onClick={handleCopy}
-            >
-              {copied ? <Check className="size-3" /> : <Copy className="size-3" />}
-            </button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  className="inline-flex items-center justify-center rounded-md size-6 shrink-0 text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+                  onClick={handleCopy}
+                >
+                  {copied ? <Check className="size-3" /> : <Copy className="size-3" />}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{copied ? "Copied!" : "Copy to clipboard"}</p>
+              </TooltipContent>
+            </Tooltip>
           )}
         </div>
         {isCollapsed && hasContent && (
@@ -727,43 +745,61 @@ export function MPASectionCard({
               <div className="flex items-center gap-1">
                 {/* Refresh button - get latest data */}
                 {onRefresh && (
-                  <button
-                    className={cn(
-                      "inline-flex items-center justify-center rounded-md size-7 text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors",
-                      isRefreshing && "animate-spin"
-                    )}
-                    onClick={handleRefresh}
-                    disabled={isRefreshing}
-                    title="Refresh to get latest data"
-                  >
-                    <RefreshCw className="size-3.5" />
-                  </button>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        className={cn(
+                          "inline-flex items-center justify-center rounded-md size-7 text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors",
+                          isRefreshing && "animate-spin"
+                        )}
+                        onClick={handleRefresh}
+                        disabled={isRefreshing}
+                      >
+                        <RefreshCw className="size-3.5" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Refresh to get latest data</p>
+                    </TooltipContent>
+                  </Tooltip>
                 )}
 
-                {/* History button with tooltip */}
-                <button
-                  className={cn(
-                    "inline-flex items-center justify-center rounded-md size-7 text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors",
-                    showHistory && "bg-accent text-accent-foreground"
-                  )}
-                  onClick={() => setShowHistory(!showHistory)}
-                  title="View saved snapshots - browse previous versions of this statement"
-                >
-                  <History className="size-3.5" />
-                </button>
+                {/* History button */}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      className={cn(
+                        "inline-flex items-center justify-center rounded-md size-7 text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors",
+                        showHistory && "bg-accent text-accent-foreground"
+                      )}
+                      onClick={() => setShowHistory(!showHistory)}
+                    >
+                      <History className="size-3.5" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>View snapshot history</p>
+                  </TooltipContent>
+                </Tooltip>
 
-                {/* Snapshot button with tooltip */}
-                <button
-                  className={cn(
-                    "inline-flex items-center justify-center rounded-md size-7 text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors disabled:opacity-50 disabled:pointer-events-none",
-                    showSnapshotNote && "bg-accent text-accent-foreground"
-                  )}
-                  disabled={!hasContent}
-                  onClick={() => setShowSnapshotNote(!showSnapshotNote)}
-                  title="Save a snapshot - create a backup of current text"
-                >
-                  <Camera className="size-3.5" />
-                </button>
+                {/* Snapshot button - instantly saves current text to history */}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      className={cn(
+                        "inline-flex items-center justify-center rounded-md size-7 text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors disabled:opacity-50 disabled:pointer-events-none",
+                        isCreatingSnapshot && "animate-pulse"
+                      )}
+                      disabled={!hasContent || isCreatingSnapshot}
+                      onClick={handleCreateSnapshot}
+                    >
+                      <Camera className="size-3.5" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Save snapshot to history</p>
+                  </TooltipContent>
+                </Tooltip>
               </div>
             </div>
 
@@ -776,59 +812,42 @@ export function MPASectionCard({
                     {snapshots.length} snapshot{snapshots.length !== 1 && "s"}
                   </p>
                 </div>
-                <div className="max-h-48 overflow-y-auto">
+                <div className="max-h-64 overflow-y-auto">
                   {snapshots.length === 0 ? (
                     <p className="p-3 text-sm text-muted-foreground text-center">
-                      No snapshots yet
+                      No snapshots yet. Click the camera icon to save your current text.
                     </p>
                   ) : (
                     snapshots.map((snap) => (
-                      <button
+                      <div
                         key={snap.id}
-                        onClick={() => handleRestoreSnapshot(snap)}
-                        className="w-full p-3 text-left hover:bg-muted/50 border-b last:border-0 transition-colors"
+                        className="p-3 border-b last:border-0"
                       >
-                        <p className="text-xs text-muted-foreground mb-1">
-                          {new Date(snap.created_at).toLocaleString()}
+                        <div className="flex items-start justify-between gap-2 mb-1">
+                          <p className="text-xs text-muted-foreground">
+                            {new Date(snap.created_at).toLocaleString()}
+                          </p>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <button
+                                onClick={() => handleRestoreSnapshot(snap)}
+                                className="text-[10px] px-1.5 py-0.5 rounded border bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                              >
+                                <RotateCcw className="size-3 inline mr-0.5" />
+                                Restore
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Replace current statement with this version</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </div>
+                        <p className="text-sm select-text cursor-text whitespace-pre-wrap">
+                          {snap.statement_text}
                         </p>
-                        {snap.note && (
-                          <p className="text-xs font-medium mb-1">{snap.note}</p>
-                        )}
-                        <p className="text-sm line-clamp-2">{snap.statement_text}</p>
-                      </button>
+                      </div>
                     ))
                   )}
-                </div>
-              </div>
-            )}
-
-            {/* Snapshot Note Panel - inline form */}
-            {showSnapshotNote && (
-              <div className="rounded-lg border bg-card shadow-lg p-3 animate-in slide-in-from-top-2 duration-200">
-                <div className="space-y-2">
-                  <span className="text-xs font-medium">Snapshot note (optional)</span>
-                  <input
-                    type="text"
-                    value={snapshotNote}
-                    onChange={(e) => setSnapshotNote(e.target.value)}
-                    placeholder="e.g., Before revisions"
-                    className="w-full px-2 py-1.5 text-sm border rounded-md"
-                  />
-                  <div className="flex gap-2">
-                    <button 
-                      onClick={handleCreateSnapshot} 
-                      className="flex-1 h-8 px-3 rounded-md text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 inline-flex items-center justify-center"
-                    >
-                      <Camera className="size-3.5 mr-1.5" />
-                      Save Snapshot
-                    </button>
-                    <button 
-                      onClick={() => setShowSnapshotNote(false)}
-                      className="h-8 px-3 rounded-md text-sm font-medium border bg-background hover:bg-accent hover:text-accent-foreground inline-flex items-center justify-center"
-                    >
-                      Cancel
-                    </button>
-                  </div>
                 </div>
               </div>
             )}
