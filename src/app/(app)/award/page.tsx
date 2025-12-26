@@ -207,6 +207,7 @@ export default function AwardPage() {
   const [showRevisionPopover, setShowRevisionPopover] = useState(false);
   const [showSynonymPopover, setShowSynonymPopover] = useState(false);
   const [synonyms, setSynonyms] = useState<string[]>([]);
+  const [isLoadingSynonyms, setIsLoadingSynonyms] = useState(false);
   const [isConverting, setIsConverting] = useState(false);
   const [showConvertDialog, setShowConvertDialog] = useState(false);
   const [convertOptions, setConvertOptions] = useState<string[]>([]);
@@ -768,7 +769,7 @@ export default function AwardPage() {
     setRevisionOptions([]);
   }
 
-  function handleShowSynonyms() {
+  async function handleShowSynonyms() {
     const textarea = workspaceTextareaRef.current;
     if (!textarea || textarea.selectionStart === textarea.selectionEnd) {
       toast.error("Please highlight a word");
@@ -785,25 +786,34 @@ export default function AwardPage() {
     }
 
     setSelectedTextRange({ start, end });
-
-    // Check if the selected word is an action verb
-    const isActionVerb = DEFAULT_ACTION_VERBS.some(
-      (v) => v.toLowerCase() === selectedWord.toLowerCase()
-    );
-
-    if (isActionVerb) {
-      // Suggest other action verbs as synonyms
-      setSynonyms(
-        DEFAULT_ACTION_VERBS
-          .filter((v) => v.toLowerCase() !== selectedWord.toLowerCase())
-          .slice(0, 8)
-      );
-    } else {
-      // Default suggestions for non-verbs
-      setSynonyms(["Led", "Directed", "Managed", "Coordinated", "Executed", "Spearheaded", "Orchestrated", "Championed"]);
-    }
-
+    setSynonyms([]);
     setShowSynonymPopover(true);
+    setIsLoadingSynonyms(true);
+
+    try {
+      const response = await fetch("/api/synonyms", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          word: selectedWord,
+          fullStatement: workspaceText,
+          model: selectedModel,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch synonyms");
+      }
+
+      const data = await response.json();
+      setSynonyms(data.synonyms || []);
+    } catch (error) {
+      console.error("Error fetching synonyms:", error);
+      toast.error("Failed to get synonyms");
+      setShowSynonymPopover(false);
+    } finally {
+      setIsLoadingSynonyms(false);
+    }
   }
 
   function applySynonym(synonym: string) {
@@ -1996,12 +2006,20 @@ export default function AwardPage() {
             <DialogTitle>Replace with Synonym</DialogTitle>
             <DialogDescription>Choose a replacement word</DialogDescription>
           </DialogHeader>
-          <div className="flex flex-wrap gap-2">
-            {synonyms.map((syn) => (
-              <Button key={syn} size="sm" variant="outline" onClick={() => applySynonym(syn)}>
-                {syn}
-              </Button>
-            ))}
+          <div className="flex flex-wrap gap-2 min-h-[60px]">
+            {isLoadingSynonyms ? (
+              <div className="w-full flex items-center justify-center py-4">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary" />
+              </div>
+            ) : synonyms.length > 0 ? (
+              synonyms.map((syn) => (
+                <Button key={syn} size="sm" variant="outline" onClick={() => applySynonym(syn)}>
+                  {syn}
+                </Button>
+              ))
+            ) : (
+              <p className="text-sm text-muted-foreground w-full text-center py-4">No synonyms found</p>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowSynonymPopover(false)}>Cancel</Button>

@@ -675,6 +675,9 @@ export function EPBShellForm({
     loadShell();
   }, [selectedRatee, cycleYear, profile, supabase, setCurrentShell, setIsLoadingShell, setSnapshots]);
 
+  // Track previous visibility state to detect transitions
+  const prevPageVisibleRef = useRef(isPageVisible);
+
   // Realtime subscription for section text updates
   // This ensures all users viewing the same EPB see text changes immediately
   // Only active when page is visible to save resources
@@ -691,7 +694,7 @@ export function EPBShellForm({
       if (data) {
         (data as EPBShellSection[]).forEach((section) => {
           // Only update sections we're not actively editing
-          const currentState = sectionStates[section.mpa];
+          const currentState = useEPBShellStore.getState().sectionStates[section.mpa];
           if (!currentState?.isDirty) {
             updateSection(section.mpa, {
               statement_text: section.statement_text,
@@ -707,8 +710,14 @@ export function EPBShellForm({
       }
     };
     
-    // Refresh on visibility restore
-    refreshSections();
+    // Only refresh when page visibility transitions from hidden to visible
+    // This prevents race conditions with optimistic updates
+    const wasHidden = !prevPageVisibleRef.current;
+    prevPageVisibleRef.current = isPageVisible;
+    
+    if (wasHidden) {
+      refreshSections();
+    }
 
     // Subscribe to section updates for this shell
     const channel = supabase
@@ -751,7 +760,7 @@ export function EPBShellForm({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [currentShell?.id, profile, supabase, updateSection, sectionStates, isPageVisible]);
+  }, [currentShell?.id, profile, supabase, updateSection, isPageVisible]);
 
   // Load accomplishments for the selected ratee
   useEffect(() => {
