@@ -8,6 +8,7 @@ import { NextResponse } from "next/server";
 import { DEFAULT_ACRONYMS, formatAcronymsList } from "@/lib/default-acronyms";
 import { formatAbbreviationsList } from "@/lib/default-abbreviations";
 import { STANDARD_MGAS, DEFAULT_MPA_DESCRIPTIONS, formatMPAContext } from "@/lib/constants";
+import { getDecryptedApiKeys } from "@/app/actions/api-keys";
 import type { MPADescriptions } from "@/types/database";
 import type { Rank, WritingStyle, UserLLMSettings, MajorGradedArea, Acronym, Abbreviation } from "@/types/database";
 
@@ -416,19 +417,8 @@ export async function POST(request: Request) {
       ? (userSettings as unknown as UserLLMSettings)
       : DEFAULT_SETTINGS;
 
-    // Get user API keys
-    const { data: userKeysData } = await supabase
-      .from("user_api_keys")
-      .select("*")
-      .eq("user_id", user.id)
-      .single();
-
-    const userKeys = userKeysData as unknown as {
-      openai_key?: string | null;
-      anthropic_key?: string | null;
-      google_key?: string | null;
-      grok_key?: string | null;
-    } | null;
+    // Get user API keys (decrypted)
+    const userKeys = await getDecryptedApiKeys();
 
     // Fetch example statements based on AFSC and writing style
     // communityMpaFilter allows filtering to a specific MPA's top 20 examples

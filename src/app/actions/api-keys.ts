@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { encrypt, safeDecrypt } from "@/lib/encryption";
 
 export type KeyStatus = {
   openai_key: boolean;
@@ -81,6 +82,15 @@ export async function saveApiKey(
     return { success: false, error: "API key cannot be empty" };
   }
 
+  // Encrypt the API key before storing
+  let encryptedKey: string;
+  try {
+    encryptedKey = encrypt(keyValue.trim());
+  } catch (error) {
+    console.error("Failed to encrypt API key:", error);
+    return { success: false, error: "Failed to secure API key. Please check server configuration." };
+  }
+
   // Check if user already has a row
   const { data: existing } = await supabase
     .from("user_api_keys")
@@ -92,7 +102,7 @@ export async function saveApiKey(
     // Update the specific key
     const { error } = await supabase
       .from("user_api_keys")
-      .update({ [keyName]: keyValue.trim() } as never)
+      .update({ [keyName]: encryptedKey } as never)
       .eq("user_id", user.id);
 
     if (error) {
@@ -104,7 +114,7 @@ export async function saveApiKey(
       .from("user_api_keys")
       .insert({ 
         user_id: user.id, 
-        [keyName]: keyValue.trim() 
+        [keyName]: encryptedKey 
       } as never);
 
     if (error) {
@@ -138,5 +148,46 @@ export async function deleteApiKey(
   }
 
   return { success: true };
+}
+
+export interface DecryptedApiKeys {
+  openai_key: string | null;
+  anthropic_key: string | null;
+  google_key: string | null;
+  grok_key: string | null;
+}
+
+/**
+ * Get decrypted API keys for the current user.
+ * This is a server-only function for use in API routes.
+ * Keys are decrypted on-the-fly and never stored in plaintext.
+ */
+export async function getDecryptedApiKeys(): Promise<DecryptedApiKeys | null> {
+  const supabase = await createClient();
+  
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return null;
+  }
+
+  const { data } = await supabase
+    .from("user_api_keys")
+    .select("openai_key, anthropic_key, google_key, grok_key")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (!data) {
+    return null;
+  }
+
+  const typedData = data as unknown as UserApiKeysRow;
+
+  // Decrypt each key if present
+  return {
+    openai_key: typedData.openai_key ? safeDecrypt(typedData.openai_key) : null,
+    anthropic_key: typedData.anthropic_key ? safeDecrypt(typedData.anthropic_key) : null,
+    google_key: typedData.google_key ? safeDecrypt(typedData.google_key) : null,
+    grok_key: typedData.grok_key ? safeDecrypt(typedData.grok_key) : null,
+  };
 }
 

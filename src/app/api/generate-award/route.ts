@@ -6,6 +6,7 @@ import { createXai } from "@ai-sdk/xai";
 import { generateText } from "ai";
 import { NextResponse } from "next/server";
 import { AWARD_1206_CATEGORIES, DEFAULT_AWARD_SENTENCES } from "@/lib/constants";
+import { getDecryptedApiKeys } from "@/app/actions/api-keys";
 import type { Rank, UserLLMSettings, AwardLevel, AwardCategory, AwardSentencesPerCategory } from "@/types/database";
 
 interface AccomplishmentData {
@@ -232,19 +233,8 @@ export async function POST(request: Request) {
 
     const settings = userSettings as unknown as Partial<UserLLMSettings> || {};
 
-    // Get user API keys
-    const { data: userKeysData } = await supabase
-      .from("user_api_keys")
-      .select("*")
-      .eq("user_id", user.id)
-      .single();
-
-    const userKeys = userKeysData as unknown as {
-      openai_key?: string | null;
-      anthropic_key?: string | null;
-      google_key?: string | null;
-      grok_key?: string | null;
-    } | null;
+    // Get user API keys (decrypted)
+    const userKeys = await getDecryptedApiKeys();
 
     const systemPrompt = buildAwardSystemPrompt(settings, nomineeRank);
     const modelProvider = getModelProvider(model, userKeys);

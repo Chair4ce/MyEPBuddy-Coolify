@@ -5,6 +5,7 @@ import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createXai } from "@ai-sdk/xai";
 import { generateText } from "ai";
 import { NextResponse } from "next/server";
+import { getDecryptedApiKeys } from "@/app/actions/api-keys";
 
 interface AccomplishmentData {
   action_verb: string;
@@ -99,12 +100,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "No accomplishments provided" }, { status: 400 });
     }
 
-    // Get user API keys
-    const { data: apiKeys } = await supabase
-      .from("user_api_keys")
-      .select("openai_key, anthropic_key, google_key, grok_key")
-      .eq("user_id", user.id)
-      .single() as { data: { openai_key: string | null; anthropic_key: string | null; google_key: string | null; grok_key: string | null } | null };
+    // Get user API keys (decrypted)
+    const apiKeys = await getDecryptedApiKeys();
 
     const userKeys = {
       openai: apiKeys?.openai_key || null,

@@ -5,6 +5,7 @@ import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createXai } from "@ai-sdk/xai";
 import { generateText } from "ai";
 import { NextResponse } from "next/server";
+import { getDecryptedApiKeys } from "@/app/actions/api-keys";
 
 interface SynonymRequest {
   word: string;
@@ -79,19 +80,8 @@ export async function POST(request: Request) {
       );
     }
 
-    // Get user API keys
-    const { data: userKeysData } = await supabase
-      .from("user_api_keys")
-      .select("*")
-      .eq("user_id", user.id)
-      .single();
-
-    const userKeys = userKeysData as unknown as {
-      openai_key?: string | null;
-      anthropic_key?: string | null;
-      google_key?: string | null;
-      grok_key?: string | null;
-    } | null;
+    // Get user API keys (decrypted)
+    const userKeys = await getDecryptedApiKeys();
 
     const modelProvider = getModelProvider(model, userKeys);
 
