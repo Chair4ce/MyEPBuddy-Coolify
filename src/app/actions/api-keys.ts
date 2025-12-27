@@ -82,13 +82,34 @@ export async function saveApiKey(
     return { success: false, error: "API key cannot be empty" };
   }
 
+  // Verify encryption key is configured before attempting to save
+  if (!process.env.ENCRYPTION_KEY) {
+    console.error("ENCRYPTION_KEY environment variable is not set");
+    return { 
+      success: false, 
+      error: "Server encryption is not configured. Please contact the administrator." 
+    };
+  }
+
   // Encrypt the API key before storing
   let encryptedKey: string;
   try {
     encryptedKey = encrypt(keyValue.trim());
   } catch (error) {
     console.error("Failed to encrypt API key:", error);
-    return { success: false, error: "Failed to secure API key. Please check server configuration." };
+    return { 
+      success: false, 
+      error: "Failed to encrypt API key. Server configuration error." 
+    };
+  }
+  
+  // Safety check: ensure encryption actually produced a different value
+  if (encryptedKey === keyValue.trim()) {
+    console.error("Encryption failed - output matches input");
+    return { 
+      success: false, 
+      error: "Encryption verification failed. Please contact the administrator." 
+    };
   }
 
   // Check if user already has a row
