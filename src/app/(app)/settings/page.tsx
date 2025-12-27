@@ -30,7 +30,7 @@ import {
   getCycleProgress,
   RANK_TO_TIER 
 } from "@/lib/constants";
-import { Loader2, User, Calendar, Clock, Camera, X } from "lucide-react";
+import { Loader2, User, Calendar, Clock, Camera, X, RotateCcw } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import type { Rank, Profile } from "@/types/database";
 
@@ -40,6 +40,7 @@ export default function SettingsPage() {
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [cropDialogOpen, setCropDialogOpen] = useState(false);
   const [selectedImageSrc, setSelectedImageSrc] = useState<string | null>(null);
+  const [googlePictureUrl, setGooglePictureUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState({
     full_name: "",
@@ -49,6 +50,25 @@ export default function SettingsPage() {
   });
 
   const supabase = createClient();
+
+  // Fetch Google profile picture from auth metadata on mount (only for Google OAuth users)
+  useEffect(() => {
+    async function fetchGooglePicture() {
+      const { data: { user } } = await supabase.auth.getUser();
+      // Check if user signed in with Google OAuth
+      const isGoogleUser = user?.app_metadata?.provider === "google" || 
+        user?.identities?.some((identity) => identity.provider === "google");
+      
+      if (isGoogleUser && user?.user_metadata?.picture) {
+        setGooglePictureUrl(user.user_metadata.picture);
+      }
+    }
+    fetchGooglePicture();
+  }, [supabase.auth]);
+
+  // Check if current avatar is NOT the Google picture (i.e., user uploaded a custom one)
+  const hasCustomAvatar = profile?.avatar_url && googlePictureUrl && profile.avatar_url !== googlePictureUrl;
+  const canRevertToGoogle = googlePictureUrl && (hasCustomAvatar || !profile?.avatar_url);
   
   const initials =
     profile?.full_name
@@ -203,6 +223,43 @@ export default function SettingsPage() {
     }
   }
 
+  async function handleRevertToGoogle() {
+    if (!profile || !googlePictureUrl) return;
+
+    setIsUploadingAvatar(true);
+
+    try {
+      // Delete custom avatar from storage if it exists
+      if (profile.avatar_url && profile.avatar_url.includes("/storage/v1/object/")) {
+        const oldPath = profile.avatar_url.split("/avatars/")[1]?.split("?")[0];
+        if (oldPath) {
+          await supabase.storage.from("avatars").remove([oldPath]);
+        }
+      }
+
+      // Update profile to use Google picture
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("profiles")
+        .update({ avatar_url: googlePictureUrl })
+        .eq("id", profile.id)
+        .select()
+        .single();
+
+      if (error) {
+        toast.error("Failed to revert to Google photo");
+        return;
+      }
+
+      setProfile(data as Profile);
+      toast.success("Reverted to Google profile photo");
+    } catch {
+      toast.error("Failed to revert to Google photo");
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  }
+
   useEffect(() => {
     if (profile) {
       setForm({
@@ -289,7 +346,7 @@ export default function SettingsPage() {
               )}
             </div>
             <div className="flex flex-col gap-2">
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <Button
                   type="button"
                   variant="outline"
@@ -310,6 +367,19 @@ export default function SettingsPage() {
                     </>
                   )}
                 </Button>
+                {canRevertToGoogle && profile?.avatar_url !== googlePictureUrl && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleRevertToGoogle}
+                    disabled={isUploadingAvatar}
+                    aria-label="Use Google photo"
+                  >
+                    <RotateCcw className="size-4 mr-2" />
+                    Use Google Photo
+                  </Button>
+                )}
                 {profile?.avatar_url && (
                   <Button
                     type="button"

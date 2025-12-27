@@ -22,6 +22,7 @@ import {
   Heart,
   Award,
 } from "lucide-react";
+import { AppLogo } from "@/components/layout/app-logo";
 import type { Profile } from "@/types/database";
 
 interface AppSidebarProps {
@@ -143,15 +144,9 @@ export function AppSidebar({ profile }: AppSidebarProps) {
           <div className="flex items-center justify-between h-16 px-6 border-b border-sidebar-border">
             <Link
               href="/dashboard"
-              className="flex items-center gap-2 font-bold text-lg"
               onClick={() => setIsOpen(false)}
             >
-              <div className="size-8 rounded-lg bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center text-primary-foreground font-bold text-sm">
-                EP
-              </div>
-              <span className="bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
-                My EPBuddy
-              </span>
+              <AppLogo size="md" variant="inline" />
             </Link>
             {/* Mobile close button - inside sidebar header */}
             <Button

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { AppLogo, AppLogoIcon } from "@/components/layout/app-logo";
 import {
   FileText,
   Sparkles,
@@ -17,12 +18,7 @@ export default function LandingPage() {
       {/* Header */}
       <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2 font-bold text-xl">
-            <div className="size-8 rounded-lg bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center text-primary-foreground font-bold text-sm">
-              EP
-            </div>
-            <span>My EPBuddy</span>
-          </div>
+          <AppLogo size="md" variant="inline" />
           
           {/* Unclassified Banner */}
           <span className="hidden sm:inline-block px-3 py-1 text-xs font-semibold tracking-wider rounded bg-green-600 text-white dark:bg-green-700 dark:text-green-50 select-none">
@@ -219,10 +215,8 @@ export default function LandingPage() {
         <div className="container mx-auto px-4">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <div className="size-6 rounded bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center text-primary-foreground font-bold text-xs">
-                EP
-              </div>
-              <span>My EPBuddy © {new Date().getFullYear()}</span>
+              <AppLogoIcon size={20} className="text-primary" />
+              <span>myEPBuddy © {new Date().getFullYear()}</span>
             </div>
             <div className="flex items-center gap-6 text-sm text-muted-foreground">
               <Link href="/privacy" className="hover:text-foreground transition-colors">

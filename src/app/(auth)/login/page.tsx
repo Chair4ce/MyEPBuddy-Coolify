@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/card";
 import { toast } from "@/components/ui/sonner";
 import { Loader2, ExternalLink, Copy, Check } from "lucide-react";
+import { AppLogo } from "@/components/layout/app-logo";
 
 // Detect if running in a restricted browser context (in-app browsers, PWAs)
 function isRestrictedBrowser(): { restricted: boolean; browserName: string } {
@@ -131,9 +132,9 @@ export default function LoginPage() {
   return (
     <div className="animate-fade-in">
       <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
-          My EPBuddy
-        </h1>
+        <div className="flex justify-center mb-3">
+          <AppLogo size="xl" variant="stacked" />
+        </div>
         <p className="text-muted-foreground mt-2">
           Your Air Force EPB writing assistant
         </p>
