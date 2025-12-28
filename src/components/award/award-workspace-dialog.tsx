@@ -8,12 +8,24 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import {
   Select,
   SelectContent,
@@ -45,13 +57,11 @@ import {
   ChevronDown,
   ChevronUp,
   X,
+  RotateCcw,
+  Smartphone,
+  Trash2,
+  AlertTriangle,
 } from "lucide-react";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import {
   Collapsible,
   CollapsibleContent,
@@ -152,11 +162,39 @@ export function AwardWorkspaceDialog({
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [copiedAll, setCopiedAll] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [nomineeInfo, setNomineeInfo] = useState<NomineeInfo | null>(null);
+  
+  // Mobile orientation state
+  const [isMobilePortrait, setIsMobilePortrait] = useState(false);
+  const [dismissedLandscapeHint, setDismissedLandscapeHint] = useState(false);
 
   // ============================================================================
   // Effects
   // ============================================================================
+  
+  // Detect mobile portrait orientation
+  useEffect(() => {
+    if (typeof window === "undefined" || !open) return;
+    
+    const checkOrientation = () => {
+      const isMobile = window.innerWidth < 768;
+      const isPortrait = window.innerHeight > window.innerWidth;
+      setIsMobilePortrait(isMobile && isPortrait);
+    };
+    
+    // Check immediately when dialog opens
+    checkOrientation();
+    
+    window.addEventListener("resize", checkOrientation);
+    window.addEventListener("orientationchange", checkOrientation);
+    
+    return () => {
+      window.removeEventListener("resize", checkOrientation);
+      window.removeEventListener("orientationchange", checkOrientation);
+    };
+  }, [open]);
 
   // Load shell data when dialog opens
   useEffect(() => {
@@ -174,14 +212,15 @@ export function AwardWorkspaceDialog({
           .single();
 
         if (shellData) {
-          const sectionsData = (shellData as any).award_shell_sections || [];
-          setCurrentShell(shellData as AwardShell);
-          setSections(sectionsData as AwardShellSection[]);
+          const typedShellData = shellData as AwardShell & { award_shell_sections?: AwardShellSection[] };
+          const sectionsData = typedShellData.award_shell_sections || [];
+          setCurrentShell(typedShellData);
+          setSections(sectionsData);
 
           // Update award config
-          setAwardLevel(shellData.award_level as AwardLevel);
-          setAwardCategory(shellData.award_category as AwardCategory);
-          setSentencesPerStatement(shellData.sentences_per_statement as 2 | 3);
+          setAwardLevel(typedShellData.award_level);
+          setAwardCategory(typedShellData.award_category);
+          setSentencesPerStatement(typedShellData.sentences_per_statement);
         }
       } catch (error) {
         console.error("Error loading shell data:", error);
@@ -267,6 +306,7 @@ export function AwardWorkspaceDialog({
   useEffect(() => {
     if (!open) {
       reset();
+      setDismissedLandscapeHint(false); // Reset hint for next time
     }
   }, [open, reset]);
 
@@ -337,6 +377,39 @@ export function AwardWorkspaceDialog({
       setIsSaving(false);
     }
   }, [nomineeInfo, profile, currentShell, awardLevel, awardCategory, sentencesPerStatement, slotStates, sections, supabase, onSaved]);
+
+  // Delete the award shell
+  const handleDeleteShell = useCallback(async () => {
+    if (!currentShell) return;
+
+    setIsDeleting(true);
+
+    try {
+      // First delete all sections (cascade should handle this, but be explicit)
+      await supabase
+        .from("award_shell_sections")
+        .delete()
+        .eq("shell_id", currentShell.id);
+
+      // Then delete the shell
+      const { error } = await supabase
+        .from("award_shells")
+        .delete()
+        .eq("id", currentShell.id);
+
+      if (error) throw error;
+
+      toast.success("Award package deleted");
+      setShowDeleteConfirm(false);
+      onOpenChange(false);
+      onSaved?.(); // Refresh the list
+    } catch (error) {
+      console.error("Error deleting award shell:", error);
+      toast.error("Failed to delete award package");
+    } finally {
+      setIsDeleting(false);
+    }
+  }, [currentShell, supabase, onOpenChange, onSaved]);
 
   // Combine all statements for preview
   const allStatementsForPreview = useMemo(() => {
@@ -418,79 +491,121 @@ export function AwardWorkspaceDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="!fixed !inset-0 !translate-x-0 !translate-y-0 !top-0 !left-0 w-screen h-screen !max-w-none !max-h-none flex flex-col overflow-hidden p-0 !rounded-none">
-          <DialogHeader className="px-6 pt-6 pb-4 border-b shrink-0">
-            <div className="flex items-center justify-between gap-4 mr-4">
-              <div className="flex items-center gap-3 min-w-0">
+        <DialogContent 
+          hideCloseButton 
+          className="!fixed !inset-0 !translate-x-0 !translate-y-0 !top-0 !left-0 w-screen h-screen !max-w-none !max-h-none flex flex-col overflow-hidden p-0 !rounded-none"
+        >
+          {/* Mobile Portrait Landscape Hint */}
+          {isMobilePortrait && !dismissedLandscapeHint && (
+            <div className="bg-gradient-to-r from-primary/15 to-primary/5 border-b border-primary/20 px-3 py-2.5 shrink-0">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <div className="relative shrink-0">
+                    <Smartphone className="size-4 text-primary" />
+                    <RotateCcw className="size-2.5 text-primary absolute -bottom-0.5 -right-0.5" />
+                  </div>
+                  <div className="text-xs">
+                    <p className="font-medium text-primary">Best viewed in landscape</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      Rotate phone or swipe horizontally to see full statements
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setDismissedLandscapeHint(true)}
+                  className="shrink-0 h-7 w-7 p-0"
+                >
+                  <X className="size-3.5" />
+                  <span className="sr-only">Dismiss</span>
+                </Button>
+              </div>
+            </div>
+          )}
+          
+          <DialogHeader className="px-4 pt-4 pb-3 border-b shrink-0">
+            {/* Title row with close button */}
+            <div className="flex items-start justify-between gap-2 mb-3">
+              <div className="flex items-center gap-2 min-w-0">
                 <Award className="size-5 text-primary shrink-0" />
                 <div className="min-w-0">
-                  <DialogTitle className="text-lg truncate">
-                    {nomineeDisplayName}&apos;s Award Package
+                  <DialogTitle className="text-base font-semibold leading-tight">
+                    {nomineeDisplayName}&apos;s Award
                   </DialogTitle>
-                  <DialogDescription className="text-xs">
-                    {shell.award_level} level • {shell.award_category} • {shell.cycle_year} cycle
+                  <DialogDescription className="text-xs text-muted-foreground mt-0.5">
+                    {shell.award_level} • {shell.award_category} • {shell.cycle_year}
                   </DialogDescription>
                 </div>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
-                {canEdit && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleSaveShell}
-                        disabled={isSaving || isLoadingShell}
-                      >
-                        {isSaving ? (
-                          <Loader2 className="size-4 mr-1 animate-spin" />
-                        ) : (
-                          <Save className="size-4 mr-1" />
-                        )}
-                        Save
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>Save all changes</TooltipContent>
-                  </Tooltip>
+              <DialogClose asChild>
+                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0 -mr-1 -mt-1">
+                  <X className="size-4" />
+                  <span className="sr-only">Close</span>
+                </Button>
+              </DialogClose>
+            </div>
+            
+            {/* Action buttons row */}
+            <div className="flex items-center gap-2">
+              {canEdit && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSaveShell}
+                  disabled={isSaving || isLoadingShell}
+                  className="h-8 px-3 flex-1"
+                >
+                  {isSaving ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Save className="size-4" />
+                  )}
+                  <span className="ml-1.5 text-xs">Save</span>
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowShareDialog(true)}
+                className="h-8 px-3 flex-1"
+              >
+                <Share2 className="size-4" />
+                <span className="ml-1.5 text-xs">Share</span>
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowPreviewDialog(true)}
+                disabled={totalStatementsWithContent === 0}
+                className="h-8 px-3 flex-1"
+              >
+                <Eye className="size-4" />
+                <span className="ml-1.5 text-xs">Preview</span>
+                {totalStatementsWithContent > 0 && (
+                  <Badge variant="secondary" className="ml-1 text-[10px]">
+                    {totalStatementsWithContent}
+                  </Badge>
                 )}
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setShowShareDialog(true)}
-                    >
-                      <Share2 className="size-4 mr-1" />
-                      Share
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Share this award package</TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setShowPreviewDialog(true)}
-                      disabled={totalStatementsWithContent === 0}
-                    >
-                      <Eye className="size-4 mr-1" />
-                      Preview
-                      {totalStatementsWithContent > 0 && (
-                        <Badge variant="secondary" className="ml-1.5 text-xs">
-                          {totalStatementsWithContent}
-                        </Badge>
-                      )}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>View and copy all statements</TooltipContent>
-                </Tooltip>
-              </div>
+              </Button>
             </div>
           </DialogHeader>
 
-          <ScrollArea className="flex-1 min-h-0">
-            <div className="p-6 space-y-4">
+          <ScrollArea className="flex-1 min-h-0 relative">
+            {/* Floating landscape hint button (shows after dismissing banner) */}
+            {isMobilePortrait && dismissedLandscapeHint && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setDismissedLandscapeHint(false)}
+                className="fixed bottom-20 right-4 z-50 shadow-lg bg-background/95 backdrop-blur-sm border-primary/30"
+              >
+                <RotateCcw className="size-4 mr-1.5 text-primary" />
+                <span className="text-xs">Rotate phone</span>
+              </Button>
+            )}
+            
+            <div className="p-3 sm:p-6 space-y-3 sm:space-y-4">
               {/* Settings Collapsible */}
               {canEdit && (
                 <Collapsible open={showConfig} onOpenChange={setShowConfig}>
@@ -575,6 +690,61 @@ export function AwardWorkspaceDialog({
                       <Button variant="ghost" size="sm" onClick={collapseAll}>
                         Collapse All
                       </Button>
+                    </div>
+                    
+                    {/* Danger Zone - Delete */}
+                    <Separator className="my-4" />
+                    <div className="space-y-2">
+                      <Label className="text-xs text-destructive">Danger Zone</Label>
+                      <div className="flex items-center justify-between p-3 rounded-lg border border-destructive/30 bg-destructive/5">
+                        <div className="space-y-0.5">
+                          <p className="text-sm font-medium">Delete Award Package</p>
+                          <p className="text-xs text-muted-foreground">
+                            Permanently delete this award package and all statements.
+                          </p>
+                        </div>
+                        <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="destructive" size="sm">
+                              <Trash2 className="size-4 mr-1.5" />
+                              Delete
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle className="flex items-center gap-2">
+                                <AlertTriangle className="size-5 text-destructive" />
+                                Delete Award Package
+                              </AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Are you sure you want to delete this award package for{" "}
+                                <strong>{nomineeDisplayName}</strong>? This will permanently delete
+                                all statements and cannot be undone.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={handleDeleteShell}
+                                disabled={isDeleting}
+                                className="bg-destructive text-white hover:bg-destructive/90"
+                              >
+                                {isDeleting ? (
+                                  <>
+                                    <Loader2 className="size-4 mr-1.5 animate-spin" />
+                                    Deleting...
+                                  </>
+                                ) : (
+                                  <>
+                                    <Trash2 className="size-4 mr-1.5" />
+                                    Delete Permanently
+                                  </>
+                                )}
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
                     </div>
                   </CollapsibleContent>
                 </Collapsible>

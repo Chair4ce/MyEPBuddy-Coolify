@@ -59,7 +59,6 @@ const navItems = [
     href: "/award",
     icon: Award,
     roles: ["member", "admin"],
-    badge: "BETA",
   },
   {
     title: "Statement Library",

@@ -12,7 +12,6 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -400,21 +399,9 @@ export function PendingLinksCard() {
     setActionType(action);
   };
 
-  if (isLoading) {
-    return (
-      <Card className="border-amber-300 dark:border-amber-600/50 bg-amber-50/50 dark:bg-amber-900/10">
-        <CardHeader className="pb-3">
-          <Skeleton className="h-5 w-48" />
-          <Skeleton className="h-4 w-64" />
-        </CardHeader>
-        <CardContent>
-          <Skeleton className="h-24 w-full" />
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (pendingLinks.length === 0) {
+  // Don't show anything during loading or if no pending links
+  // This prevents the orange skeleton card from flickering before the main content loads
+  if (isLoading || pendingLinks.length === 0) {
     return null;
   }
 

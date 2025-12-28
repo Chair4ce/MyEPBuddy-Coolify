@@ -514,16 +514,19 @@ function StatementSlotCard({
 
       {/* Collapsible Content */}
       {!isCollapsed && (
-        <div className="px-4 pb-4 pt-1 space-y-3 animate-in fade-in-0 slide-in-from-top-2 duration-200">
+        <div className="px-2 sm:px-4 pb-3 sm:pb-4 pt-1 space-y-3 animate-in fade-in-0 slide-in-from-top-2 duration-200">
           {/* Master Workspace Textarea - Fixed 1206 dimensions with per-line controls */}
-          <div className="space-y-2 relative">
-            {/* Textarea + per-line compact buttons layout */}
-            <div className="flex items-start gap-2">
-              {/* Fixed-width container matching AF1206 form */}
-              <div 
-                className="border border-input rounded-md bg-muted/30 p-2 inline-block"
-                style={{ width: 'fit-content' }}
-              >
+          <div className="space-y-2">
+            {/* Horizontal scroll wrapper for mobile - touch scrolling enabled */}
+            <div 
+              className="overflow-x-auto pb-2 -mx-2 px-2 sm:mx-0 sm:px-0"
+              style={{ WebkitOverflowScrolling: 'touch' }}
+            >
+              <div className="flex items-start gap-2" style={{ width: 'max-content' }}>
+                {/* Fixed-width container matching AF1206 form */}
+                <div 
+                  className="border border-input rounded-md bg-muted/30 p-2 shrink-0"
+                >
                 <textarea
                   ref={textareaRef}
                   value={draftText}
@@ -592,6 +595,7 @@ function StatementSlotCard({
                 })}
               </div>
               )}
+              </div>
             </div>
         
         {/* Character count and copy button */}
