@@ -38,24 +38,28 @@ import {
   Key,
   Users,
   User,
+  UserPlus,
   Star,
   Settings2,
   ChevronDown,
   ChevronUp,
   ListChecks,
+  Share2,
 } from "lucide-react";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import type { Accomplishment, WritingStyle, UserLLMSettings, Profile } from "@/types/database";
+import Link from "next/link";
+import type { Accomplishment, WritingStyle, UserLLMSettings, Profile, ManagedMember, EPBShell } from "@/types/database";
 import { getKeyStatus } from "@/app/actions/api-keys";
 import { EPBShellForm } from "@/components/epb/epb-shell-form";
+import { EPBShellShareDialog } from "@/components/epb/epb-shell-share-dialog";
 
 export default function GeneratePage() {
   const { profile, subordinates, managedMembers } = useUserStore();
-  const { selectedRatee, reset: resetShellStore } = useEPBShellStore();
+  const { selectedRatee, setSelectedRatee, currentShell, reset: resetShellStore } = useEPBShellStore();
   
   const [selectedModel, setSelectedModel] = useState<string>("gemini-2.0-flash");
   const [hasUserKey, setHasUserKey] = useState(false);
@@ -65,6 +69,7 @@ export default function GeneratePage() {
   const [availableAfscs, setAvailableAfscs] = useState<string[]>([]);
   const [userSettings, setUserSettings] = useState<Partial<UserLLMSettings> | null>(null);
   const [configOpen, setConfigOpen] = useState(false);
+  const [showShareDialog, setShowShareDialog] = useState(false);
   
   // Accomplishment selection dialog
   const [showAccomplishmentDialog, setShowAccomplishmentDialog] = useState(false);
@@ -74,6 +79,73 @@ export default function GeneratePage() {
 
   const supabase = createClient();
   const cycleYear = userSettings?.current_cycle_year || new Date().getFullYear();
+
+  // Build ratee selector options
+  const rateeOptions = [
+    {
+      value: "self",
+      label: `Myself (${profile?.rank} ${profile?.full_name})`,
+      ratee: {
+        id: profile?.id || "",
+        fullName: profile?.full_name || null,
+        rank: profile?.rank,
+        afsc: profile?.afsc || null,
+        isManagedMember: false,
+      },
+    },
+    ...subordinates.map((sub) => ({
+      value: sub.id,
+      label: `${sub.rank} ${sub.full_name}`,
+      ratee: {
+        id: sub.id,
+        fullName: sub.full_name,
+        rank: sub.rank,
+        afsc: sub.afsc,
+        isManagedMember: false,
+      },
+    })),
+    ...managedMembers.map((member) => ({
+      value: `managed:${member.id}`,
+      label: `${member.rank} ${member.full_name}${member.is_placeholder ? " (Managed)" : ""}`,
+      ratee: {
+        id: member.id,
+        fullName: member.full_name,
+        rank: member.rank,
+        afsc: member.afsc,
+        isManagedMember: true,
+      },
+    })),
+  ];
+
+  // Handle ratee selection change
+  const handleRateeChange = (value: string) => {
+    const option = rateeOptions.find((o) => o.value === value);
+    if (option) {
+      setSelectedRatee(option.ratee as Parameters<typeof setSelectedRatee>[0]);
+      // Persist to localStorage
+      if (profile) {
+        const key = `epb-selected-ratee-${profile.id}-${cycleYear}`;
+        localStorage.setItem(key, JSON.stringify({ value, ratee: option.ratee }));
+      }
+    }
+  };
+
+  // Compute the current select value
+  const getSelectedRateeValue = (): string => {
+    if (!selectedRatee) return "self";
+    if (selectedRatee.id === profile?.id && !selectedRatee.isManagedMember) return "self";
+    if (!selectedRatee.isManagedMember && subordinates.some((s) => s.id === selectedRatee.id)) return selectedRatee.id;
+    if (selectedRatee.isManagedMember && managedMembers.some((m) => m.id === selectedRatee.id)) return `managed:${selectedRatee.id}`;
+    return selectedRatee.isManagedMember ? `managed:${selectedRatee.id}` : selectedRatee.id;
+  };
+
+  // Get display name for the page title
+  const getMemberDisplayName = () => {
+    if (!selectedRatee) return "";
+    const rank = selectedRatee.rank || "";
+    const name = selectedRatee.fullName || "";
+    return `${rank} ${name}`.trim();
+  };
 
   // Load user's writing style preference
   useEffect(() => {
@@ -219,12 +291,112 @@ export default function GeneratePage() {
 
   return (
     <div className="space-y-6 min-w-0 w-full max-w-7xl">
-      <div className="min-w-0">
-        <h1 className="text-2xl font-bold tracking-tight">EPB Workspace</h1>
-        <p className="text-muted-foreground text-sm sm:text-base">
-          Create and manage performance narrative statements for your EPB
-        </p>
+      {/* Page Header with Title and Share Button */}
+      <div className="flex items-center justify-between gap-4 min-w-0">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold tracking-tight truncate">
+            EPB Workspace{getMemberDisplayName() && ` - ${getMemberDisplayName()}`}
+          </h1>
+        </div>
+        {currentShell && (
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => setShowShareDialog(true)} 
+            className="h-8 px-3 shrink-0"
+            title="Share EPB"
+          >
+            <Share2 className="size-4" />
+            <span className="hidden sm:inline ml-1.5">Share</span>
+          </Button>
+        )}
       </div>
+
+      {/* Share Dialog */}
+      {currentShell && (
+        <EPBShellShareDialog
+          shellId={currentShell.id}
+          isOpen={showShareDialog}
+          onClose={() => setShowShareDialog(false)}
+          ratee={selectedRatee}
+          currentUserId={profile?.id}
+        />
+      )}
+
+      {/* Viewing EPB for Selector */}
+      {currentShell && (
+        <Card className="bg-muted/30 overflow-hidden">
+          <CardContent className="py-2 sm:py-3 px-3 sm:px-6">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+              <span className="text-xs sm:text-sm text-muted-foreground shrink-0">Viewing EPB for:</span>
+              <div className="flex items-center gap-2 min-w-0 flex-1">
+                <Select
+                  value={getSelectedRateeValue()}
+                  onValueChange={handleRateeChange}
+                >
+                  <SelectTrigger className="bg-background h-8 sm:h-9 text-xs sm:text-sm max-w-[240px] sm:max-w-sm">
+                    <SelectValue placeholder="Select member..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="self">
+                      <span className="flex items-center gap-2">
+                        <User className="size-4" />
+                        Myself ({profile?.rank} {profile?.full_name})
+                      </span>
+                    </SelectItem>
+                    {subordinates.length > 0 && (
+                      <>
+                        <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+                          Team Members
+                        </div>
+                        {subordinates.map((sub) => (
+                          <SelectItem key={sub.id} value={sub.id}>
+                            <span className="flex items-center gap-2">
+                              <Users className="size-4" />
+                              {sub.rank} {sub.full_name}
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </>
+                    )}
+                    {managedMembers.length > 0 && (
+                      <>
+                        <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+                          Managed Members
+                        </div>
+                        {managedMembers.map((member) => (
+                          <SelectItem key={member.id} value={`managed:${member.id}`}>
+                            <span className="flex items-center gap-2">
+                              <User className="size-4 opacity-60" />
+                              {member.rank} {member.full_name}
+                              {member.is_placeholder && (
+                                <Badge variant="secondary" className="text-[10px]">
+                                  Managed
+                                </Badge>
+                              )}
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </>
+                    )}
+                    <Separator className="my-1" />
+                    <Link
+                      href="/team"
+                      className="flex items-center gap-2 px-2 py-1.5 text-sm text-primary hover:bg-muted rounded-sm cursor-pointer"
+                    >
+                      <UserPlus className="size-4" />
+                      Add team member
+                    </Link>
+                  </SelectContent>
+                </Select>
+                <Badge variant="outline" className="shrink-0 text-[10px] sm:text-xs">
+                  {cycleYear}
+                </Badge>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Configuration - Collapsible */}
       <Collapsible open={configOpen} onOpenChange={setConfigOpen}>

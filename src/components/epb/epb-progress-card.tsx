@@ -1,9 +1,14 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import {
   Tooltip,
   TooltipContent,
@@ -26,6 +31,7 @@ import {
   Circle,
   TrendingUp,
   Target,
+  ChevronDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -36,6 +42,7 @@ interface EPBProgressCardProps {
   className?: string;
   compact?: boolean;
   title?: string;
+  defaultCollapsed?: boolean;
 }
 
 // Recommended minimum entries per MPA for a complete EPB
@@ -49,7 +56,9 @@ export function EPBProgressCard({
   className,
   compact = false,
   title = "Performance Coverage & Progress",
+  defaultCollapsed = true,
 }: EPBProgressCardProps) {
+  const [isOpen, setIsOpen] = useState(!defaultCollapsed);
   const tier = rank ? RANK_TO_TIER[rank] : null;
   const closeout = getStaticCloseoutDate(rank);
   const daysUntil = getDaysUntilCloseout(rank);
@@ -210,117 +219,127 @@ export function EPBProgressCard({
   }
 
   return (
-    <Card className={cn("border", className)}>
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Target className="size-4" />
-            {title}
-          </CardTitle>
-          <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
-            <Clock className="size-4" />
-            {daysUntil !== null ? (
-              daysUntil === 0 ? "Today!" :
-              daysUntil < 0 ? `${Math.abs(daysUntil)}d overdue` :
-              `${daysUntil} days`
-            ) : "—"}
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Timeline Progress */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Cycle Progress</span>
-            <span className="font-medium">{Math.round(cycleProgress || 0)}%</span>
-          </div>
-          <Progress value={cycleProgress || 0} className="h-2" />
-        </div>
-
-        {/* Next Milestone */}
-        {nextMilestone && (
-          <div className="rounded-lg p-3 text-sm bg-muted/50">
-            <div className="flex items-start gap-2">
-              <TrendingUp className="size-4 mt-0.5 shrink-0 text-primary" />
-              <div>
-                <p className="font-medium">
-                  {nextMilestone.label}
-                </p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {nextMilestone.daysFromNow === 0 
-                    ? "Today" 
-                    : nextMilestone.daysFromNow === 1 
-                    ? "Tomorrow"
-                    : `In ${nextMilestone.daysFromNow} days`} — {nextMilestone.date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                </p>
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <Card className={cn("border", className)}>
+        <CollapsibleTrigger asChild>
+          <CardHeader className="pb-3 cursor-pointer hover:bg-muted/50 transition-colors select-none">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Target className="size-4" />
+                {title}
+                <ChevronDown className={cn(
+                  "size-4 text-muted-foreground transition-transform duration-200",
+                  isOpen && "rotate-180"
+                )} />
+              </CardTitle>
+              <div className="flex items-center gap-3">
+                {/* Quick summary when collapsed */}
+                {!isOpen && (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span>{readiness.totalEntries} entries</span>
+                    <span>•</span>
+                    <span>{readiness.coveredMPAs}/{readiness.mpaCount} MPAs</span>
+                  </div>
+                )}
+                <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+                  <Clock className="size-4" />
+                  {daysUntil !== null ? (
+                    daysUntil === 0 ? "Today!" :
+                    daysUntil < 0 ? `${Math.abs(daysUntil)}d overdue` :
+                    `${daysUntil}d`
+                  ) : "—"}
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          </CardHeader>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <CardContent className="space-y-4 pt-0">
+            {nextMilestone && (
+              <div className="rounded-lg p-3 text-sm bg-muted/50">
+                <div className="flex items-start gap-2">
+                  <TrendingUp className="size-4 mt-0.5 shrink-0 text-primary" />
+                  <div>
+                    <p className="font-medium">
+                      {nextMilestone.label}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {nextMilestone.daysFromNow === 0 
+                        ? "Today" 
+                        : nextMilestone.daysFromNow === 1 
+                        ? "Tomorrow"
+                        : `In ${nextMilestone.daysFromNow} days`} — {nextMilestone.date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
 
-        {/* MPA Coverage Grid */}
-        <div className="space-y-2">
-          <p className="text-sm font-medium">MPA Coverage</p>
-          <div className="grid grid-cols-2 gap-2">
-            <TooltipProvider delayDuration={200}>
-              {ENTRY_MGAS.map((mpa) => {
-                const stat = mpaStats[mpa.key];
-                const progress = Math.min(100, (stat.entries / RECOMMENDED_ENTRIES_PER_MPA) * 100);
-                const isComplete = stat.entries >= RECOMMENDED_ENTRIES_PER_MPA;
-                
-                return (
-                  <Tooltip key={mpa.key}>
-                    <TooltipTrigger asChild>
-                      <div className="p-2 rounded-lg border bg-card hover:bg-muted/50 transition-colors cursor-help">
-                        <div className="flex items-center justify-between mb-1.5">
-                          <span className="text-xs font-medium truncate pr-2">
-                            {MPA_ABBREVIATIONS[mpa.key]}
-                          </span>
-                          <div className="flex items-center gap-1">
-                            {isComplete ? (
-                              <CheckCircle2 className="size-3.5 text-primary" />
-                            ) : stat.entries > 0 ? (
-                              <Circle className="size-3.5 text-primary/50 fill-primary/20" />
-                            ) : (
-                              <Circle className="size-3.5 text-muted-foreground" />
-                            )}
-                            <span className="text-[10px] tabular-nums">
-                              {stat.entries}/{RECOMMENDED_ENTRIES_PER_MPA}
-                            </span>
+            {/* MPA Coverage Grid */}
+            <div className="space-y-2">
+              <p className="text-sm font-medium">MPA Coverage</p>
+              <div className="grid grid-cols-2 gap-2">
+                <TooltipProvider delayDuration={200}>
+                  {ENTRY_MGAS.map((mpa) => {
+                    const stat = mpaStats[mpa.key];
+                    const progress = Math.min(100, (stat.entries / RECOMMENDED_ENTRIES_PER_MPA) * 100);
+                    const isComplete = stat.entries >= RECOMMENDED_ENTRIES_PER_MPA;
+                    
+                    return (
+                      <Tooltip key={mpa.key}>
+                        <TooltipTrigger asChild>
+                          <div className="p-2 rounded-lg border bg-card hover:bg-muted/50 transition-colors cursor-help">
+                            <div className="flex items-center justify-between mb-1.5">
+                              <span className="text-xs font-medium truncate pr-2">
+                                {MPA_ABBREVIATIONS[mpa.key]}
+                              </span>
+                              <div className="flex items-center gap-1">
+                                {isComplete ? (
+                                  <CheckCircle2 className="size-3.5 text-primary" />
+                                ) : stat.entries > 0 ? (
+                                  <Circle className="size-3.5 text-primary/50 fill-primary/20" />
+                                ) : (
+                                  <Circle className="size-3.5 text-muted-foreground" />
+                                )}
+                                <span className="text-[10px] tabular-nums">
+                                  {stat.entries}/{RECOMMENDED_ENTRIES_PER_MPA}
+                                </span>
+                              </div>
+                            </div>
+                            <Progress value={progress} className="h-1.5" />
                           </div>
-                        </div>
-                        <Progress value={progress} className="h-1.5" />
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p className="font-medium">{mpa.label}</p>
-                      <p className="text-xs">
-                        {stat.entries} of {RECOMMENDED_ENTRIES_PER_MPA} recommended entries
-                      </p>
-                      {stat.entries < RECOMMENDED_ENTRIES_PER_MPA && (
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Add {RECOMMENDED_ENTRIES_PER_MPA - stat.entries} more for complete coverage
-                        </p>
-                      )}
-                    </TooltipContent>
-                  </Tooltip>
-                );
-              })}
-            </TooltipProvider>
-          </div>
-        </div>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="font-medium">{mpa.label}</p>
+                          <p className="text-xs">
+                            {stat.entries} of {RECOMMENDED_ENTRIES_PER_MPA} recommended entries
+                          </p>
+                          {stat.entries < RECOMMENDED_ENTRIES_PER_MPA && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Add {RECOMMENDED_ENTRIES_PER_MPA - stat.entries} more for complete coverage
+                            </p>
+                          )}
+                        </TooltipContent>
+                      </Tooltip>
+                    );
+                  })}
+                </TooltipProvider>
+              </div>
+            </div>
 
-        {/* Summary */}
-        <div className="flex items-center justify-between text-xs pt-2 border-t">
-          <span className="text-muted-foreground">
-            {readiness.totalEntries} total entries • {readiness.coveredMPAs}/{readiness.mpaCount} MPAs covered
-          </span>
-          <Badge variant={readiness.overallProgress === 100 ? "default" : "secondary"} className="text-[10px]">
-            {readiness.overallProgress === 100 ? "Ready!" : `${Math.round(readiness.overallProgress)}% progress`}
-          </Badge>
-        </div>
-      </CardContent>
-    </Card>
+            {/* Summary */}
+            <div className="flex items-center justify-between text-xs pt-2 border-t">
+              <span className="text-muted-foreground">
+                {readiness.totalEntries} total entries • {readiness.coveredMPAs}/{readiness.mpaCount} MPAs covered
+              </span>
+              <Badge variant={readiness.overallProgress === 100 ? "default" : "secondary"} className="text-[10px]">
+                {readiness.overallProgress === 100 ? "Ready!" : `${Math.round(readiness.overallProgress)}% progress`}
+              </Badge>
+            </div>
+          </CardContent>
+        </CollapsibleContent>
+      </Card>
+    </Collapsible>
   );
 }
 

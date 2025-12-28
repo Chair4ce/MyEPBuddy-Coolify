@@ -136,7 +136,7 @@ export default function DashboardPage() {
 
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
+        {/* <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">Total Entries</CardTitle>
             <FileText className="size-4 text-muted-foreground" />
@@ -147,8 +147,8 @@ export default function DashboardPage() {
               For {cycleYear} cycle
             </p>
           </CardContent>
-        </Card>
-
+        </Card> */}
+{/* 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">This Month</CardTitle>
@@ -158,9 +158,9 @@ export default function DashboardPage() {
             <div className="text-2xl font-bold">{stats.thisMonth}</div>
             <p className="text-xs text-muted-foreground">New entries added</p>
           </CardContent>
-        </Card>
+        </Card> */}
 
-        {(subordinates.length > 0 || profile?.role === "admin") && (
+        {/* {(subordinates.length > 0 || profile?.role === "admin") && (
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">
@@ -175,9 +175,9 @@ export default function DashboardPage() {
               </p>
             </CardContent>
           </Card>
-        )}
+        )} */}
 
-        <Card>
+        {/* <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">Coverage</CardTitle>
             <Target className="size-4 text-muted-foreground" />
@@ -188,7 +188,7 @@ export default function DashboardPage() {
             </div>
             <p className="text-xs text-muted-foreground">MPAs with entries</p>
           </CardContent>
-        </Card>
+        </Card> */}
       </div>
 
       {/* EPB Progress - Statement status */}

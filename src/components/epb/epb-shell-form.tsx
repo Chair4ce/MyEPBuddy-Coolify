@@ -31,16 +31,12 @@ import {
   User,
   UserPlus,
   Share2,
-  CheckCircle2,
-  Circle,
-  Crown,
 } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { useUserStore } from "@/stores/user-store";
 import { useEPBShellStore, type SelectedRatee } from "@/stores/epb-shell-store";
 import { MPASectionCard } from "./mpa-section-card";
-import { EPBShellShareDialog } from "./epb-shell-share-dialog";
 import { RealtimeCursors } from "./realtime-cursors";
 import { useEPBCollaboration } from "@/hooks/use-epb-collaboration";
 import { useSectionLocks } from "@/hooks/use-section-locks";
@@ -102,9 +98,7 @@ export function EPBShellForm({
 
   const [accomplishments, setAccomplishments] = useState<Accomplishment[]>([]);
   const [userSettings, setUserSettings] = useState<Partial<UserLLMSettings> | null>(null);
-  const [showShareDialog, setShowShareDialog] = useState(false);
   const [isTogglingMode, setIsTogglingMode] = useState(false);
-  const [highlightedMpa, setHighlightedMpa] = useState<string | null>(null);
   const [sharedEPBs, setSharedEPBs] = useState<SharedEPBInfo[]>([]);
   const [isPageVisible, setIsPageVisible] = useState(true);
   
@@ -258,12 +252,6 @@ export function EPBShellForm({
     }
   }, [currentShell, supabase, setCurrentShell]);
 
-  // Calculate completion status - now based on is_complete toggle, not text content
-  const completedMPAs = Object.values(sections).filter(
-    (s) => s.is_complete
-  ).length;
-  const totalMPAs = STANDARD_MGAS.length;
-
   // Toggle completion status for a section
   const handleToggleComplete = async (mpa: string) => {
     const section = sections[mpa];
@@ -288,32 +276,6 @@ export function EPBShellForm({
       updateSection(mpa, { is_complete: !newValue });
       toast.error("Failed to update completion status");
       console.error("Toggle complete error:", error);
-    }
-  };
-
-  // Scroll to and highlight an MPA section
-  const scrollToMpaSection = (mpaKey: string) => {
-    // Expand the section if collapsed
-    if (collapsedSections[mpaKey]) {
-      setSectionCollapsed(mpaKey, false);
-    }
-    
-    // Find the section element using data attribute
-    const sectionElement = document.querySelector(`[data-mpa-key="${mpaKey}"]`);
-    if (sectionElement) {
-      // Scroll to section - position at top of viewport for consistent experience
-      // Small delay to allow collapse animation to complete if section was collapsed
-      setTimeout(() => {
-        sectionElement.scrollIntoView({ behavior: "smooth", block: "start" });
-      }, 50);
-      
-      // Set highlight state to trigger pulse animation
-      setHighlightedMpa(mpaKey);
-      
-      // Clear highlight after animation completes (0.6s for single pulse)
-      setTimeout(() => {
-        setHighlightedMpa(null);
-      }, 600);
     }
   };
 
@@ -1260,301 +1222,125 @@ export function EPBShellForm({
     );
   }
 
+  // Track if all sections are expanded (for toggle state)
+  const allExpanded = STANDARD_MGAS.every((mpa) => !collapsedSections[mpa.key]);
+  
+  const toggleAllSections = () => {
+    if (allExpanded) {
+      collapseAll();
+    } else {
+      expandAll();
+    }
+  };
+
   // Shell exists - show full form
   return (
-    <div className="space-y-6">
-      {/* Member Selector - Always visible to show who you're viewing */}
-      <Card className="bg-muted/30 overflow-hidden">
-        <CardContent className="py-2 sm:py-3 px-3 sm:px-6">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-            <span className="text-xs sm:text-sm text-muted-foreground shrink-0">Viewing EPB for:</span>
-            <div className="flex items-center gap-2 min-w-0 flex-1">
-              <Select
-                value={getSelectedRateeValue()}
-                onValueChange={handleRateeChange}
-              >
-                <SelectTrigger className="bg-background h-8 sm:h-9 text-xs sm:text-sm max-w-[240px] sm:max-w-sm">
-                  <SelectValue placeholder="Select member..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="self">
-                    <span className="flex items-center gap-2">
-                      <User className="size-4" />
-                      Myself ({profile?.rank} {profile?.full_name})
-                    </span>
-                  </SelectItem>
-                  {subordinates.length > 0 && (
-                    <>
-                      <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
-                        Team Members
-                      </div>
-                      {subordinates.map((sub) => (
-                        <SelectItem key={sub.id} value={sub.id}>
-                          <span className="flex items-center gap-2">
-                            <Users className="size-4" />
-                            {sub.rank} {sub.full_name}
-                          </span>
-                        </SelectItem>
-                      ))}
-                    </>
-                  )}
-                  {managedMembers.length > 0 && (
-                    <>
-                      <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
-                        Managed Members
-                      </div>
-                      {managedMembers.map((member) => (
-                        <SelectItem key={member.id} value={`managed:${member.id}`}>
-                          <span className="flex items-center gap-2">
-                            <User className="size-4 opacity-60" />
-                            {member.rank} {member.full_name}
-                            {member.is_placeholder && (
-                              <Badge variant="secondary" className="text-[10px]">
-                                Managed
-                              </Badge>
-                            )}
-                          </span>
-                        </SelectItem>
-                      ))}
-                    </>
-                  )}
-                  {sharedEPBOptions.length > 0 && (
-                    <>
-                      <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
-                        Shared with Me
-                      </div>
-                      {sharedEPBOptions.map((opt) => (
-                        <SelectItem key={opt.value} value={opt.value}>
-                          <span className="flex items-center gap-2">
-                            <Share2 className="size-4 text-purple-500" />
-                            {opt.label}
-                            <Badge variant="secondary" className="text-[10px] bg-purple-500/10 text-purple-600 border-purple-500/30">
-                              Shared
-                            </Badge>
-                          </span>
-                        </SelectItem>
-                      ))}
-                    </>
-                  )}
-                  <Separator className="my-1" />
-                  <Link
-                    href="/team"
-                    className="flex items-center gap-2 px-2 py-1.5 text-sm text-primary hover:bg-muted rounded-sm cursor-pointer"
-                  >
-                    <UserPlus className="size-4" />
-                    Add team member
-                  </Link>
-                </SelectContent>
-              </Select>
-              <Badge variant="outline" className="shrink-0 text-[10px] sm:text-xs">
-                {cycleYear}
-              </Badge>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+    <div className="space-y-4">
+      {/* Collaboration Controls - Only shown when collaboration feature is enabled */}
+      {isCollaborationEnabled && (
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+          <Button
+            variant={isMultiUserMode ? "default" : "secondary"}
+            size="sm"
+            onClick={handleToggleMultiUserMode}
+            disabled={isTogglingMode}
+            className={cn(
+              "h-7 sm:h-8 gap-1.5 sm:gap-2 rounded-full px-2 sm:px-4 text-xs sm:text-sm",
+              isMultiUserMode && "bg-violet-600 hover:bg-violet-700"
+            )}
+            title={isMultiUserMode ? "Collaboration enabled" : "Enable collaboration"}
+          >
+            {isTogglingMode ? (
+              <Loader2 className="size-3.5 sm:size-4 animate-spin" />
+            ) : isMultiUserMode ? (
+              <Users className="size-3.5 sm:size-4" />
+            ) : (
+              <User className="size-3.5 sm:size-4" />
+            )}
+            <span className="hidden sm:inline">Collaborate</span>
+            {isMultiUserMode && collaboration.collaborators.length > 0 && (
+              <span className="flex items-center justify-center size-4 sm:size-5 rounded-full bg-white/20 text-[10px] sm:text-xs font-bold">
+                {collaboration.collaborators.length}
+              </span>
+            )}
+          </Button>
 
-      {/* Header with ratee info and progress */}
-      <Card className="overflow-hidden">
-        <CardHeader className="pb-4 px-3 sm:px-6">
-          <div className="flex flex-col gap-3">
-            {/* Name and badges row */}
-            <div className="min-w-0">
-              <CardTitle className="text-base sm:text-xl flex items-center gap-2 flex-wrap">
-                <span className="truncate max-w-[200px] sm:max-w-none">{selectedRatee?.rank} {selectedRatee?.fullName}</span>
-                {selectedRatee?.isManagedMember && (
-                  <Badge variant="secondary" className="text-[10px] sm:text-xs shrink-0">Managed</Badge>
-                )}
-              </CardTitle>
-              <CardDescription className="flex items-center gap-1.5 sm:gap-2 mt-1 flex-wrap">
-                <Badge variant="outline" className="text-[10px] sm:text-xs">{cycleYear}</Badge>
-                {selectedRatee?.afsc && (
-                  <Badge variant="secondary" className="text-[10px] sm:text-xs">{selectedRatee.afsc}</Badge>
-                )}
-              </CardDescription>
-            </div>
-            {/* Action buttons row */}
-            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-              {/* Collaborate Toggle - Only shown when collaboration feature is enabled */}
-              {isCollaborationEnabled && (
+          {/* Session controls - only shown when multi-user is enabled */}
+          {isMultiUserMode && (
+            <div className="flex items-center gap-1 sm:gap-1.5">
+              {!collaboration.isInSession ? (
                 <>
                   <Button
-                    variant={isMultiUserMode ? "default" : "secondary"}
+                    variant="ghost"
                     size="sm"
-                    onClick={handleToggleMultiUserMode}
-                    disabled={isTogglingMode}
-                    className={cn(
-                      "h-7 sm:h-8 gap-1.5 sm:gap-2 rounded-full px-2 sm:px-4 text-xs sm:text-sm",
-                      isMultiUserMode && "bg-violet-600 hover:bg-violet-700"
-                    )}
-                    title={isMultiUserMode ? "Collaboration enabled" : "Enable collaboration"}
+                    onClick={() => collaboration.createSession()}
+                    disabled={collaboration.isLoading}
+                    className="h-6 sm:h-7 px-1.5 sm:px-2 text-[10px] sm:text-xs"
                   >
-                    {isTogglingMode ? (
-                      <Loader2 className="size-3.5 sm:size-4 animate-spin" />
-                    ) : isMultiUserMode ? (
-                      <Users className="size-3.5 sm:size-4" />
+                    {collaboration.isLoading ? (
+                      <Loader2 className="size-3 animate-spin" />
                     ) : (
-                      <User className="size-3.5 sm:size-4" />
-                    )}
-                    <span className="hidden sm:inline">Collaborate</span>
-                    {isMultiUserMode && collaboration.collaborators.length > 0 && (
-                      <span className="flex items-center justify-center size-4 sm:size-5 rounded-full bg-white/20 text-[10px] sm:text-xs font-bold">
-                        {collaboration.collaborators.length}
-                      </span>
+                      "Start"
                     )}
                   </Button>
-
-                  {/* Session controls - only shown when multi-user is enabled */}
-                  {isMultiUserMode && (
-                    <div className="flex items-center gap-1 sm:gap-1.5">
-                      {!collaboration.isInSession ? (
-                        <>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => collaboration.createSession()}
-                            disabled={collaboration.isLoading}
-                            className="h-6 sm:h-7 px-1.5 sm:px-2 text-[10px] sm:text-xs"
-                          >
-                            {collaboration.isLoading ? (
-                              <Loader2 className="size-3 animate-spin" />
-                            ) : (
-                              "Start"
-                            )}
-                          </Button>
-                          <input
-                            type="text"
-                            placeholder="Code"
-                            className="h-6 sm:h-7 w-12 sm:w-16 rounded border bg-background px-1.5 sm:px-2 text-[10px] sm:text-xs uppercase placeholder:normal-case"
-                            maxLength={6}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") {
-                                const code = (e.target as HTMLInputElement).value.trim();
-                                if (code) collaboration.joinSession(code);
-                              }
-                            }}
-                          />
-                        </>
-                      ) : (
-                        <>
-                          <Badge variant="secondary" className="h-6 sm:h-7 px-1.5 sm:px-2 font-mono text-[10px] sm:text-xs">
-                            {collaboration.sessionCode}
-                          </Badge>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={collaboration.isHost ? collaboration.endSession : collaboration.leaveSession}
-                            className="h-6 sm:h-7 px-1.5 sm:px-2 text-[10px] sm:text-xs text-muted-foreground hover:text-destructive"
-                          >
-                            {collaboration.isHost ? "End" : "Leave"}
-                          </Button>
-                        </>
-                      )}
-                    </div>
-                  )}
+                  <input
+                    type="text"
+                    placeholder="Code"
+                    className="h-6 sm:h-7 w-12 sm:w-16 rounded border bg-background px-1.5 sm:px-2 text-[10px] sm:text-xs uppercase placeholder:normal-case"
+                    maxLength={6}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        const code = (e.target as HTMLInputElement).value.trim();
+                        if (code) collaboration.joinSession(code);
+                      }
+                    }}
+                  />
+                </>
+              ) : (
+                <>
+                  <Badge variant="secondary" className="h-6 sm:h-7 px-1.5 sm:px-2 font-mono text-[10px] sm:text-xs">
+                    {collaboration.sessionCode}
+                  </Badge>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={collaboration.isHost ? collaboration.endSession : collaboration.leaveSession}
+                    className="h-6 sm:h-7 px-1.5 sm:px-2 text-[10px] sm:text-xs text-muted-foreground hover:text-destructive"
+                  >
+                    {collaboration.isHost ? "End" : "Leave"}
+                  </Button>
                 </>
               )}
-              
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={() => setShowShareDialog(true)} 
-                className="h-7 sm:h-8 px-2 sm:px-3"
-                title="Share EPB"
-              >
-                <Share2 className="size-3.5 sm:size-4" />
-                <span className="hidden sm:inline ml-1.5">Share</span>
-              </Button>
             </div>
-            
-            {/* Share Dialog */}
-            {currentShell && (
-              <EPBShellShareDialog
-                shellId={currentShell.id}
-                isOpen={showShareDialog}
-                onClose={() => setShowShareDialog(false)}
-                ratee={selectedRatee}
-                currentUserId={profile?.id}
-              />
-            )}
-          </div>
-        </CardHeader>
-        <CardContent className="pt-0 px-3 sm:px-6">
-          {/* Progress indicator */}
-          <div className="space-y-2 sm:space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs sm:text-sm font-medium">Progress</span>
-              <span className="text-xs sm:text-sm text-muted-foreground">
-                {completedMPAs}/{totalMPAs}
-              </span>
-            </div>
-            <div className="grid grid-cols-5 gap-1 sm:gap-2">
-              {STANDARD_MGAS.map((mpa) => {
-                const section = sections[mpa.key];
-                const isComplete = section?.is_complete ?? false;
-                const hasContent = section?.statement_text?.trim().length > 0;
-                const isHLR = mpa.key === "hlr_assessment";
-                return (
-                  <Button
-                    key={mpa.key}
-                    variant="outline"
-                    size="sm"
-                    onClick={() => scrollToMpaSection(mpa.key)}
-                    className={cn(
-                      "h-auto p-1.5 sm:p-2 flex-col gap-0.5 text-center transition-all hover:shadow-sm",
-                      isComplete
-                        ? "bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-700 hover:bg-green-100 dark:hover:bg-green-900/30"
-                        : hasContent
-                        ? "bg-amber-50 dark:bg-amber-900/20 border-amber-300/50 dark:border-amber-700/50 hover:bg-amber-100 dark:hover:bg-amber-900/30"
-                        : "bg-muted/30 hover:bg-muted/50",
-                      isHLR && !isComplete && !hasContent && "border-amber-300/50"
-                    )}
-                  >
-                    <div className="flex items-center justify-center gap-0.5 sm:gap-1">
-                      {isComplete ? (
-                        <CheckCircle2 className="size-3 text-green-600" />
-                      ) : hasContent ? (
-                        <Circle className="size-3 text-amber-500" />
-                      ) : (
-                        <Circle className="size-3 text-muted-foreground" />
-                      )}
-                      {isHLR && <Crown className="size-3 text-amber-600" />}
-                    </div>
-                    {/* Mobile: show acronyms, Desktop: show full labels */}
-                    <span className="text-[9px] sm:text-[10px] font-medium truncate">
-                      {mpa.key === "executing_mission" && <><span className="sm:hidden">EM</span><span className="hidden sm:inline">Mission</span></>}
-                      {mpa.key === "leading_people" && <><span className="sm:hidden">LP</span><span className="hidden sm:inline">Leading</span></>}
-                      {mpa.key === "managing_resources" && <><span className="sm:hidden">MR</span><span className="hidden sm:inline">Resources</span></>}
-                      {mpa.key === "improving_unit" && <><span className="sm:hidden">IU</span><span className="hidden sm:inline">Improving</span></>}
-                      {mpa.key === "hlr_assessment" && "HLR"}
-                    </span>
-                  </Button>
-                );
-              })}
-            </div>
-          </div>
+          )}
+        </div>
+      )}
 
-          <Separator className="my-3 sm:my-4" />
-
-          {/* Quick actions */}
-          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-            <Button variant="outline" size="sm" onClick={expandAll} className="h-7 sm:h-8 px-2 sm:px-3 text-xs sm:text-sm">
-              <ChevronDown className="size-3 sm:size-3.5" />
-              <span className="hidden sm:inline ml-1.5">Expand All</span>
-              <span className="sm:hidden ml-1">All</span>
-            </Button>
-            <Button variant="outline" size="sm" onClick={collapseAll} className="h-7 sm:h-8 px-2 sm:px-3 text-xs sm:text-sm">
-              <ChevronUp className="size-3 sm:size-3.5" />
-              <span className="hidden sm:inline ml-1.5">Collapse All</span>
-              <span className="sm:hidden ml-1">None</span>
-            </Button>
-            <div className="flex-1" />
-            <Badge variant="secondary" className="text-[10px] sm:text-xs">
-              {accomplishments.length} <span className="hidden sm:inline">Performance </span>Actions
-            </Badge>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Toggle All Sections Button */}
+      <div className="flex items-center gap-2">
+        <Button 
+          variant="outline" 
+          size="sm" 
+          onClick={toggleAllSections} 
+          className="h-8 px-3 text-sm"
+        >
+          {allExpanded ? (
+            <>
+              <ChevronUp className="size-4 mr-1.5" />
+              Collapse All
+            </>
+          ) : (
+            <>
+              <ChevronDown className="size-4 mr-1.5" />
+              Expand All
+            </>
+          )}
+        </Button>
+        <div className="flex-1" />
+        <Badge variant="secondary" className="text-xs">
+          {accomplishments.length} Performance Actions
+        </Badge>
+      </div>
 
       {/* MPA Sections with cursor tracking */}
       {/* pb-[60vh] allows scrolling the last card (HLR) to the top of the viewport */}
@@ -1604,8 +1390,8 @@ export function EPBShellForm({
                 isCollaborating={collaboration.isInSession}
                 // Completion toggle
                 onToggleComplete={() => handleToggleComplete(mpa.key)}
-                // Highlight pulse when scrolled to from progress card
-                isHighlighted={highlightedMpa === mpa.key}
+                // Highlight pulse (not currently used)
+                isHighlighted={false}
                 // Saved examples (scratchpad)
                 savedExamples={savedExamples[section.id] || []}
                 onSaveExample={(text, note) => handleSaveExample(mpa.key, text, note)}

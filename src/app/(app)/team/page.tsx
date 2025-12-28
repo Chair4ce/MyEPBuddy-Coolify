@@ -2094,7 +2094,7 @@ export default function TeamPage() {
       )}
 
       {/* Stats Cards - horizontal scroll on mobile */}
-      <div className="relative -mx-4 px-4 md:mx-0 md:px-0">
+      {/* <div className="relative -mx-4 px-4 md:mx-0 md:px-0">
         <div className="flex gap-2 sm:gap-3 overflow-x-auto pb-2 md:grid md:grid-cols-3 lg:grid-cols-4 md:overflow-visible md:pb-0 snap-x snap-mandatory scrollbar-hide">
           <Card className="shrink-0 w-28 sm:w-32 md:w-auto snap-start">
             <CardContent className="p-2 pl-2 md:p-4">
@@ -2125,7 +2125,7 @@ export default function TeamPage() {
               </Card>
             ))}
         </div>
-      </div>
+      </div> */}
 
       <Tabs defaultValue="chain" className="w-full">
         <TabsList className="w-full h-auto flex flex-wrap justify-start gap-1 p-1 bg-muted/50">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo, useLayoutEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -76,6 +76,59 @@ interface AwardCategorySectionProps {
   onUpdateSlotState: (category: string, slotIndex: number, updates: Partial<SectionSlotState>) => void;
   onAddSection: () => void;
   onRemoveSection: (slotIndex: number) => void;
+}
+
+// ============================================================================
+// Animated Height Wrapper - for smooth "elevator" effect on new statements
+// ============================================================================
+
+function AnimatedHeightWrapper({ 
+  children, 
+  isNew 
+}: { 
+  children: React.ReactNode; 
+  isNew: boolean;
+}) {
+  const [isAnimating, setIsAnimating] = useState(isNew);
+  const [height, setHeight] = useState<number | "auto">(isNew ? 0 : "auto");
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    if (isNew && contentRef.current) {
+      // Measure the content height
+      const contentHeight = contentRef.current.scrollHeight;
+      
+      // Force a reflow to ensure 0 height is painted
+      requestAnimationFrame(() => {
+        setHeight(contentHeight);
+        
+        // After animation completes, set to auto for natural resizing
+        const timer = setTimeout(() => {
+          setHeight("auto");
+          setIsAnimating(false);
+        }, 350); // Match the transition duration
+        
+        return () => clearTimeout(timer);
+      });
+    }
+  }, [isNew]);
+
+  return (
+    <div 
+      className={cn(
+        "overflow-hidden",
+        isAnimating && "transition-[height,opacity] duration-300 ease-out"
+      )}
+      style={{ 
+        height: height === "auto" ? "auto" : `${height}px`,
+        opacity: isAnimating && height === 0 ? 0 : 1
+      }}
+    >
+      <div ref={contentRef}>
+        {children}
+      </div>
+    </div>
+  );
 }
 
 // ============================================================================
@@ -404,7 +457,7 @@ function StatementSlotCard({
   };
 
   return (
-    <div className="border rounded-lg bg-card/50 animate-in fade-in-0 duration-300 overflow-hidden">
+    <div className="border rounded-lg bg-card/50 overflow-hidden">
       {/* Header Row - Clickable to collapse/expand */}
       <div
         role="button"
@@ -431,19 +484,25 @@ function StatementSlotCard({
               {charCount} chars
             </Badge>
           )}
-          {/* Delete button - stop propagation */}
-          {totalSlots > 1 && (
-            <div onClick={(e) => e.stopPropagation()}>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive transition-colors"
-                onClick={onRemove}
-              >
-                <Trash2 className="size-3.5" />
-              </Button>
-            </div>
-          )}
+          {/* Delete button - always reserve space to prevent layout shift */}
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className={cn(
+              "transition-opacity duration-200",
+              totalSlots > 1 ? "opacity-100" : "opacity-0 pointer-events-none"
+            )}
+          >
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive transition-colors"
+              onClick={onRemove}
+              tabIndex={totalSlots > 1 ? 0 : -1}
+              aria-hidden={totalSlots <= 1}
+            >
+              <Trash2 className="size-3.5" />
+            </Button>
+          </div>
           {/* Collapse indicator */}
           {isCollapsed ? (
             <ChevronDown className="size-4 text-muted-foreground" />
@@ -988,6 +1047,36 @@ export function AwardCategorySectionCard({
   // Track collapsed state for each statement slot
   const [collapsedSlots, setCollapsedSlots] = useState<Record<number, boolean>>({});
   
+  // Track which slots are newly added for animation
+  const [newSlotKeys, setNewSlotKeys] = useState<Set<string>>(new Set());
+  const prevSectionKeysRef = useRef<Set<string>>(new Set());
+  
+  // Detect newly added sections
+  useEffect(() => {
+    const currentKeys = new Set(sections.map(s => s.key));
+    const prevKeys = prevSectionKeysRef.current;
+    
+    // Find keys that are in current but not in previous
+    const newKeys = new Set<string>();
+    currentKeys.forEach(key => {
+      if (!prevKeys.has(key)) {
+        newKeys.add(key);
+      }
+    });
+    
+    // Always update the ref for next comparison
+    prevSectionKeysRef.current = currentKeys;
+    
+    if (newKeys.size > 0) {
+      setNewSlotKeys(newKeys);
+      // Clear the "new" status after animation completes
+      const timer = setTimeout(() => {
+        setNewSlotKeys(new Set());
+      }, 400);
+      return () => clearTimeout(timer);
+    }
+  }, [sections]);
+  
   const toggleSlotCollapse = (slotIndex: number) => {
     setCollapsedSlots(prev => ({
       ...prev,
@@ -1045,19 +1134,21 @@ export function AwardCategorySectionCard({
         <CardContent className="pt-0 px-4 pb-4 space-y-3">
           {/* Statement Slots */}
           {sections.map((s) => {
+            const isNewSlot = newSlotKeys.has(s.key);
             return (
-              <StatementSlotCard
-                key={s.key}
-                categoryKey={categoryKey}
-                slotIndex={s.slotIndex}
-                totalSlots={sections.length}
-                accomplishments={accomplishments}
-                isCollapsed={collapsedSlots[s.slotIndex] ?? false}
-                onToggleCollapse={() => toggleSlotCollapse(s.slotIndex)}
-                onRemove={() => onRemoveSection(s.slotIndex)}
-                onGenerate={(revisionMode, revisionIntensity) => generateStatement(s.slotIndex, s.slotState || getSlotState(s), revisionMode, revisionIntensity)}
-                model={model}
-              />
+              <AnimatedHeightWrapper key={s.key} isNew={isNewSlot}>
+                <StatementSlotCard
+                  categoryKey={categoryKey}
+                  slotIndex={s.slotIndex}
+                  totalSlots={sections.length}
+                  accomplishments={accomplishments}
+                  isCollapsed={collapsedSlots[s.slotIndex] ?? false}
+                  onToggleCollapse={() => toggleSlotCollapse(s.slotIndex)}
+                  onRemove={() => onRemoveSection(s.slotIndex)}
+                  onGenerate={(revisionMode, revisionIntensity) => generateStatement(s.slotIndex, s.slotState || getSlotState(s), revisionMode, revisionIntensity)}
+                  model={model}
+                />
+              </AnimatedHeightWrapper>
             );
           })}
 
@@ -1069,7 +1160,7 @@ export function AwardCategorySectionCard({
             onClick={onAddSection}
           >
             <Plus className="size-4" />
-            Add Another Statement
+            Add
           </Button>
         </CardContent>
       )}

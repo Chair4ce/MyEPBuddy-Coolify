@@ -130,7 +130,7 @@ export default function AwardPage() {
   // ---- Local State ----
   const [selectedNomineeId, setSelectedNomineeId] = useState<string>("self");
   const [accomplishments, setAccomplishments] = useState<Accomplishment[]>([]);
-  const [showConfig, setShowConfig] = useState(true);
+  const [showConfig, setShowConfig] = useState(false);
   const [showPreviewDialog, setShowPreviewDialog] = useState(false);
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [copiedAll, setCopiedAll] = useState(false);
@@ -666,7 +666,7 @@ export default function AwardPage() {
                   <div className="flex items-center gap-3">
                     <Settings className="size-5" />
                     <div>
-                      <CardTitle className="text-base">Configuration</CardTitle>
+                      <CardTitle className="text-base">Settings</CardTitle>
                       <CardDescription className="text-xs">
                         {selectedNominee ? `${selectedNominee.rank} ${selectedNominee.fullName}` : "Select nominee"} • {awardLevel} level • {awardCategory}
                       </CardDescription>

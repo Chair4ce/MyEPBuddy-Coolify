@@ -3,3 +3,4 @@ UPDATE profiles SET role = 'member' WHERE role IN ('supervisor', 'subordinate');
 
 
 
+

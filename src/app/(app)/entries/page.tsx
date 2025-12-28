@@ -236,108 +236,6 @@ function EntriesContent() {
         </Button>
       </div>
 
-      {/* Filters */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex flex-wrap gap-4 items-end">
-            {canManageTeam && hasSubordinates && (
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium">Viewing for</label>
-                <Select value={selectedUser} onValueChange={setSelectedUser}>
-                  <SelectTrigger className="w-[200px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="self">Myself</SelectItem>
-                    {subordinates.length > 0 && (
-                      <>
-                        <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
-                          Registered Team
-                        </div>
-                        {subordinates.map((sub) => (
-                          <SelectItem key={sub.id} value={sub.id}>
-                            {sub.rank} {sub.full_name}
-                          </SelectItem>
-                        ))}
-                      </>
-                    )}
-                    {managedMembers.length > 0 && (
-                      <>
-                        <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
-                          Managed Members
-                        </div>
-                        {managedMembers.map((member) => (
-                          <SelectItem key={member.id} value={`managed:${member.id}`}>
-                            {member.rank} {member.full_name}
-                            {member.is_placeholder && " (Managed)"}
-                          </SelectItem>
-                        ))}
-                      </>
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium flex items-center gap-2">
-                <Filter className="size-4" />
-                Filter by MPA
-              </label>
-              <Select value={selectedMPA} onValueChange={setSelectedMPA}>
-                <SelectTrigger className="w-[200px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All MPAs</SelectItem>
-                  {mgas.map((mpa) => (
-                    <SelectItem key={mpa.key} value={mpa.key}>
-                      {mpa.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* View Mode Toggle */}
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">View</label>
-              <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "list" | "quarterly")}>
-                <TabsList className="h-9">
-                  <TabsTrigger value="list" className="gap-1.5 px-3">
-                    <LayoutList className="size-4" />
-                    <span className="hidden sm:inline">List</span>
-                  </TabsTrigger>
-                  <TabsTrigger value="quarterly" className="gap-1.5 px-3">
-                    <CalendarDays className="size-4" />
-                    <span className="hidden sm:inline">Quarterly</span>
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
-            </div>
-
-            {/* Fiscal Year Toggle - only show in quarterly view */}
-            {viewMode === "quarterly" && (
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium flex items-center gap-2">
-                  <Calendar className="size-4" />
-                  Year Type
-                </label>
-                <div className="flex items-center gap-2 h-9 px-3 rounded-md border bg-background">
-                  <span className={cn("text-sm", !useFiscalYear && "font-medium")}>Calendar</span>
-                  <Switch
-                    checked={useFiscalYear}
-                    onCheckedChange={setUseFiscalYear}
-                    aria-label="Toggle fiscal year"
-                  />
-                  <span className={cn("text-sm", useFiscalYear && "font-medium")}>Fiscal</span>
-                </div>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Performance Coverage & Progress - Only for military enlisted */}
       {profile?.rank !== "Civilian" && (
         <EPBProgressCard
@@ -345,6 +243,88 @@ function EntriesContent() {
           entries={accomplishments}
         />
       )}
+
+      {/* Filters & View Controls - Local to entries list */}
+      <div className="flex flex-wrap items-center gap-3">
+        {canManageTeam && hasSubordinates && (
+          <Select value={selectedUser} onValueChange={setSelectedUser}>
+            <SelectTrigger className="w-[180px] h-9">
+              <SelectValue placeholder="Viewing for" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="self">Myself</SelectItem>
+              {subordinates.length > 0 && (
+                <>
+                  <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+                    Registered Team
+                  </div>
+                  {subordinates.map((sub) => (
+                    <SelectItem key={sub.id} value={sub.id}>
+                      {sub.rank} {sub.full_name}
+                    </SelectItem>
+                  ))}
+                </>
+              )}
+              {managedMembers.length > 0 && (
+                <>
+                  <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+                    Managed Members
+                  </div>
+                  {managedMembers.map((member) => (
+                    <SelectItem key={member.id} value={`managed:${member.id}`}>
+                      {member.rank} {member.full_name}
+                      {member.is_placeholder && " (Managed)"}
+                    </SelectItem>
+                  ))}
+                </>
+              )}
+            </SelectContent>
+          </Select>
+        )}
+
+        <Select value={selectedMPA} onValueChange={setSelectedMPA}>
+          <SelectTrigger className="w-[160px] h-9">
+            <Filter className="size-3.5 mr-1.5 text-muted-foreground" />
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All MPAs</SelectItem>
+            {mgas.map((mpa) => (
+              <SelectItem key={mpa.key} value={mpa.key}>
+                {mpa.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <div className="flex-1" />
+
+        <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "list" | "quarterly")}>
+          <TabsList className="h-9">
+            <TabsTrigger value="list" className="gap-1.5 px-3">
+              <LayoutList className="size-4" />
+              <span className="hidden sm:inline">List</span>
+            </TabsTrigger>
+            <TabsTrigger value="quarterly" className="gap-1.5 px-3">
+              <CalendarDays className="size-4" />
+              <span className="hidden sm:inline">Quarterly</span>
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+
+        {/* Fiscal Year Toggle - only show in quarterly view */}
+        {viewMode === "quarterly" && (
+          <div className="flex items-center gap-2 h-9 px-3 rounded-md border bg-background">
+            <span className={cn("text-sm", !useFiscalYear && "font-medium")}>Calendar</span>
+            <Switch
+              checked={useFiscalYear}
+              onCheckedChange={setUseFiscalYear}
+              aria-label="Toggle fiscal year"
+            />
+            <span className={cn("text-sm", useFiscalYear && "font-medium")}>Fiscal</span>
+          </div>
+        )}
+      </div>
 
       {/* Entries List or Quarterly View */}
       {accomplishments.length === 0 ? (
@@ -626,7 +606,7 @@ export default function EntriesPage() {
 
 function EntriesSkeleton() {
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 w-full max-w-7xl">
       <div className="flex justify-between">
         <div className="space-y-2">
           <Skeleton className="h-8 w-32" />
@@ -634,14 +614,28 @@ function EntriesSkeleton() {
         </div>
         <Skeleton className="h-10 w-28" />
       </div>
+      {/* Progress card skeleton */}
       <Card>
         <CardContent className="pt-6">
-          <div className="flex gap-4">
-            <Skeleton className="h-10 w-48" />
-            <Skeleton className="h-10 w-48" />
+          <div className="space-y-4">
+            <Skeleton className="h-6 w-48" />
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <Skeleton className="h-16 w-full" />
+              <Skeleton className="h-16 w-full" />
+              <Skeleton className="h-16 w-full" />
+              <Skeleton className="h-16 w-full" />
+            </div>
           </div>
         </CardContent>
       </Card>
+      {/* Filters skeleton */}
+      <div className="flex gap-3">
+        <Skeleton className="h-9 w-40" />
+        <Skeleton className="h-9 w-36" />
+        <div className="flex-1" />
+        <Skeleton className="h-9 w-48" />
+      </div>
+      {/* Entries list skeleton */}
       <div className="space-y-4">
         {[...Array(3)].map((_, i) => (
           <Card key={i}>
