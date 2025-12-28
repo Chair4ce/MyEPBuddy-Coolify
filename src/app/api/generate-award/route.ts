@@ -7,7 +7,14 @@ import { generateText } from "ai";
 import { NextResponse } from "next/server";
 import { AWARD_1206_CATEGORIES, DEFAULT_AWARD_SENTENCES } from "@/lib/constants";
 import { getDecryptedApiKeys } from "@/app/actions/api-keys";
-import type { Rank, UserLLMSettings, AwardLevel, AwardCategory, AwardSentencesPerCategory } from "@/types/database";
+import type { Rank, UserLLMSettings, AwardLevel, AwardCategory, AwardSentencesPerCategory, WinLevel } from "@/types/database";
+
+interface AwardExampleStatement {
+  category: string;
+  statement: string;
+  is_winning: boolean;
+  win_level: WinLevel | null;
+}
 
 interface AccomplishmentData {
   id: string;
@@ -194,6 +201,83 @@ function getAwardLevelGuidance(level: AwardLevel): string {
   return guidance[level] || guidance.squadron;
 }
 
+// Fetch user-curated award example statements
+async function fetchAwardExampleStatements(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  categoryFilter?: string | null
+): Promise<AwardExampleStatement[]> {
+  const examples: AwardExampleStatement[] = [];
+  
+  // Fetch user-curated award examples (use_as_llm_example = true)
+  let query = supabase
+    .from("refined_statements")
+    .select("statement, award_category, is_winning_package, win_level")
+    .eq("user_id", userId)
+    .eq("statement_type", "award")
+    .eq("use_as_llm_example", true)
+    .order("created_at", { ascending: false });
+  
+  // Optionally filter to specific category
+  if (categoryFilter) {
+    query = query.eq("award_category", categoryFilter);
+  }
+  
+  const { data } = await query.limit(20);
+  
+  if (data) {
+    interface AwardStatementRow {
+      statement: string;
+      award_category: string | null;
+      is_winning_package: boolean;
+      win_level: WinLevel | null;
+    }
+    (data as AwardStatementRow[]).forEach((s) => {
+      if (s.award_category) {
+        examples.push({
+          category: s.award_category,
+          statement: s.statement,
+          is_winning: s.is_winning_package,
+          win_level: s.win_level,
+        });
+      }
+    });
+  }
+  
+  return examples;
+}
+
+// Build example statements section for the prompt
+function buildExamplesSection(examples: AwardExampleStatement[], category: string): string {
+  const categoryExamples = examples.filter(e => e.category === category);
+  
+  if (categoryExamples.length === 0) return "";
+  
+  // Prioritize winning examples
+  const sortedExamples = [...categoryExamples].sort((a, b) => {
+    // Winning at higher levels first
+    const levelOrder: Record<WinLevel, number> = { haf: 5, majcom: 4, wing: 3, group: 2, squadron: 1 };
+    const aScore = a.is_winning ? (levelOrder[a.win_level as WinLevel] || 0) + 10 : 0;
+    const bScore = b.is_winning ? (levelOrder[b.win_level as WinLevel] || 0) + 10 : 0;
+    return bScore - aScore;
+  });
+  
+  const examplesText = sortedExamples.slice(0, 5).map((e, i) => {
+    const winBadge = e.is_winning && e.win_level 
+      ? ` [WINNING - ${e.win_level.toUpperCase()}]` 
+      : "";
+    return `${i + 1}.${winBadge} ${e.statement}`;
+  }).join("\n");
+  
+  return `
+
+USER-CURATED EXAMPLE STATEMENTS (match this quality):
+These are high-quality examples the user has saved as references:
+${examplesText}
+
+Emulate the style, density, and impact of these examples.`;
+}
+
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
@@ -291,6 +375,9 @@ export async function POST(request: Request) {
     const systemPrompt = buildAwardSystemPrompt(settings, nomineeRank);
     const modelProvider = getModelProvider(model, userKeys);
 
+    // Fetch user-curated award examples
+    const awardExamples = await fetchAwardExampleStatements(supabase, user.id);
+
     // Get sentences per category from settings or use defaults
     const sentencesPerCategory = settings.award_sentences_per_category || 
       DEFAULT_AWARD_SETTINGS.award_sentences_per_category;
@@ -357,6 +444,7 @@ TRANSFORMATION INSTRUCTIONS:
 - Quantify aggressively: if approximate numbers are mentioned, use them; if none, infer reasonable metrics
 - Connect accomplishments to larger organizational impact (flight → squadron → wing → AF)
 - Use your military expertise to enhance with standard AF outcomes and terminology
+${buildExamplesSection(awardExamples, category.key)}
 
 **LINE COUNT & CHARACTER BUDGET - CRITICAL:**
 Target: ${sentencesPerStatement} lines on AF Form 1206 (Times New Roman 12pt, 765.95px line width)
@@ -525,6 +613,7 @@ ${isRevisionMode && revisionMode === "add" ? `COMBINATION INSTRUCTIONS:
 - Sum up any numerical metrics that can be combined
 - Create a cohesive narrative that covers all the key accomplishments
 - Prioritize the most impactful elements if space is limited` : ''}
+${buildExamplesSection(awardExamples, category.key)}
 
 **LINE COUNT & CHARACTER BUDGET - CRITICAL:**
 Target: ${sentencesPerStatement} lines on AF Form 1206 (Times New Roman 12pt, 765.95px line width)
@@ -621,6 +710,7 @@ Details: ${accomplishment.details}
 Impact: ${accomplishment.impact}
 ${accomplishment.metrics ? `Metrics: ${accomplishment.metrics}` : ""}
 Date: ${new Date(accomplishment.date).toLocaleDateString("en-US", { month: "short", year: "numeric" })}
+${buildExamplesSection(awardExamples, category.key)}
 
 **LINE COUNT & CHARACTER BUDGET - CRITICAL:**
 Target: ${sentencesPerStatement} lines on AF Form 1206 (Times New Roman 12pt, 765.95px line width)

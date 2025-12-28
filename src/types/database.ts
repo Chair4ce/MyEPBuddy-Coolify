@@ -123,6 +123,8 @@ export interface StatementHistory {
   created_at: string;
 }
 
+export type WinLevel = "squadron" | "group" | "wing" | "tenant_unit" | "haf";
+
 export interface RefinedStatement {
   id: string;
   user_id: string;
@@ -136,6 +138,12 @@ export interface RefinedStatement {
   cycle_year: number;
   statement_type: StatementType;
   is_favorite: boolean;
+  // Enhanced metadata fields
+  applicable_mpas: string[]; // Array of MPA keys this statement could apply to (EPB multi-tagging)
+  award_category: string | null; // 1206 category for award statements
+  is_winning_package: boolean; // Whether this was part of a winning award package
+  win_level: WinLevel | null; // Level at which the award was won
+  use_as_llm_example: boolean; // Include as example in LLM prompts
   created_at: string;
   updated_at: string;
 }
@@ -175,6 +183,12 @@ export interface SharedStatementView {
   cycle_year: number;
   statement_type: StatementType;
   is_favorite: boolean;
+  // Enhanced metadata fields
+  applicable_mpas: string[];
+  award_category: string | null;
+  is_winning_package: boolean;
+  win_level: WinLevel | null;
+  use_as_llm_example: boolean;
   created_at: string;
   updated_at: string;
   share_type: ShareType;

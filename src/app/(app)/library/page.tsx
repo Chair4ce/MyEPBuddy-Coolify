@@ -508,9 +508,6 @@ export default function LibraryPage() {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Statement Library</h1>
-          <p className="text-sm sm:text-base text-muted-foreground">
-            Your saved statements, shared statements, and community contributions
-          </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <Button

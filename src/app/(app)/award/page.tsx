@@ -468,15 +468,13 @@ export default function AwardPage() {
   if (hasCheckedForShell && !currentShell && !isLoadingShell) {
     return (
       <TooltipProvider>
-        <div className="container max-w-5xl mx-auto py-6 px-4 space-y-6">
+        <div className="space-y-6 min-w-0 w-full max-w-7xl">
           {/* Page Header */}
           <div className="flex items-center gap-3">
             <Award className="size-6" />
             <div>
               <h1 className="text-xl font-bold">Award Statement Generator</h1>
-              <p className="text-sm text-muted-foreground">
-                Build AF Form 1206 narrative statements
-              </p>
+      
             </div>
             <Badge variant="outline" className="text-[10px] h-5 bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-700">
               BETA
@@ -586,16 +584,14 @@ export default function AwardPage() {
 
   return (
     <TooltipProvider>
-      <div className="container max-w-5xl mx-auto py-6 px-4 space-y-6">
+      <div className="space-y-6 min-w-0 w-full max-w-7xl">
         {/* Page Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Award className="size-6" />
             <div>
               <h1 className="text-xl font-bold">Award Statement Generator</h1>
-              <p className="text-sm text-muted-foreground">
-                Build AF Form 1206 narrative statements
-              </p>
+           
             </div>
             <Badge variant="outline" className="text-[10px] h-5 bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-700">
               BETA

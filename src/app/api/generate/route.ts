@@ -185,27 +185,59 @@ async function fetchExampleStatements(
   communityMpaFilter?: string | null
 ): Promise<ExampleStatement[]> {
   const examples: ExampleStatement[] = [];
+  const existingStatements = new Set<string>();
 
+  // PRIORITY 1: User-curated examples (use_as_llm_example = true)
+  // These are the user's hand-picked high-quality examples
+  const { data: curatedData } = await supabase
+    .from("refined_statements")
+    .select("mpa, statement, applicable_mpas")
+    .eq("user_id", userId)
+    .eq("statement_type", "epb")
+    .eq("use_as_llm_example", true)
+    .order("created_at", { ascending: false })
+    .limit(15);
+
+  if (curatedData) {
+    const typedCurated = curatedData as { mpa: string; statement: string; applicable_mpas?: string[] }[];
+    typedCurated.forEach((s) => {
+      if (!existingStatements.has(s.statement)) {
+        existingStatements.add(s.statement);
+        examples.push({
+          mpa: s.mpa,
+          statement: s.statement,
+          source: "personal" as const,
+        });
+      }
+    });
+  }
+
+  // PRIORITY 2: Personal examples (if writing style includes personal)
   if (writingStyle === "personal" || writingStyle === "hybrid") {
     const { data: personalData } = await supabase
       .from("refined_statements")
       .select("mpa, statement")
       .eq("user_id", userId)
       .eq("afsc", personalAfsc) // Use ratee's AFSC for personal examples
+      .eq("statement_type", "epb")
       .order("created_at", { ascending: false })
       .limit(10);
 
     if (personalData) {
-      examples.push(
-        ...(personalData as { mpa: string; statement: string }[]).map((s) => ({
-          mpa: s.mpa,
-          statement: s.statement,
-          source: "personal" as const,
-        }))
-      );
+      (personalData as { mpa: string; statement: string }[]).forEach((s) => {
+        if (!existingStatements.has(s.statement)) {
+          existingStatements.add(s.statement);
+          examples.push({
+            mpa: s.mpa,
+            statement: s.statement,
+            source: "personal" as const,
+          });
+        }
+      });
     }
   }
 
+  // PRIORITY 3: Community examples (if writing style includes community)
   if (writingStyle === "community" || writingStyle === "hybrid") {
     // Fetch top 20 community-voted statements for the selected AFSC
     // Optionally filtered by specific MPA for more targeted examples
@@ -235,13 +267,16 @@ async function fetchExampleStatements(
         .sort((a, b) => b.netVotes - a.netVotes)
         .slice(0, 20);
 
-      examples.push(
-        ...sortedByNetVotes.map((s) => ({
-          mpa: s.mpa,
-          statement: s.statement,
-          source: "community" as const,
-        }))
-      );
+      sortedByNetVotes.forEach((s) => {
+        if (!existingStatements.has(s.statement)) {
+          existingStatements.add(s.statement);
+          examples.push({
+            mpa: s.mpa,
+            statement: s.statement,
+            source: "community" as const,
+          });
+        }
+      });
     }
     
     // Also fetch from shared community statements (statement_shares with share_type='community')
@@ -261,16 +296,17 @@ async function fetchExampleStatements(
     
     if (sharedCommunityData) {
       // Add shared community statements, avoiding duplicates
-      const existingStatements = new Set(examples.map(e => e.statement));
-      const newShared = (sharedCommunityData as { mpa: string; statement: string }[])
+      (sharedCommunityData as { mpa: string; statement: string }[])
         .filter(s => !existingStatements.has(s.statement))
         .slice(0, 10) // Limit to avoid too many
-        .map(s => ({
-          mpa: s.mpa,
-          statement: s.statement,
-          source: "community" as const,
-        }));
-      examples.push(...newShared);
+        .forEach(s => {
+          existingStatements.add(s.statement);
+          examples.push({
+            mpa: s.mpa,
+            statement: s.statement,
+            source: "community" as const,
+          });
+        });
     }
   }
 

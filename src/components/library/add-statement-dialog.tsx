@@ -24,11 +24,21 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "@/components/ui/sonner";
 import { cn, getCharacterCountColor } from "@/lib/utils";
-import { MAX_STATEMENT_CHARACTERS, STANDARD_MGAS, RANKS } from "@/lib/constants";
-import { Loader2, UserCheck, Users, Globe, CheckCircle2 } from "lucide-react";
-import type { Rank, StatementType } from "@/types/database";
+import { MAX_STATEMENT_CHARACTERS, STANDARD_MGAS, RANKS, AWARD_1206_CATEGORIES } from "@/lib/constants";
+import { Loader2, UserCheck, Users, Globe, CheckCircle2, Trophy, Sparkles, FileText, Award } from "lucide-react";
+import type { Rank, StatementType, WinLevel } from "@/types/database";
+
+const WIN_LEVELS: { value: WinLevel; label: string }[] = [
+  { value: "squadron", label: "Squadron" },
+  { value: "group", label: "Group" },
+  { value: "wing", label: "Wing" },
+  { value: "tenant_unit", label: "Tenant Unit" },
+  { value: "haf", label: "HAF" },
+];
 
 interface AddStatementDialogProps {
   open: boolean;
@@ -44,13 +54,25 @@ export function AddStatementDialog({
   const { profile, epbConfig, subordinates } = useUserStore();
   const [isSaving, setIsSaving] = useState(false);
 
-  // Form state
+  // Form state - Statement Type FIRST
+  const [statementType, setStatementType] = useState<StatementType>("epb");
+
+  // Statement text
   const [statementText, setStatementText] = useState("");
-  const [selectedMpa, setSelectedMpa] = useState("");
+
+  // EPB-specific fields
+  const [selectedMpas, setSelectedMpas] = useState<string[]>([]);
   const [selectedAfsc, setSelectedAfsc] = useState("");
   const [selectedRank, setSelectedRank] = useState<Rank | "">("");
   const [cycleYear, setCycleYear] = useState<number>(new Date().getFullYear());
-  const [statementType, setStatementType] = useState<StatementType>("epb");
+
+  // Award-specific fields
+  const [awardCategory, setAwardCategory] = useState("");
+  const [isWinningPackage, setIsWinningPackage] = useState(false);
+  const [winLevel, setWinLevel] = useState<WinLevel | "">("");
+
+  // Common fields
+  const [useAsLlmExample, setUseAsLlmExample] = useState(false);
 
   // Granular sharing options
   const [shareWithSupervisor, setShareWithSupervisor] = useState(false);
@@ -58,7 +80,7 @@ export function AddStatementDialog({
   const [shareWithCommunity, setShareWithCommunity] = useState(false);
 
   const supabase = createClient();
-  const mgas = STANDARD_MGAS;
+  const mgas = STANDARD_MGAS.filter(m => m.key !== "hlr_assessment"); // Exclude HLR from manual entry
   const maxChars = epbConfig?.max_characters_per_statement || MAX_STATEMENT_CHARACTERS;
 
   // Derived state for "Share with All"
@@ -80,6 +102,15 @@ export function AddStatementDialog({
     setShareWithCommunity(checked);
   }
 
+  // Toggle MPA selection for multi-select
+  function toggleMpa(mpaKey: string) {
+    setSelectedMpas(prev => 
+      prev.includes(mpaKey) 
+        ? prev.filter(m => m !== mpaKey)
+        : [...prev, mpaKey]
+    );
+  }
+
   // Initialize defaults from profile when dialog opens
   useEffect(() => {
     if (open && profile) {
@@ -89,13 +120,36 @@ export function AddStatementDialog({
     }
   }, [open, profile, epbConfig]);
 
+  // Reset award-specific fields when switching to EPB
+  useEffect(() => {
+    if (statementType === "epb") {
+      setAwardCategory("");
+      setIsWinningPackage(false);
+      setWinLevel("");
+    } else {
+      // Reset EPB-specific multi-select when switching to Award
+      setSelectedMpas([]);
+    }
+  }, [statementType]);
+
+  // Reset win level when unchecking winning package
+  useEffect(() => {
+    if (!isWinningPackage) {
+      setWinLevel("");
+    }
+  }, [isWinningPackage]);
+
   function resetForm() {
     setStatementText("");
-    setSelectedMpa("");
+    setStatementType("epb");
+    setSelectedMpas([]);
     setSelectedAfsc(profile?.afsc || "");
     setSelectedRank(profile?.rank || "");
     setCycleYear(epbConfig?.current_cycle_year || new Date().getFullYear());
-    setStatementType("epb");
+    setAwardCategory("");
+    setIsWinningPackage(false);
+    setWinLevel("");
+    setUseAsLlmExample(false);
     setShareWithSupervisor(false);
     setShareWithSubordinates(false);
     setShareWithCommunity(false);
@@ -109,10 +163,6 @@ export function AddStatementDialog({
       toast.error("Please enter a statement");
       return;
     }
-    if (!selectedMpa) {
-      toast.error("Please select an MPA");
-      return;
-    }
     if (!selectedAfsc) {
       toast.error("Please enter an AFSC");
       return;
@@ -122,21 +172,49 @@ export function AddStatementDialog({
       return;
     }
 
+    // Type-specific validation
+    if (statementType === "epb") {
+      if (selectedMpas.length === 0) {
+        toast.error("Please select at least one MPA");
+        return;
+      }
+    } else {
+      if (!awardCategory) {
+        toast.error("Please select an award category");
+        return;
+      }
+      if (isWinningPackage && !winLevel) {
+        toast.error("Please select the win level");
+        return;
+      }
+    }
+
     setIsSaving(true);
 
     try {
+      // Determine primary MPA for the mpa column (first selected for EPB, category mapping for Award)
+      const primaryMpa = statementType === "epb" 
+        ? selectedMpas[0] 
+        : awardCategory;
+
       // Insert the refined statement
       const { data: newStatement, error: insertError } = await supabase
         .from("refined_statements")
         .insert({
           user_id: profile.id,
-          mpa: selectedMpa,
+          mpa: primaryMpa,
           afsc: selectedAfsc.toUpperCase(),
           rank: selectedRank,
           statement: statementText.trim(),
           cycle_year: cycleYear,
           statement_type: statementType,
           is_favorite: false,
+          // New enhanced fields
+          applicable_mpas: statementType === "epb" ? selectedMpas : [],
+          award_category: statementType === "award" ? awardCategory : null,
+          is_winning_package: statementType === "award" ? isWinningPackage : false,
+          win_level: statementType === "award" && isWinningPackage ? winLevel : null,
+          use_as_llm_example: useAsLlmExample,
         } as never)
         .select("id")
         .single() as { data: { id: string } | null; error: Error | null };
@@ -202,12 +280,19 @@ export function AddStatementDialog({
     }
   }
 
-  const isValid =
-    statementText.trim() &&
-    selectedMpa &&
-    selectedAfsc &&
-    selectedRank &&
-    statementText.length <= maxChars;
+  const isValid = (() => {
+    const baseValid = 
+      statementText.trim() &&
+      selectedAfsc &&
+      selectedRank &&
+      statementText.length <= maxChars;
+    
+    if (statementType === "epb") {
+      return baseValid && selectedMpas.length > 0;
+    } else {
+      return baseValid && awardCategory && (!isWinningPackage || winLevel);
+    }
+  })();
 
   return (
     <Dialog open={open} onOpenChange={(value) => {
@@ -223,7 +308,48 @@ export function AddStatementDialog({
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* Statement Textarea - Main Event */}
+          {/* 1. Statement Type Selector - FIRST */}
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Statement Type</Label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setStatementType("epb")}
+                className={cn(
+                  "flex items-center gap-2 p-3 rounded-lg border text-left transition-colors",
+                  statementType === "epb"
+                    ? "bg-primary/5 border-primary/30 ring-1 ring-primary/20"
+                    : "bg-card hover:bg-muted/50"
+                )}
+              >
+                <FileText className={cn("size-5", statementType === "epb" ? "text-primary" : "text-muted-foreground")} />
+                <div>
+                  <div className="text-sm font-medium">EPB</div>
+                  <div className="text-xs text-muted-foreground">Performance statement</div>
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setStatementType("award")}
+                className={cn(
+                  "flex items-center gap-2 p-3 rounded-lg border text-left transition-colors",
+                  statementType === "award"
+                    ? "bg-primary/5 border-primary/30 ring-1 ring-primary/20"
+                    : "bg-card hover:bg-muted/50"
+                )}
+              >
+                <Award className={cn("size-5", statementType === "award" ? "text-primary" : "text-muted-foreground")} />
+                <div>
+                  <div className="text-sm font-medium">Award</div>
+                  <div className="text-xs text-muted-foreground">1206 statement</div>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* 2. Statement Textarea - SECOND */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label htmlFor="statement-text" className="text-sm font-medium">
@@ -242,7 +368,9 @@ export function AddStatementDialog({
               id="statement-text"
               value={statementText}
               onChange={(e) => setStatementText(e.target.value)}
-              placeholder="Enter your EPB statement..."
+              placeholder={statementType === "epb" 
+                ? "Paste or type your EPB statement..." 
+                : "Paste or type your 1206 award statement..."}
               rows={5}
               className="resize-none text-sm"
               aria-label="Statement text"
@@ -251,106 +379,242 @@ export function AddStatementDialog({
 
           <Separator />
 
-          {/* Statement Type Selector */}
-          <div className="space-y-2">
-            <Label htmlFor="type-select" className="text-sm">
-              Statement Type
-            </Label>
-            <Select value={statementType} onValueChange={(v) => setStatementType(v as StatementType)}>
-              <SelectTrigger id="type-select" className="w-full">
-                <SelectValue placeholder="Select type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="epb">EPB Statement</SelectItem>
-                <SelectItem value="award">Award Statement (1206)</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          {/* 3. Dynamic Options based on Type */}
+          {statementType === "epb" ? (
+            // EPB-specific options
+            <>
+              {/* MPA Multi-Select */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">
+                  Applicable MPAs
+                  <span className="text-xs text-muted-foreground ml-1">(select all that apply)</span>
+                </Label>
+                <div className="flex flex-wrap gap-2">
+                  {mgas.map((mpa) => (
+                    <button
+                      key={mpa.key}
+                      type="button"
+                      onClick={() => toggleMpa(mpa.key)}
+                      className={cn(
+                        "px-3 py-1.5 text-xs font-medium rounded-full border transition-colors",
+                        selectedMpas.includes(mpa.key)
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "bg-muted/50 hover:bg-muted border-border"
+                      )}
+                    >
+                      {mpa.label}
+                    </button>
+                  ))}
+                </div>
+                {selectedMpas.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {selectedMpas.length} MPA{selectedMpas.length !== 1 ? "s" : ""} selected
+                  </p>
+                )}
+              </div>
+
+              {/* EPB Details Grid */}
+              <div className="grid grid-cols-2 gap-3">
+                {/* Cycle Year */}
+                <div className="space-y-2">
+                  <Label htmlFor="cycle-select" className="text-sm">
+                    Cycle Year
+                  </Label>
+                  <Select
+                    value={cycleYear.toString()}
+                    onValueChange={(v) => setCycleYear(parseInt(v))}
+                  >
+                    <SelectTrigger id="cycle-select" className="w-full">
+                      <SelectValue placeholder="Select year" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 + i).map(
+                        (year) => (
+                          <SelectItem key={year} value={year.toString()}>
+                            {year}
+                          </SelectItem>
+                        )
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Rank Selector */}
+                <div className="space-y-2">
+                  <Label htmlFor="rank-select" className="text-sm">
+                    Rank
+                  </Label>
+                  <Select
+                    value={selectedRank}
+                    onValueChange={(v) => setSelectedRank(v as Rank)}
+                  >
+                    <SelectTrigger id="rank-select" className="w-full">
+                      <SelectValue placeholder="Select rank" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {RANKS.map((rank) => (
+                        <SelectItem key={rank.value} value={rank.value}>
+                          {rank.value}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* AFSC Input */}
+                <div className="space-y-2 col-span-2">
+                  <Label htmlFor="afsc-input" className="text-sm">
+                    AFSC
+                  </Label>
+                  <Input
+                    id="afsc-input"
+                    value={selectedAfsc}
+                    onChange={(e) => setSelectedAfsc(e.target.value.toUpperCase())}
+                    placeholder="e.g., 1A8X2"
+                    className="uppercase"
+                    aria-label="AFSC"
+                  />
+                </div>
+              </div>
+            </>
+          ) : (
+            // Award-specific options
+            <>
+              {/* Award Category */}
+              <div className="space-y-2">
+                <Label htmlFor="award-category" className="text-sm font-medium">
+                  1206 Category
+                </Label>
+                <Select value={awardCategory} onValueChange={setAwardCategory}>
+                  <SelectTrigger id="award-category" className="w-full">
+                    <SelectValue placeholder="Select category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {AWARD_1206_CATEGORIES.map((cat) => (
+                      <SelectItem key={cat.key} value={cat.key}>
+                        {cat.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Winning Package Toggle */}
+              <div className="space-y-3">
+                <label
+                  className={cn(
+                    "flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors",
+                    isWinningPackage
+                      ? "bg-amber-50 dark:bg-amber-950/20 border-amber-300 dark:border-amber-800"
+                      : "bg-card hover:bg-muted/50"
+                  )}
+                >
+                  <Checkbox
+                    checked={isWinningPackage}
+                    onCheckedChange={(checked) => setIsWinningPackage(!!checked)}
+                    aria-label="Part of winning package"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <Trophy className={cn("size-4", isWinningPackage ? "text-amber-600" : "text-muted-foreground")} />
+                      <span className="text-sm font-medium">Part of Winning Package</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      This statement was used in an award package that won
+                    </p>
+                  </div>
+                </label>
+
+                {/* Win Level - Only show if winning package is checked */}
+                {isWinningPackage && (
+                  <div className="space-y-2 ml-8">
+                    <Label htmlFor="win-level" className="text-sm">
+                      Win Level
+                    </Label>
+                    <Select value={winLevel} onValueChange={(v) => setWinLevel(v as WinLevel)}>
+                      <SelectTrigger id="win-level" className="w-full">
+                        <SelectValue placeholder="Select level" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {WIN_LEVELS.map((level) => (
+                          <SelectItem key={level.value} value={level.value}>
+                            {level.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+
+              {/* Award Details Grid */}
+              <div className="grid grid-cols-2 gap-3">
+                {/* Rank Selector */}
+                <div className="space-y-2">
+                  <Label htmlFor="rank-select" className="text-sm">
+                    Rank
+                  </Label>
+                  <Select
+                    value={selectedRank}
+                    onValueChange={(v) => setSelectedRank(v as Rank)}
+                  >
+                    <SelectTrigger id="rank-select" className="w-full">
+                      <SelectValue placeholder="Select rank" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {RANKS.map((rank) => (
+                        <SelectItem key={rank.value} value={rank.value}>
+                          {rank.value}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* AFSC Input */}
+                <div className="space-y-2">
+                  <Label htmlFor="afsc-input-award" className="text-sm">
+                    AFSC
+                  </Label>
+                  <Input
+                    id="afsc-input-award"
+                    value={selectedAfsc}
+                    onChange={(e) => setSelectedAfsc(e.target.value.toUpperCase())}
+                    placeholder="e.g., 1A8X2"
+                    className="uppercase"
+                    aria-label="AFSC"
+                  />
+                </div>
+              </div>
+            </>
+          )}
 
           <Separator />
 
-          {/* Options Grid */}
-          <div className="grid grid-cols-2 gap-3">
-            {/* MPA Selector */}
-            <div className="space-y-2">
-              <Label htmlFor="mpa-select" className="text-sm">
-                MPA
-              </Label>
-              <Select value={selectedMpa} onValueChange={setSelectedMpa}>
-                <SelectTrigger id="mpa-select" className="w-full">
-                  <SelectValue placeholder="Select MPA" />
-                </SelectTrigger>
-                <SelectContent>
-                  {mgas.map((mpa) => (
-                    <SelectItem key={mpa.key} value={mpa.key}>
-                      {mpa.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          {/* LLM Example Toggle - Common to both types */}
+          <label
+            className={cn(
+              "flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors",
+              useAsLlmExample
+                ? "bg-violet-50 dark:bg-violet-950/20 border-violet-300 dark:border-violet-800"
+                : "bg-card hover:bg-muted/50"
+            )}
+          >
+            <Checkbox
+              checked={useAsLlmExample}
+              onCheckedChange={(checked) => setUseAsLlmExample(!!checked)}
+              aria-label="Use as LLM example"
+            />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <Sparkles className={cn("size-4", useAsLlmExample ? "text-violet-600" : "text-muted-foreground")} />
+                <span className="text-sm font-medium">Use as AI Example</span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Include this statement as an example when generating new {statementType === "epb" ? "EPB" : "award"} statements
+              </p>
             </div>
-
-            {/* Cycle Year Selector */}
-            <div className="space-y-2">
-              <Label htmlFor="cycle-select" className="text-sm">
-                Cycle Year
-              </Label>
-              <Select
-                value={cycleYear.toString()}
-                onValueChange={(v) => setCycleYear(parseInt(v))}
-              >
-                <SelectTrigger id="cycle-select" className="w-full">
-                  <SelectValue placeholder="Select year" />
-                </SelectTrigger>
-                <SelectContent>
-                  {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 + i).map(
-                    (year) => (
-                      <SelectItem key={year} value={year.toString()}>
-                        {year}
-                      </SelectItem>
-                    )
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* AFSC Input */}
-            <div className="space-y-2">
-              <Label htmlFor="afsc-input" className="text-sm">
-                AFSC
-              </Label>
-              <Input
-                id="afsc-input"
-                value={selectedAfsc}
-                onChange={(e) => setSelectedAfsc(e.target.value.toUpperCase())}
-                placeholder="e.g., 1A8X2"
-                className="uppercase"
-                aria-label="AFSC"
-              />
-            </div>
-
-            {/* Rank Selector */}
-            <div className="space-y-2">
-              <Label htmlFor="rank-select" className="text-sm">
-                Rank
-              </Label>
-              <Select
-                value={selectedRank}
-                onValueChange={(v) => setSelectedRank(v as Rank)}
-              >
-                <SelectTrigger id="rank-select" className="w-full">
-                  <SelectValue placeholder="Select rank" />
-                </SelectTrigger>
-                <SelectContent>
-                  {RANKS.map((rank) => (
-                    <SelectItem key={rank.value} value={rank.value}>
-                      {rank.value}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+          </label>
 
           <Separator />
 
@@ -482,4 +746,3 @@ export function AddStatementDialog({
     </Dialog>
   );
 }
-
