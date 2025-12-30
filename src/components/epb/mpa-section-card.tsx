@@ -56,7 +56,7 @@ interface MPASectionCardProps {
   onSave: (text: string) => Promise<void>;
   onCreateSnapshot: (text: string) => Promise<void>;
   onGenerateStatement: (options: GenerateOptions) => Promise<string[]>;
-  onReviseStatement: (text: string, context?: string, versionCount?: number) => Promise<string[]>;
+  onReviseStatement: (text: string, context?: string, versionCount?: number, aggressiveness?: number, fillToMax?: boolean) => Promise<string[]>;
   snapshots: EPBShellSnapshot[];
   accomplishments: Accomplishment[]; // All available accomplishments
   onOpenAccomplishments: () => void;
@@ -224,6 +224,8 @@ export function MPASectionCard({
   const [showRevisePanel, setShowRevisePanel] = useState(false);
   const [reviseVersionCount, setReviseVersionCount] = useState(3);
   const [reviseContext, setReviseContext] = useState("");
+  const [reviseAggressiveness, setReviseAggressiveness] = useState(50);
+  const [reviseFillToMax, setReviseFillToMax] = useState(true);
   const [generatedRevisions, setGeneratedRevisions] = useState<string[]>([]);
   const [isRevising, setIsRevising] = useState(false);
   
@@ -651,7 +653,7 @@ export function MPASectionCard({
     setIsRevising(true);
     setGeneratedRevisions([]);
     try {
-      const revisions = await onReviseStatement(localText, reviseContext || undefined, reviseVersionCount);
+      const revisions = await onReviseStatement(localText, reviseContext || undefined, reviseVersionCount, reviseAggressiveness, reviseFillToMax);
       if (revisions.length > 0) {
         setGeneratedRevisions(revisions);
       } else {
@@ -1212,40 +1214,99 @@ export function MPASectionCard({
                   </button>
                 </div>
 
-                {/* Options row */}
-                <div className="flex flex-col sm:flex-row gap-3">
-                  {/* Version count selector */}
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">Versions:</span>
-                    <div className="flex items-center border rounded-md">
-                      {[1, 2, 3].map((num) => (
-                        <button
-                          key={num}
-                          onClick={() => setReviseVersionCount(num)}
-                          className={cn(
-                            "px-2.5 py-1 text-xs transition-colors",
-                            num === 1 && "rounded-l-md",
-                            num === 3 && "rounded-r-md",
-                            reviseVersionCount === num
-                              ? "bg-primary text-primary-foreground"
-                              : "hover:bg-muted"
-                          )}
-                        >
-                          {num}
-                        </button>
-                      ))}
+                {/* Options */}
+                <div className="space-y-3">
+                  {/* Top row: Versions and Context */}
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    {/* Version count selector */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground whitespace-nowrap">Versions:</span>
+                      <div className="flex items-center border rounded-md">
+                        {[1, 2, 3].map((num) => (
+                          <button
+                            key={num}
+                            onClick={() => setReviseVersionCount(num)}
+                            className={cn(
+                              "px-2.5 py-1 text-xs transition-colors",
+                              num === 1 && "rounded-l-md",
+                              num === 3 && "rounded-r-md",
+                              reviseVersionCount === num
+                                ? "bg-primary text-primary-foreground"
+                                : "hover:bg-muted"
+                            )}
+                          >
+                            {num}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Context input */}
+                    <div className="flex-1">
+                      <input
+                        type="text"
+                        value={reviseContext}
+                        onChange={(e) => setReviseContext(e.target.value)}
+                        placeholder="Optional: How should it sound? (e.g., more concise, more impactful...)"
+                        className="w-full h-7 px-2.5 text-xs rounded-md border border-input bg-transparent placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      />
                     </div>
                   </div>
 
-                  {/* Context input */}
-                  <div className="flex-1">
-                    <input
-                      type="text"
-                      value={reviseContext}
-                      onChange={(e) => setReviseContext(e.target.value)}
-                      placeholder="Optional: How should it sound? (e.g., more concise, more impactful...)"
-                      className="w-full h-7 px-2.5 text-xs rounded-md border border-input bg-transparent placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                    />
+                  {/* Aggressiveness slider */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground">Word Replacement:</span>
+                      <span className="text-xs font-medium tabular-nums">
+                        {reviseAggressiveness <= 20 ? "Minimal" : reviseAggressiveness <= 40 ? "Conservative" : reviseAggressiveness <= 60 ? "Moderate" : reviseAggressiveness <= 80 ? "Aggressive" : "Maximum"}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-[10px] text-muted-foreground shrink-0">Keep Most</span>
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        step="10"
+                        value={reviseAggressiveness}
+                        onChange={(e) => setReviseAggressiveness(Number(e.target.value))}
+                        className="flex-1 h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
+                      />
+                      <span className="text-[10px] text-muted-foreground shrink-0">Replace All</span>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">
+                      {reviseAggressiveness <= 20 
+                        ? "Only fix obvious issues, preserve your voice" 
+                        : reviseAggressiveness <= 40 
+                          ? "Light touch, replace only weak words" 
+                          : reviseAggressiveness <= 60 
+                            ? "Balanced refresh with new phrasing" 
+                            : reviseAggressiveness <= 80 
+                              ? "Substantial rewrite, keep only metrics" 
+                              : "Complete rewrite, preserve only data"}
+                    </p>
+                  </div>
+
+                  {/* Fill to max toggle */}
+                  <div className="flex items-center justify-between py-1.5 px-2 rounded-md bg-muted/50">
+                    <div className="space-y-0.5">
+                      <span className="text-xs font-medium">Fill to Maximum</span>
+                      <p className="text-[10px] text-muted-foreground">Target {maxChars - 10}-{maxChars} chars for maximum impact</p>
+                    </div>
+                    <button
+                      onClick={() => setReviseFillToMax(!reviseFillToMax)}
+                      className={cn(
+                        "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors",
+                        reviseFillToMax ? "bg-primary" : "bg-muted-foreground/30"
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-background shadow-lg transition-transform",
+                          reviseFillToMax ? "translate-x-4" : "translate-x-0"
+                        )}
+                      />
+                    </button>
                   </div>
                 </div>
 

@@ -16,6 +16,10 @@ interface ReviseSelectionRequest {
   mode?: "expand" | "compress" | "general"; // expand = longer words, compress = shorter words
   context?: string; // Additional context for revision
   usedVerbs?: string[]; // Verbs already used in this cycle - avoid repeating
+  aggressiveness?: number; // 0-100: how aggressively to replace words (0 = minimal, 100 = replace almost all)
+  fillToMax?: boolean; // If true, prioritize filling to max character count
+  maxCharacters?: number; // Max character limit for the statement
+  versionCount?: number; // Number of revisions to generate (default 3)
 }
 
 // Overused/cliché verbs that should be avoided unless user explicitly requests them
@@ -101,10 +105,92 @@ export async function POST(request: Request) {
     }
 
     const body: ReviseSelectionRequest = await request.json();
-    const { fullStatement, selectedText, selectionStart, selectionEnd, model, mode = "general", context, usedVerbs = [] } = body;
+    const { 
+      fullStatement, 
+      selectedText, 
+      selectionStart, 
+      selectionEnd, 
+      model, 
+      mode = "general", 
+      context, 
+      usedVerbs = [],
+      aggressiveness = 50,
+      fillToMax = true,
+      maxCharacters,
+      versionCount = 3,
+    } = body;
     
     // Combine banned verbs with already-used verbs for this session
     const verbsToAvoid = [...new Set([...BANNED_VERBS, ...usedVerbs.map(v => v.toLowerCase())])];
+    
+    // Calculate aggressiveness instructions
+    const getAggressivenessInstructions = (level: number): string => {
+      if (level <= 20) {
+        return `**WORD REPLACEMENT LEVEL: MINIMAL (${level}%)**
+- Make VERY FEW changes - only fix obvious issues
+- Keep the overall structure and most words intact
+- Only replace words that are clearly weak or redundant
+- Preserve the author's voice and style as much as possible
+- Focus on 1-2 small improvements per version`;
+      } else if (level <= 40) {
+        return `**WORD REPLACEMENT LEVEL: CONSERVATIVE (${level}%)**
+- Make LIMITED changes - keep most of the original phrasing
+- Replace only the weakest words and phrases
+- Maintain the general sentence structure
+- Focus on enhancing key action verbs and impact phrases
+- Preserve numerical data and metrics exactly as-is`;
+      } else if (level <= 60) {
+        return `**WORD REPLACEMENT LEVEL: MODERATE (${level}%)**
+- Make BALANCED changes - refresh phrasing while keeping core meaning
+- Replace verbs and descriptive words freely
+- Restructure phrases for better flow
+- Keep the same factual content and metrics
+- Aim for noticeable improvement without complete rewrite`;
+      } else if (level <= 80) {
+        return `**WORD REPLACEMENT LEVEL: AGGRESSIVE (${level}%)**
+- Make SIGNIFICANT changes - substantially rewrite for impact
+- Replace most words except core metrics and data
+- Feel free to restructure sentences completely
+- Use fresh vocabulary and phrasing throughout
+- Only preserve specific numbers, percentages, and proper nouns`;
+      } else {
+        return `**WORD REPLACEMENT LEVEL: MAXIMUM (${level}%)**
+- COMPLETELY REWRITE the text with fresh perspective
+- Replace virtually all words except metrics and data
+- Use entirely new sentence structure and approach
+- Only preserve: numbers, percentages, dollar amounts, proper nouns
+- Create a completely fresh take while maintaining factual accuracy`;
+      }
+    };
+    
+    // Calculate fill-to-max instructions
+    const getFillInstructions = (shouldFill: boolean, maxChars?: number, currentLength?: number): string => {
+      if (!shouldFill || !maxChars) {
+        return "";
+      }
+      const targetMin = maxChars - 10;
+      const charsToAdd = maxChars - (currentLength || 0);
+      return `
+**YOUR #1 PRIORITY: HIT THE CHARACTER TARGET**
+- Target: EXACTLY ${targetMin} to ${maxChars} characters
+- This is non-negotiable. Every revision MUST be in this range.
+
+The input is ${currentLength || "unknown"} chars. You need ${charsToAdd > 0 ? charsToAdd : 0} MORE characters.
+
+**HOW TO ADD CHARACTERS:**
+- "led" → "spearheaded and directed" (+15 chars)
+- "&" → " and " (+4 chars) 
+- "ops" → "critical operations" (+15 chars)
+- Add adjectives: "systems" → "mission-critical systems" (+17 chars)
+- Add scope: "safeguarding" → "effectively safeguarding" (+12 chars)
+
+**PROCESS FOR EACH REVISION:**
+1. Write your revision
+2. Count the characters (every letter, number, space, and symbol)
+3. If under ${targetMin}, ADD words until you reach the target
+4. If over ${maxChars}, trim until you reach the target
+5. Verify the count is ${targetMin}-${maxChars} before including`;
+    };
 
     if (!fullStatement || !selectedText) {
       return NextResponse.json(
@@ -151,11 +237,17 @@ Your goal is to SIGNIFICANTLY transform the selected text:
     // Get available verbs (exclude used ones)
     const availableVerbs = RECOMMENDED_VERBS.filter(v => !verbsToAvoid.includes(v.toLowerCase()));
 
+    const aggressivenessInstructions = getAggressivenessInstructions(aggressiveness);
+    const fillInstructions = getFillInstructions(fillToMax, maxCharacters, selectedText.length);
+
     const systemPrompt = `You are an expert Air Force writer helping to revise a portion of an award statement (AF Form 1206).
 
-Your task is to COMPLETELY REWRITE the selected portion of text with FRESH, VARIED language while maintaining coherence with the surrounding context.
+Your task is to revise the selected portion of text while maintaining coherence with the surrounding context.
 
 ${modeInstructions[mode]}
+
+${aggressivenessInstructions}
+${fillInstructions}
 
 **BANNED VERBS - NEVER USE THESE (overused clichés):**
 ${verbsToAvoid.map(v => `- "${v}"`).join("\n")}
@@ -170,11 +262,19 @@ ${availableVerbs.slice(0, 20).join(", ")}
 
 **USE ONLY:** Commas (,) to connect clauses
 
+**PRESERVE THESE EXACTLY (never change):**
+- All numbers and metrics (e.g., "36", "24/7", "$14B", "909K", "1.2M")
+- Percentages (e.g., "99%", "15%")
+- Dollar amounts (e.g., "$5M", "$14B")
+- Abbreviations for units (e.g., "Amn", "hrs", "TB")
+- Acronyms (e.g., "O&M", "AFCYBER", "USCYBERCOM")
+- Proper nouns and organizational names
+
 CRITICAL RULES:
 1. NEVER use any verb from the BANNED list - these are overused Air Force clichés
-2. Each of your 3 alternatives MUST use DIFFERENT opening verbs from each other
+2. Each of your ${versionCount} alternatives MUST use DIFFERENT opening verbs from each other
 3. Output ONLY the revised text for the selected portion - no quotes, no explanation
-4. Maintain the same general meaning but with FRESH phrasing
+4. Maintain the same general meaning but with appropriately varied phrasing based on aggressiveness level
 5. Maintain grammatical coherence with surrounding text
 6. NEVER use em-dashes (--) - use COMMAS instead to connect clauses
 7. If the selection starts at the beginning of the statement and includes "- ", preserve the "- " prefix
@@ -198,11 +298,14 @@ ${context ? `ADDITIONAL GUIDANCE: ${context}` : ""}
 
 MODE: ${mode.toUpperCase()}
 ${mode === "expand" ? "Make it LONGER with more descriptive words." : mode === "compress" ? "Make it SHORTER with concise words and abbreviations." : "Improve quality while keeping similar length."}
+AGGRESSIVENESS: ${aggressiveness}% (${aggressiveness <= 20 ? "minimal changes" : aggressiveness <= 40 ? "conservative" : aggressiveness <= 60 ? "moderate" : aggressiveness <= 80 ? "aggressive" : "maximum rewrite"})
+${fillToMax && maxCharacters ? `
+⚠️ CHARACTER TARGET: ${maxCharacters - 10}-${maxCharacters} chars (add ~${maxCharacters - selectedText.length > 0 ? maxCharacters - selectedText.length : 0} chars)
+` : ""}
 
-Generate 3 alternative versions of ONLY the selected portion.
+Generate ${versionCount} revisions of ONLY the selected portion.${fillToMax && maxCharacters ? ` Each MUST be ${maxCharacters - 10}-${maxCharacters} chars.` : ""}
 
-Return ONLY a JSON array with 3 revised versions:
-["revised version 1", "revised version 2", "revised version 3"]`;
+Return JSON array only: [${Array.from({ length: versionCount }, (_, i) => `"revision${i + 1}"`).join(", ")}]`;
 
     const { text } = await generateText({
       model: modelProvider,
@@ -220,12 +323,14 @@ Return ONLY a JSON array with 3 revised versions:
       }
     } catch {
       // Fallback: split by newlines if JSON parsing fails
-      revisions = text.split("\n").filter(line => line.trim().length > 10).slice(0, 3);
+      revisions = text.split("\n").filter(line => line.trim().length > 10).slice(0, versionCount);
     }
 
-    // Ensure we have at least one revision
+    // Ensure we have at least one revision and limit to requested count
     if (revisions.length === 0) {
       revisions = [selectedText]; // Return original if nothing generated
+    } else {
+      revisions = revisions.slice(0, versionCount);
     }
 
     return NextResponse.json({ 

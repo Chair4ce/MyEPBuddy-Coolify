@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -16,7 +16,6 @@ import { toast } from "@/components/ui/sonner";
 import { cn, getCharacterCountColor } from "@/lib/utils";
 import { MAX_DUTY_DESCRIPTION_CHARACTERS } from "@/lib/constants";
 import {
-  Sparkles,
   Copy,
   Check,
   Loader2,
@@ -25,15 +24,28 @@ import {
   ChevronUp,
   RotateCcw,
   Briefcase,
+  History,
+  Camera,
+  Bookmark,
+  BookMarked,
+  Trash2,
 } from "lucide-react";
 import { useEPBShellStore } from "@/stores/epb-shell-store";
+import type { DutyDescriptionSnapshot, DutyDescriptionExample } from "@/types/database";
 
 interface DutyDescriptionCardProps {
   currentDutyDescription: string;
   isCollapsed: boolean;
   onToggleCollapse: () => void;
   onSave: (text: string) => Promise<void>;
-  onGenerateDutyDescription?: (context: string) => Promise<string[]>;
+  onReviseStatement?: (text: string, context?: string, versionCount?: number, aggressiveness?: number, fillToMax?: boolean) => Promise<string[]>;
+  // Snapshots (history)
+  snapshots?: DutyDescriptionSnapshot[];
+  onCreateSnapshot?: (text: string) => Promise<void>;
+  // Saved examples
+  savedExamples?: DutyDescriptionExample[];
+  onSaveExample?: (text: string, note?: string) => Promise<void>;
+  onDeleteExample?: (id: string) => Promise<void>;
 }
 
 export function DutyDescriptionCard({
@@ -41,7 +53,12 @@ export function DutyDescriptionCard({
   isCollapsed,
   onToggleCollapse,
   onSave,
-  onGenerateDutyDescription,
+  onReviseStatement,
+  snapshots = [],
+  onCreateSnapshot,
+  savedExamples = [],
+  onSaveExample,
+  onDeleteExample,
 }: DutyDescriptionCardProps) {
   const maxChars = MAX_DUTY_DESCRIPTION_CHARACTERS;
   
@@ -58,20 +75,26 @@ export function DutyDescriptionCard({
   const [copied, setCopied] = useState(false);
   const [localText, setLocalText] = useState(dutyDescriptionDraft || currentDutyDescription || "");
   const [isEditing, setIsEditing] = useState(false);
-  const [showAIPanel, setShowAIPanel] = useState(false);
-  const [aiContext, setAIContext] = useState("");
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [generatedVersions, setGeneratedVersions] = useState<string[]>([]);
+  const [showRevisePanel, setShowRevisePanel] = useState(false);
+  const [reviseContext, setReviseContext] = useState("");
+  const [reviseVersionCount, setReviseVersionCount] = useState(3);
+  const [reviseAggressiveness, setReviseAggressiveness] = useState(50);
+  const [reviseFillToMax, setReviseFillToMax] = useState(true);
+  const [isRevising, setIsRevising] = useState(false);
+  const [generatedRevisions, setGeneratedRevisions] = useState<string[]>([]);
+  const [showHistoryPanel, setShowHistoryPanel] = useState(false);
+  const [showExamplesPanel, setShowExamplesPanel] = useState(false);
+  const [isCreatingSnapshot, setIsCreatingSnapshot] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lastSavedRef = useRef<string>(currentDutyDescription);
-  const aiPanelRef = useRef<HTMLDivElement>(null);
+  const revisePanelRef = useRef<HTMLDivElement>(null);
 
   // Initialize local text when store changes
   useEffect(() => {
     if (!isEditing && dutyDescriptionDraft !== localText) {
       setLocalText(dutyDescriptionDraft || currentDutyDescription || "");
     }
-  }, [dutyDescriptionDraft, currentDutyDescription, isEditing]);
+  }, [dutyDescriptionDraft, currentDutyDescription, isEditing, localText]);
 
   // Sync with current duty description on mount
   useEffect(() => {
@@ -132,39 +155,84 @@ export function DutyDescriptionCard({
     setIsDutyDescriptionDirty(false);
   };
 
-  // Generate duty description with AI
-  const handleGenerate = async () => {
-    if (!onGenerateDutyDescription || !aiContext.trim()) {
-      toast.error("Please provide context for generation");
-      return;
-    }
-    
-    setIsGenerating(true);
-    setGeneratedVersions([]);
+  // Create snapshot
+  const handleCreateSnapshot = async () => {
+    if (!onCreateSnapshot || !displayText.trim()) return;
+    setIsCreatingSnapshot(true);
     try {
-      const results = await onGenerateDutyDescription(aiContext);
-      if (results.length > 0) {
-        setGeneratedVersions(results);
-      } else {
-        toast.error("No descriptions generated");
-      }
+      await onCreateSnapshot(displayText);
+      toast.success("Snapshot saved");
     } catch (error) {
       console.error(error);
-      toast.error("Failed to generate description");
+      toast.error("Failed to save snapshot");
     } finally {
-      setIsGenerating(false);
+      setIsCreatingSnapshot(false);
     }
   };
 
-  // Use a generated version
-  const handleUseVersion = (version: string) => {
+  // Apply a snapshot
+  const handleApplySnapshot = (text: string) => {
+    setLocalText(text);
+    setDutyDescriptionDraft(text);
+    setIsDutyDescriptionDirty(text !== currentDutyDescription);
+    setShowHistoryPanel(false);
+    toast.success("Snapshot applied");
+  };
+
+  // Save current as example
+  const handleSaveAsExample = async () => {
+    if (!onSaveExample || !displayText.trim()) return;
+    try {
+      await onSaveExample(displayText);
+      toast.success("Saved to examples");
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to save example");
+    }
+  };
+
+  // Apply an example
+  const handleApplyExample = (text: string) => {
+    setLocalText(text);
+    setDutyDescriptionDraft(text);
+    setIsDutyDescriptionDirty(text !== currentDutyDescription);
+    setShowExamplesPanel(false);
+    toast.success("Example applied");
+  };
+
+  // Revise duty description with AI
+  const handleRevise = async () => {
+    if (!onReviseStatement || !localText.trim()) {
+      toast.error("Please enter a duty description to revise");
+      return;
+    }
+    
+    setIsRevising(true);
+    setGeneratedRevisions([]);
+    try {
+      const results = await onReviseStatement(localText, reviseContext || undefined, reviseVersionCount, reviseAggressiveness, reviseFillToMax);
+      if (results.length > 0) {
+        setGeneratedRevisions(results);
+      } else {
+        toast.error("No revisions generated");
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to generate revisions");
+    } finally {
+      setIsRevising(false);
+    }
+  };
+
+  // Use a generated revision
+  const handleUseRevision = (version: string) => {
     setLocalText(version);
     setDutyDescriptionDraft(version);
     setIsDutyDescriptionDirty(version !== currentDutyDescription);
-    setGeneratedVersions([]);
-    setShowAIPanel(false);
-    setAIContext("");
-    toast.success("Description applied");
+    setGeneratedRevisions([]);
+    setShowRevisePanel(false);
+    setReviseContext("");
+    toast.success("Revision applied");
   };
 
   return (
@@ -293,52 +361,251 @@ export function DutyDescriptionCard({
             </div>
           </div>
 
-          {/* AI Options Bar */}
-          {onGenerateDutyDescription && (
-            <div className="flex items-center justify-between gap-2 pt-2 border-t">
-              <div className="flex items-center gap-1.5">
+          {/* Tools Bar */}
+          <div className="flex items-center justify-between gap-2 pt-2 border-t">
+            <div className="flex items-center gap-1.5">
+              {/* Revise button - only show when there's content */}
+              {hasContent && onReviseStatement && (
                 <button
                   onClick={() => {
-                    const opening = !showAIPanel;
-                    setShowAIPanel(opening);
+                    const opening = !showRevisePanel;
+                    setShowRevisePanel(opening);
+                    setShowHistoryPanel(false);
+                    setShowExamplesPanel(false);
                     if (opening) {
-                      setGeneratedVersions([]);
+                      setGeneratedRevisions([]);
                       setTimeout(() => {
-                        aiPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+                        revisePanelRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
                       }, 100);
                     }
                   }}
                   className={cn(
                     "h-7 px-2.5 rounded-md text-xs inline-flex items-center justify-center transition-colors",
-                    showAIPanel
+                    showRevisePanel
                       ? "bg-indigo-600 text-white hover:bg-indigo-700"
                       : "border border-input bg-background hover:bg-accent hover:text-accent-foreground"
                   )}
                 >
-                  <Sparkles className="size-3 mr-1" />
-                  <span className="hidden sm:inline">AI Enhance</span>
-                  <span className="sm:hidden">AI</span>
+                  <Wand2 className="size-3 mr-1" />
+                  <span className="hidden sm:inline">Revise Statement</span>
+                  <span className="sm:hidden">Revise</span>
                 </button>
+              )}
+            </div>
+
+            {/* Right side tools */}
+            <div className="flex items-center gap-1">
+              {/* History button */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => {
+                      setShowHistoryPanel(!showHistoryPanel);
+                      setShowExamplesPanel(false);
+                      setShowRevisePanel(false);
+                    }}
+                    className={cn(
+                      "size-7 rounded-md inline-flex items-center justify-center transition-colors",
+                      showHistoryPanel
+                        ? "bg-indigo-600 text-white"
+                        : "hover:bg-accent hover:text-accent-foreground"
+                    )}
+                  >
+                    <History className="size-3.5" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  History {snapshots.length > 0 && `(${snapshots.length})`}
+                </TooltipContent>
+              </Tooltip>
+
+              {/* Examples button */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => {
+                      setShowExamplesPanel(!showExamplesPanel);
+                      setShowHistoryPanel(false);
+                      setShowRevisePanel(false);
+                    }}
+                    className={cn(
+                      "size-7 rounded-md inline-flex items-center justify-center transition-colors",
+                      showExamplesPanel
+                        ? "bg-indigo-600 text-white"
+                        : "hover:bg-accent hover:text-accent-foreground"
+                    )}
+                  >
+                    {savedExamples.length > 0 ? (
+                      <BookMarked className="size-3.5" />
+                    ) : (
+                      <Bookmark className="size-3.5" />
+                    )}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  Examples {savedExamples.length > 0 && `(${savedExamples.length})`}
+                </TooltipContent>
+              </Tooltip>
+
+              {/* Snapshot button */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={handleCreateSnapshot}
+                    disabled={isCreatingSnapshot || !hasContent}
+                    className="size-7 rounded-md inline-flex items-center justify-center hover:bg-accent hover:text-accent-foreground transition-colors disabled:opacity-50 disabled:pointer-events-none"
+                  >
+                    {isCreatingSnapshot ? (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    ) : (
+                      <Camera className="size-3.5" />
+                    )}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>Save snapshot</TooltipContent>
+              </Tooltip>
+            </div>
+          </div>
+
+          {/* History Panel */}
+          {showHistoryPanel && (
+            <div className="rounded-lg border bg-muted/30 animate-in fade-in-0 duration-200">
+              <div className="p-3 border-b">
+                <h4 className="font-medium text-sm">Snapshot History</h4>
+                <p className="text-xs text-muted-foreground">
+                  {snapshots.length} snapshot{snapshots.length !== 1 && "s"}
+                </p>
+              </div>
+              <div className="max-h-64 overflow-y-auto">
+                {snapshots.length === 0 ? (
+                  <p className="p-3 text-sm text-muted-foreground text-center">
+                    No snapshots yet. Click the camera icon to save your current text.
+                  </p>
+                ) : (
+                  snapshots.map((snap) => (
+                    <div
+                      key={snap.id}
+                      className="p-3 border-b last:border-0"
+                    >
+                      <div className="flex items-start justify-between gap-2 mb-1">
+                        <span className="text-[10px] text-muted-foreground">
+                          {new Date(snap.created_at).toLocaleString()}
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(snap.description_text);
+                              toast.success("Copied");
+                            }}
+                            className="h-5 px-1.5 rounded text-[10px] hover:bg-muted transition-colors"
+                          >
+                            <Copy className="size-3" />
+                          </button>
+                          <button
+                            onClick={() => handleApplySnapshot(snap.description_text)}
+                            className="h-5 px-1.5 rounded text-[10px] bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
+                          >
+                            Apply
+                          </button>
+                        </div>
+                      </div>
+                      <p className="text-xs text-muted-foreground line-clamp-2">
+                        {snap.description_text}
+                      </p>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           )}
 
-          {/* AI Generate Panel */}
-          {showAIPanel && onGenerateDutyDescription && (
+          {/* Examples Panel */}
+          {showExamplesPanel && (
+            <div className="rounded-lg border bg-muted/30 animate-in fade-in-0 duration-200">
+              <div className="p-3 border-b flex items-center justify-between">
+                <div>
+                  <h4 className="font-medium text-sm">Saved Examples</h4>
+                  <p className="text-xs text-muted-foreground">
+                    {savedExamples.length} example{savedExamples.length !== 1 && "s"} saved
+                  </p>
+                </div>
+                {hasContent && onSaveExample && (
+                  <button
+                    onClick={handleSaveAsExample}
+                    className="h-7 px-2.5 rounded-md text-xs bg-indigo-600 text-white hover:bg-indigo-700 inline-flex items-center"
+                  >
+                    <Bookmark className="size-3 mr-1" />
+                    Save Current
+                  </button>
+                )}
+              </div>
+              <div className="max-h-64 overflow-y-auto">
+                {savedExamples.length === 0 ? (
+                  <p className="p-3 text-sm text-muted-foreground text-center">
+                    No saved examples yet. Save your favorite duty descriptions here for reference.
+                  </p>
+                ) : (
+                  savedExamples.map((example) => (
+                    <div
+                      key={example.id}
+                      className="p-3 border-b last:border-0"
+                    >
+                      <div className="flex items-start justify-between gap-2 mb-1">
+                        <span className="text-[10px] text-muted-foreground">
+                          {new Date(example.created_at).toLocaleString()}
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(example.example_text);
+                              toast.success("Copied");
+                            }}
+                            className="h-5 px-1.5 rounded text-[10px] hover:bg-muted transition-colors"
+                          >
+                            <Copy className="size-3" />
+                          </button>
+                          <button
+                            onClick={() => handleApplyExample(example.example_text)}
+                            className="h-5 px-1.5 rounded text-[10px] bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
+                          >
+                            Apply
+                          </button>
+                          {onDeleteExample && (
+                            <button
+                              onClick={() => onDeleteExample(example.id)}
+                              className="h-5 px-1.5 rounded text-[10px] hover:bg-destructive/10 text-destructive transition-colors"
+                            >
+                              <Trash2 className="size-3" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <p className="text-xs text-muted-foreground line-clamp-2">
+                        {example.example_text}
+                      </p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Revise Panel */}
+          {showRevisePanel && onReviseStatement && (
             <div
-              ref={aiPanelRef}
+              ref={revisePanelRef}
               className="rounded-lg border bg-muted/30 p-4 space-y-4 animate-in fade-in-0 duration-300"
             >
               <div className="flex items-center justify-between">
                 <h4 className="font-medium text-sm flex items-center gap-2">
                   <Wand2 className="size-4" />
-                  Enhance Duty Description
+                  Revise Current Statement
                 </h4>
                 <button
                   onClick={() => {
-                    setShowAIPanel(false);
-                    setGeneratedVersions([]);
-                    setAIContext("");
+                    setShowRevisePanel(false);
+                    setGeneratedRevisions([]);
+                    setReviseContext("");
                   }}
                   className="text-xs text-muted-foreground hover:text-foreground transition-colors"
                 >
@@ -346,37 +613,125 @@ export function DutyDescriptionCard({
                 </button>
               </div>
 
-              <div className="space-y-2">
-                <span className="text-xs font-medium">What to improve or add?</span>
-                <textarea
-                  value={aiContext}
-                  onChange={(e) => setAIContext(e.target.value)}
-                  placeholder="e.g., 'Make it more concise and impactful' or 'Add more detail about leadership scope and impact areas'"
-                  rows={2}
-                  className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] resize-none"
-                />
+              {/* Options */}
+              <div className="space-y-3">
+                {/* Top row: Versions and Context */}
+                <div className="flex flex-col sm:flex-row gap-3">
+                  {/* Version count selector */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">Versions:</span>
+                    <div className="flex items-center border rounded-md">
+                      {[1, 2, 3].map((num) => (
+                        <button
+                          key={num}
+                          onClick={() => setReviseVersionCount(num)}
+                          className={cn(
+                            "px-2.5 py-1 text-xs transition-colors",
+                            num === 1 && "rounded-l-md",
+                            num === 3 && "rounded-r-md",
+                            reviseVersionCount === num
+                              ? "bg-primary text-primary-foreground"
+                              : "hover:bg-muted"
+                          )}
+                        >
+                          {num}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Context input */}
+                  <div className="flex-1">
+                    <input
+                      type="text"
+                      value={reviseContext}
+                      onChange={(e) => setReviseContext(e.target.value)}
+                      placeholder="Optional: How should it sound? (e.g., more concise, more impactful...)"
+                      className="w-full h-7 px-2.5 text-xs rounded-md border border-input bg-transparent placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    />
+                  </div>
+                </div>
+
+                {/* Aggressiveness slider */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">Word Replacement:</span>
+                    <span className="text-xs font-medium tabular-nums">
+                      {reviseAggressiveness <= 20 ? "Minimal" : reviseAggressiveness <= 40 ? "Conservative" : reviseAggressiveness <= 60 ? "Moderate" : reviseAggressiveness <= 80 ? "Aggressive" : "Maximum"}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-[10px] text-muted-foreground shrink-0">Keep Most</span>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      step="10"
+                      value={reviseAggressiveness}
+                      onChange={(e) => setReviseAggressiveness(Number(e.target.value))}
+                      className="flex-1 h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
+                    />
+                    <span className="text-[10px] text-muted-foreground shrink-0">Replace All</span>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    {reviseAggressiveness <= 20 
+                      ? "Only fix obvious issues, preserve your voice" 
+                      : reviseAggressiveness <= 40 
+                        ? "Light touch, replace only weak words" 
+                        : reviseAggressiveness <= 60 
+                          ? "Balanced refresh with new phrasing" 
+                          : reviseAggressiveness <= 80 
+                            ? "Substantial rewrite, keep only metrics" 
+                            : "Complete rewrite, preserve only data"}
+                  </p>
+                </div>
+
+                {/* Fill to max toggle */}
+                <div className="flex items-center justify-between py-1.5 px-2 rounded-md bg-muted/50">
+                  <div className="space-y-0.5">
+                    <span className="text-xs font-medium">Fill to Maximum</span>
+                    <p className="text-[10px] text-muted-foreground">Target {maxChars - 10}-{maxChars} chars for maximum impact</p>
+                  </div>
+                  <button
+                    onClick={() => setReviseFillToMax(!reviseFillToMax)}
+                    className={cn(
+                      "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors",
+                      reviseFillToMax ? "bg-primary" : "bg-muted-foreground/30"
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-background shadow-lg transition-transform",
+                        reviseFillToMax ? "translate-x-4" : "translate-x-0"
+                      )}
+                    />
+                  </button>
+                </div>
               </div>
 
-              <button
-                onClick={handleGenerate}
-                disabled={isGenerating || !aiContext.trim()}
-                className="w-full h-8 px-4 rounded-md text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700 inline-flex items-center justify-center disabled:opacity-50 disabled:pointer-events-none transition-colors"
-              >
-                {isGenerating ? (
-                  <Loader2 className="size-4 animate-spin mr-2" />
-                ) : (
-                  <Sparkles className="size-4 mr-2" />
-                )}
-                Generate Enhanced Version
-              </button>
+              {/* Generate button */}
+              <div className="flex gap-2">
+                <button
+                  onClick={handleRevise}
+                  disabled={isRevising || !localText.trim()}
+                  className="flex-1 h-8 px-4 rounded-md text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 inline-flex items-center justify-center disabled:opacity-50 disabled:pointer-events-none transition-colors"
+                >
+                  {isRevising ? (
+                    <Loader2 className="size-4 animate-spin mr-2" />
+                  ) : (
+                    <Wand2 className="size-4 mr-2" />
+                  )}
+                  Generate {reviseVersionCount} Revision{reviseVersionCount > 1 ? "s" : ""}
+                </button>
+              </div>
 
-              {/* Generated Versions */}
-              {generatedVersions.length > 0 && (
+              {/* Generated Revisions */}
+              {generatedRevisions.length > 0 && (
                 <div className="space-y-3 pt-3 border-t animate-in fade-in-0 duration-300">
                   <h5 className="text-xs font-medium text-muted-foreground">
-                    Generated Versions ({generatedVersions.length})
+                    Revisions ({generatedRevisions.length})
                   </h5>
-                  {generatedVersions.map((version, index) => (
+                  {generatedRevisions.map((version, index) => (
                     <div
                       key={index}
                       className="p-3 rounded-lg border bg-background space-y-2 animate-in fade-in-0 duration-200"
@@ -405,8 +760,8 @@ export function DutyDescriptionCard({
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <button
-                                onClick={() => handleUseVersion(version)}
-                                className="h-6 px-2 rounded text-[10px] bg-indigo-600 text-white hover:bg-indigo-700 transition-colors inline-flex items-center"
+                                onClick={() => handleUseRevision(version)}
+                                className="h-6 px-2 rounded text-[10px] bg-primary text-primary-foreground hover:bg-primary/90 transition-colors inline-flex items-center"
                               >
                                 <Check className="size-3 mr-1" />
                                 Use This
@@ -435,4 +790,3 @@ export function DutyDescriptionCard({
     </Card>
   );
 }
-

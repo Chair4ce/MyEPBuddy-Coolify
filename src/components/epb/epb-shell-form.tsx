@@ -25,7 +25,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { STANDARD_MGAS, ENTRY_MGAS, MAX_STATEMENT_CHARACTERS, MAX_HLR_CHARACTERS } from "@/lib/constants";
+import { STANDARD_MGAS, ENTRY_MGAS, MAX_STATEMENT_CHARACTERS, MAX_HLR_CHARACTERS, MAX_DUTY_DESCRIPTION_CHARACTERS } from "@/lib/constants";
 import type { EPBAssessmentResult } from "@/lib/constants";
 import { EPBAssessmentDialog } from "./epb-assessment-dialog";
 import {
@@ -51,7 +51,7 @@ import { RealtimeCursors } from "./realtime-cursors";
 import { useEPBCollaboration } from "@/hooks/use-epb-collaboration";
 import { useSectionLocks } from "@/hooks/use-section-locks";
 import { useIdleDetection } from "@/hooks/use-idle-detection";
-import type { EPBShell, EPBShellSection, EPBShellSnapshot, EPBSavedExample, Accomplishment, Profile, ManagedMember, UserLLMSettings, Rank } from "@/types/database";
+import type { EPBShell, EPBShellSection, EPBShellSnapshot, EPBSavedExample, Accomplishment, Profile, ManagedMember, UserLLMSettings, Rank, DutyDescriptionSnapshot, DutyDescriptionExample } from "@/types/database";
 
 // Shared EPB info - represents an EPB shell that has been shared with the current user
 interface SharedEPBInfo {
@@ -125,6 +125,10 @@ export function EPBShellForm({
     }
     return false;
   });
+  
+  // Duty description snapshots and examples
+  const [dutyDescriptionSnapshots, setDutyDescriptionSnapshots] = useState<DutyDescriptionSnapshot[]>([]);
+  const [dutyDescriptionExamples, setDutyDescriptionExamples] = useState<DutyDescriptionExample[]>([]);
   
   // Ref for cursor tracking container
   const contentContainerRef = useRef<HTMLDivElement>(null);
@@ -684,6 +688,26 @@ export function EPBShellForm({
               });
             }
           }
+          
+          // Load duty description snapshots
+          const { data: dutySnapshots } = await supabase
+            .from("epb_duty_description_snapshots")
+            .select("*")
+            .eq("shell_id", shellData.id)
+            .order("created_at", { ascending: false });
+          if (dutySnapshots) {
+            setDutyDescriptionSnapshots(dutySnapshots as DutyDescriptionSnapshot[]);
+          }
+          
+          // Load duty description examples
+          const { data: dutyExamples } = await supabase
+            .from("epb_duty_description_examples")
+            .select("*")
+            .eq("shell_id", shellData.id)
+            .order("created_at", { ascending: false });
+          if (dutyExamples) {
+            setDutyDescriptionExamples(dutyExamples as DutyDescriptionExample[]);
+          }
         } else {
           setCurrentShell(null);
         }
@@ -908,6 +932,69 @@ export function EPBShellForm({
     setCurrentShell({ ...currentShell, duty_description: text });
   };
 
+  // Create a duty description snapshot (max 10, oldest gets deleted when 11th is added)
+  const handleCreateDutyDescriptionSnapshot = async (text: string) => {
+    if (!currentShell || !profile || !text.trim()) return;
+
+    // If we already have 10 snapshots, delete the oldest
+    if (dutyDescriptionSnapshots.length >= 10) {
+      const oldestSnapshot = dutyDescriptionSnapshots[dutyDescriptionSnapshots.length - 1];
+      await supabase
+        .from("epb_duty_description_snapshots")
+        .delete()
+        .eq("id", oldestSnapshot.id);
+    }
+
+    const { data, error } = await supabase
+      .from("epb_duty_description_snapshots")
+      .insert({
+        shell_id: currentShell.id,
+        description_text: text,
+        created_by: profile.id,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    // Add to local state
+    setDutyDescriptionSnapshots([data as DutyDescriptionSnapshot, ...dutyDescriptionSnapshots.slice(0, 9)]);
+  };
+
+  // Save a duty description example
+  const handleSaveDutyDescriptionExample = async (text: string, note?: string) => {
+    if (!currentShell || !profile || !text.trim()) return;
+
+    const { data, error } = await supabase
+      .from("epb_duty_description_examples")
+      .insert({
+        shell_id: currentShell.id,
+        example_text: text,
+        note: note || null,
+        created_by: profile.id,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    // Add to local state
+    setDutyDescriptionExamples([data as DutyDescriptionExample, ...dutyDescriptionExamples]);
+  };
+
+  // Delete a duty description example
+  const handleDeleteDutyDescriptionExample = async (exampleId: string) => {
+    const { error } = await supabase
+      .from("epb_duty_description_examples")
+      .delete()
+      .eq("id", exampleId);
+
+    if (error) throw error;
+
+    // Remove from local state
+    setDutyDescriptionExamples(dutyDescriptionExamples.filter((e) => e.id !== exampleId));
+  };
+
   // Create a snapshot (max 10 per section, oldest gets deleted when 11th is added)
   const handleCreateSnapshot = async (mpa: string, text: string) => {
     const section = sections[mpa];
@@ -1112,8 +1199,11 @@ export function EPBShellForm({
     mpa: string,
     text: string,
     context?: string,
-    versionCount: number = 3
+    versionCount: number = 3,
+    aggressiveness: number = 50,
+    fillToMax: boolean = true
   ): Promise<string[]> => {
+    const maxChars = mpa === "hlr_assessment" ? MAX_HLR_CHARACTERS : MAX_STATEMENT_CHARACTERS;
     try {
       const response = await fetch("/api/revise-selection", {
         method: "POST",
@@ -1127,6 +1217,9 @@ export function EPBShellForm({
           mode: "general",
           context: context || `Rewrite this ${STANDARD_MGAS.find((m) => m.key === mpa)?.label || mpa} statement with improved flow and action verbs.`,
           versionCount,
+          aggressiveness,
+          fillToMax,
+          maxCharacters: maxChars,
         }),
       });
 
@@ -1138,6 +1231,44 @@ export function EPBShellForm({
       return revisions.slice(0, versionCount);
     } catch (error) {
       console.error("Revise error:", error);
+      throw error;
+    }
+  };
+
+  // Revise duty description using AI (returns multiple versions)
+  const handleReviseDutyDescription = async (
+    text: string,
+    context?: string,
+    versionCount: number = 3,
+    aggressiveness: number = 50,
+    fillToMax: boolean = true
+  ): Promise<string[]> => {
+    try {
+      const response = await fetch("/api/revise-selection", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fullStatement: text,
+          selectedText: text,
+          selectionStart: 0,
+          selectionEnd: text.length,
+          model,
+          mode: "general",
+          context: context || "Rewrite this duty description with improved flow, better word economy, and stronger action verbs. Focus on describing responsibilities, scope, and impact areas. Do NOT include specific accomplishment metrics or results - this is a role description, not a performance statement.",
+          versionCount,
+          aggressiveness,
+          fillToMax,
+          maxCharacters: MAX_DUTY_DESCRIPTION_CHARACTERS,
+        }),
+      });
+
+      if (!response.ok) throw new Error("Revision failed");
+
+      const result = await response.json();
+      const revisions = result.revisions || [];
+      return revisions.slice(0, versionCount);
+    } catch (error) {
+      console.error("Revise duty description error:", error);
       throw error;
     }
   };
@@ -1524,6 +1655,12 @@ export function EPBShellForm({
           isCollapsed={isDutyDescriptionCollapsed}
           onToggleCollapse={() => setIsDutyDescriptionCollapsed(!isDutyDescriptionCollapsed)}
           onSave={handleSaveDutyDescription}
+          onReviseStatement={handleReviseDutyDescription}
+          snapshots={dutyDescriptionSnapshots}
+          onCreateSnapshot={handleCreateDutyDescriptionSnapshot}
+          savedExamples={dutyDescriptionExamples}
+          onSaveExample={handleSaveDutyDescriptionExample}
+          onDeleteExample={handleDeleteDutyDescriptionExample}
         />
 
         {STANDARD_MGAS.map((mpa) => {
@@ -1543,7 +1680,7 @@ export function EPBShellForm({
                 onSave={(text) => handleSaveSection(mpa.key, text)}
                 onCreateSnapshot={(text) => handleCreateSnapshot(mpa.key, text)}
                 onGenerateStatement={(opts) => handleGenerateStatement(mpa.key, opts)}
-                onReviseStatement={(text, ctx, count) => handleReviseStatement(mpa.key, text, ctx, count)}
+                onReviseStatement={(text, ctx, count, aggr, fill) => handleReviseStatement(mpa.key, text, ctx, count, aggr, fill)}
                 snapshots={snapshots[section.id] || []}
                 // Lock props for single-user mode
                 isLockedByOther={isLockedByOther}

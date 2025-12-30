@@ -503,6 +503,24 @@ export interface EPBSavedExample {
   created_at: string;
 }
 
+export interface DutyDescriptionSnapshot {
+  id: string;
+  shell_id: string;
+  description_text: string;
+  created_by: string | null;
+  note: string | null;
+  created_at: string;
+}
+
+export interface DutyDescriptionExample {
+  id: string;
+  shell_id: string;
+  example_text: string;
+  note: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
 export interface EPBShellShare {
   id: string;
   shell_id: string;
