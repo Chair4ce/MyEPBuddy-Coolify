@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { useEPBShellStore } from "@/stores/epb-shell-store";
 import type { DutyDescriptionSnapshot, DutyDescriptionExample } from "@/types/database";
+import { useStyleFeedback } from "@/hooks/use-style-feedback";
 
 interface DutyDescriptionCardProps {
   currentDutyDescription: string;
@@ -88,6 +89,9 @@ export function DutyDescriptionCard({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lastSavedRef = useRef<string>(currentDutyDescription);
   const revisePanelRef = useRef<HTMLDivElement>(null);
+  
+  // Style learning feedback (non-blocking, fire-and-forget)
+  const styleFeedback = useStyleFeedback();
 
   // Initialize local text when store changes
   useEffect(() => {
@@ -225,7 +229,7 @@ export function DutyDescriptionCard({
   };
 
   // Use a generated revision
-  const handleUseRevision = (version: string) => {
+  const handleUseRevision = (version: string, versionIndex: number) => {
     setLocalText(version);
     setDutyDescriptionDraft(version);
     setIsDutyDescriptionDirty(version !== currentDutyDescription);
@@ -233,6 +237,16 @@ export function DutyDescriptionCard({
     setShowRevisePanel(false);
     setReviseContext("");
     toast.success("Revision applied");
+    
+    // Track for style learning (fire-and-forget)
+    styleFeedback.trackRevisionSelected({
+      version: versionIndex + 1,
+      totalVersions: generatedRevisions.length,
+      charCount: version.length,
+      category: "duty_description",
+      aggressiveness: reviseAggressiveness,
+      fillToMax: reviseFillToMax,
+    });
   };
 
   return (
@@ -668,7 +682,11 @@ export function DutyDescriptionCard({
                       max="100"
                       step="10"
                       value={reviseAggressiveness}
-                      onChange={(e) => setReviseAggressiveness(Number(e.target.value))}
+                      onChange={(e) => {
+                        const value = Number(e.target.value);
+                        setReviseAggressiveness(value);
+                        styleFeedback.trackSliderUsed(value);
+                      }}
                       className="flex-1 h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
                     />
                     <span className="text-[10px] text-muted-foreground shrink-0">Replace All</span>
@@ -693,7 +711,11 @@ export function DutyDescriptionCard({
                     <p className="text-[10px] text-muted-foreground">Target {maxChars - 10}-{maxChars} chars for maximum impact</p>
                   </div>
                   <button
-                    onClick={() => setReviseFillToMax(!reviseFillToMax)}
+                    onClick={() => {
+                      const newValue = !reviseFillToMax;
+                      setReviseFillToMax(newValue);
+                      styleFeedback.trackToggleUsed(newValue);
+                    }}
                     className={cn(
                       "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors",
                       reviseFillToMax ? "bg-primary" : "bg-muted-foreground/30"
@@ -748,6 +770,12 @@ export function DutyDescriptionCard({
                                 onClick={() => {
                                   navigator.clipboard.writeText(version);
                                   toast.success("Copied to clipboard");
+                                  // Track copy for style learning
+                                  styleFeedback.trackRevisionCopied({
+                                    version: index + 1,
+                                    text: version,
+                                    category: "duty_description",
+                                  });
                                 }}
                                 className="h-6 px-2 rounded text-[10px] hover:bg-muted transition-colors inline-flex items-center"
                               >
@@ -760,7 +788,7 @@ export function DutyDescriptionCard({
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <button
-                                onClick={() => handleUseRevision(version)}
+                                onClick={() => handleUseRevision(version, index)}
                                 className="h-6 px-2 rounded text-[10px] bg-primary text-primary-foreground hover:bg-primary/90 transition-colors inline-flex items-center"
                               >
                                 <Check className="size-3 mr-1" />

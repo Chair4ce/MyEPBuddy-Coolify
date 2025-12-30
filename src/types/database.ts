@@ -609,6 +609,115 @@ export interface AwardShellShare {
   shared_with_profile?: Profile;
 }
 
+// ============================================
+// USER STYLE LEARNING TYPES
+// ============================================
+
+export type StyleExampleCategory = 
+  | 'executing_mission'
+  | 'leading_people'
+  | 'managing_resources'
+  | 'improving_unit'
+  | 'whole_airman'
+  | 'duty_description'
+  | 'award_statement';
+
+export type StyleFeedbackEventType =
+  | 'revision_selected'
+  | 'revision_copied'
+  | 'statement_edited'
+  | 'statement_finalized'
+  | 'slider_used'
+  | 'toggle_used';
+
+export interface UserStyleProfile {
+  id: string;
+  user_id: string;
+  // Style metrics (0-100)
+  sentence_length_pref: number;
+  verb_intensity_pref: number;
+  abbreviation_pref: number;
+  metrics_density_pref: number;
+  formality_pref: number;
+  // Version selection tracking
+  version_1_count: number;
+  version_2_count: number;
+  version_3_count: number;
+  version_other_count: number;
+  // Learned preferences
+  avg_aggressiveness: number;
+  aggressiveness_samples: number;
+  fill_to_max_ratio: number;
+  fill_to_max_samples: number;
+  // Quality indicators
+  total_statements_analyzed: number;
+  total_revisions_selected: number;
+  total_manual_edits: number;
+  // Metadata
+  last_updated: string;
+  created_at: string;
+}
+
+export interface UserStyleExample {
+  id: string;
+  user_id: string;
+  category: StyleExampleCategory;
+  statement_text: string;
+  is_finalized: boolean;
+  was_ai_assisted: boolean;
+  edit_ratio: number;
+  sequence_num: number;
+  created_at: string;
+}
+
+export interface StyleFeedbackEvent {
+  id: string;
+  user_id: string;
+  event_type: StyleFeedbackEventType;
+  payload: Record<string, unknown>;
+  processed: boolean;
+  processed_at: string | null;
+  created_at: string;
+}
+
+// Payload types for different feedback events
+export interface RevisionSelectedPayload {
+  version: number;
+  total_versions: number;
+  char_count: number;
+  category: StyleExampleCategory;
+  aggressiveness?: number;
+  fill_to_max?: boolean;
+}
+
+export interface RevisionCopiedPayload {
+  version: number;
+  text: string;
+  category: StyleExampleCategory;
+}
+
+export interface StatementEditedPayload {
+  original: string;
+  edited: string;
+  edit_distance: number; // Levenshtein distance or similar
+  category: StyleExampleCategory;
+}
+
+export interface StatementFinalizedPayload {
+  text: string;
+  category: StyleExampleCategory;
+  was_ai_assisted: boolean;
+  edit_ratio: number; // 0-100, how much was edited from AI output
+}
+
+export interface SliderUsedPayload {
+  value: number; // 0-100
+}
+
+export interface ToggleUsedPayload {
+  fill_to_max: boolean;
+}
+
 // JSON type for Supabase
 type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 

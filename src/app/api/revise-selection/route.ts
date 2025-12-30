@@ -6,6 +6,13 @@ import { createXai } from "@ai-sdk/xai";
 import { generateText } from "ai";
 import { NextResponse } from "next/server";
 import { getDecryptedApiKeys } from "@/app/actions/api-keys";
+import { 
+  getUserStyleContext, 
+  buildStyleGuidance, 
+  buildFewShotExamples,
+  triggerStyleProcessing 
+} from "@/lib/style-learning";
+import type { StyleExampleCategory } from "@/types/database";
 
 interface ReviseSelectionRequest {
   fullStatement: string;
@@ -20,6 +27,7 @@ interface ReviseSelectionRequest {
   fillToMax?: boolean; // If true, prioritize filling to max character count
   maxCharacters?: number; // Max character limit for the statement
   versionCount?: number; // Number of revisions to generate (default 3)
+  category?: StyleExampleCategory; // MPA category for style learning
 }
 
 // Overused/cliché verbs that should be avoided unless user explicitly requests them
@@ -118,7 +126,11 @@ export async function POST(request: Request) {
       fillToMax = true,
       maxCharacters,
       versionCount = 3,
+      category,
     } = body;
+    
+    // Fetch user style context for personalization (non-blocking if fails)
+    const styleContext = await getUserStyleContext(user.id, category);
     
     // Combine banned verbs with already-used verbs for this session
     const verbsToAvoid = [...new Set([...BANNED_VERBS, ...usedVerbs.map(v => v.toLowerCase())])];
@@ -240,6 +252,10 @@ Your goal is to SIGNIFICANTLY transform the selected text:
     const aggressivenessInstructions = getAggressivenessInstructions(aggressiveness);
     const fillInstructions = getFillInstructions(fillToMax, maxCharacters, selectedText.length);
 
+    // Build style guidance from user's learned preferences
+    const styleGuidance = buildStyleGuidance(styleContext);
+    const fewShotExamples = buildFewShotExamples(styleContext, "USER'S APPROVED STATEMENTS (match this style)");
+
     const systemPrompt = `You are an expert Air Force writer helping to revise a portion of an award statement (AF Form 1206).
 
 Your task is to revise the selected portion of text while maintaining coherence with the surrounding context.
@@ -248,6 +264,10 @@ ${modeInstructions[mode]}
 
 ${aggressivenessInstructions}
 ${fillInstructions}
+
+${styleGuidance}
+
+${fewShotExamples}
 
 **BANNED VERBS - NEVER USE THESE (overused clichés):**
 ${verbsToAvoid.map(v => `- "${v}"`).join("\n")}
@@ -280,7 +300,9 @@ CRITICAL RULES:
 7. If the selection starts at the beginning of the statement and includes "- ", preserve the "- " prefix
 8. READABILITY: Revised text should flow naturally when read aloud
 9. PARALLELISM: Use consistent verb tense throughout (all past tense OR all present participles)
-10. AVOID creating run-on laundry lists of 5+ actions - keep it focused`;
+10. AVOID creating run-on laundry lists of 5+ actions - keep it focused
+11. AVOID the word "the" - it wastes characters (e.g., "led the team" → "led 4-mbr team" - always quantify scope)
+12. CONSISTENCY: Use either "&" OR "and" throughout - NEVER mix them. Prefer "&" when saving space.`;
 
     const userPrompt = `FULL STATEMENT FOR CONTEXT:
 "${fullStatement}"
@@ -332,6 +354,9 @@ Return JSON array only: [${Array.from({ length: versionCount }, (_, i) => `"revi
     } else {
       revisions = revisions.slice(0, versionCount);
     }
+
+    // Trigger async style processing (fire-and-forget)
+    triggerStyleProcessing(user.id);
 
     return NextResponse.json({ 
       revisions,

@@ -106,6 +106,8 @@ CRITICAL RULES - NEVER VIOLATE THESE:
 4. Character range: AIM for {{max_characters_per_statement}} characters. Minimum 220 characters, maximum {{max_characters_per_statement}}.
 5. Generate exactly 2–3 strong statements per Major Performance Area.
 6. Output pure, clean text only — no formatting.
+7. AVOID the word "the" - it wastes characters (e.g., "led the team" → "led 4-mbr team" - always quantify scope).
+8. CONSISTENCY: Use either "&" OR "and" throughout a statement - NEVER mix them. Prefer "&" when saving space.
 
 SENTENCE STRUCTURE (CRITICAL - THE #1 RULE):
 Board members scan quickly—they need clear, punchy statements digestible in 2-3 seconds. Avoid the "laundry list" problem:
