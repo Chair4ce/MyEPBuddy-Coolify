@@ -199,11 +199,11 @@ export async function triggerStyleProcessing(userId: string): Promise<void> {
     const supabase = await createClient();
     
     // Fire and forget - don't await the result
-    supabase
-      .rpc("process_style_feedback", {
-        p_user_id: userId,
-        p_batch_size: 20,
-      })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (supabase.rpc as any)("process_style_feedback", {
+      p_user_id: userId,
+      p_batch_size: 20,
+    })
       .then(() => {
         // Processing complete - no action needed
       })

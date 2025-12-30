@@ -41,7 +41,7 @@ export function useStyleFeedback(options: UseStyleFeedbackOptions = {}) {
    * Submit a feedback event (fire-and-forget, non-blocking)
    */
   const submitEvent = useCallback(
-    async (eventType: StyleFeedbackEventType, payload: Record<string, unknown>) => {
+    async (eventType: StyleFeedbackEventType, payload: object) => {
       if (!enabled) return;
 
       try {
@@ -55,7 +55,7 @@ export function useStyleFeedback(options: UseStyleFeedbackOptions = {}) {
             user_id: user.id,
             event_type: eventType,
             payload,
-          })
+          } as never)
           .then(({ error }) => {
             if (error) {
               console.warn("[StyleFeedback] Failed to submit event:", error.message);
@@ -257,7 +257,7 @@ export function useStyleFeedback(options: UseStyleFeedbackOptions = {}) {
           is_finalized: data.isFinalized,
           was_ai_assisted: data.wasAiAssisted,
           edit_ratio: data.editRatio,
-        });
+        } as never);
       } catch {
         // Silent fail
       }
@@ -322,7 +322,8 @@ export function useStyleFeedback(options: UseStyleFeedbackOptions = {}) {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return 0;
 
-      const { data, error } = await supabase.rpc("process_style_feedback", {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase.rpc as any)("process_style_feedback", {
         p_user_id: user.id,
         p_batch_size: 50,
       });

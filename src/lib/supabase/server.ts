@@ -1,6 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
-import type { Database } from "@/types/database";
+import type { Database } from "@/types/supabase";
 import type { ResponseCookie } from "next/dist/compiled/@edge-runtime/cookies";
 
 type CookieToSet = {

@@ -951,7 +951,7 @@ export function EPBShellForm({
         shell_id: currentShell.id,
         description_text: text,
         created_by: profile.id,
-      })
+      } as never)
       .select()
       .single();
 
@@ -972,7 +972,7 @@ export function EPBShellForm({
         example_text: text,
         note: note || null,
         created_by: profile.id,
-      })
+      } as never)
       .select()
       .single();
 
