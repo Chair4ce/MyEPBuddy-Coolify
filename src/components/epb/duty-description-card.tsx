@@ -99,6 +99,16 @@ export function DutyDescriptionCard({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lastSavedRef = useRef<string>(currentDutyDescription);
   const revisePanelRef = useRef<HTMLDivElement>(null);
+  // Track if component is mounted to prevent blur handler from running after unmount
+  const isMountedRef = useRef(true);
+  
+  // Set unmount flag
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
   
   // Style learning feedback (non-blocking, fire-and-forget)
   const styleFeedback = useStyleFeedback();
@@ -137,6 +147,9 @@ export function DutyDescriptionCard({
 
   // Handle blur - clear presence and save
   const handleTextBlur = async () => {
+    // Don't update state if component is unmounting (e.g., during member switch)
+    if (!isMountedRef.current) return;
+    
     setIsEditing(false);
     
     // Clear presence

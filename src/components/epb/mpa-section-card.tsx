@@ -255,6 +255,16 @@ export function MPASectionCard({
   const [isEditing, setIsEditing] = useState(false);
   // Store the original text when user starts editing (for snapshot on focus loss)
   const originalTextOnFocusRef = useRef<string>("");
+  // Track if component is mounted to prevent blur handler from running after unmount
+  const isMountedRef = useRef(true);
+  
+  // Set unmount flag
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
   
   // Page visibility detection - save and release lock when user leaves the page
   // This is more reliable than idle detection for preventing long lock holds
@@ -495,6 +505,9 @@ export function MPASectionCard({
 
   // Sync local text to Zustand on blur, save, and release lock
   const handleTextBlur = async () => {
+    // Don't update state if component is unmounting (e.g., during member switch)
+    if (!isMountedRef.current) return;
+    
     // Mark as no longer editing (disables idle detection)
     setIsEditing(false);
     
