@@ -624,6 +624,9 @@ export function EPBShellForm({
     
     console.log("[EPB Load] Loading shell for:", selectedRatee.id);
     
+    // Abort flag to cancel this load if selectedRatee changes
+    let aborted = false;
+    
     async function loadShell() {
       if (!selectedRatee) return;
       
@@ -645,6 +648,12 @@ export function EPBShellForm({
         }
 
         const { data, error } = await query.single();
+        
+        // Check if this load was aborted (user switched to another ratee)
+        if (aborted) {
+          console.log("[EPB Load] Aborted - ratee changed");
+          return;
+        }
 
         if (error && error.code !== "PGRST116") {
           // PGRST116 = no rows returned (not an error for us)
@@ -654,6 +663,10 @@ export function EPBShellForm({
         if (data) {
           const shellData = data as EPBShell & { sections: EPBShellSection[] };
           setCurrentShell(shellData);
+          
+          // Check abort again before loading related data
+          if (aborted) return;
+          
           // Load snapshots for each section
           const sectionIds = (shellData.sections || []).map((s) => s.id);
           if (sectionIds.length > 0) {
@@ -662,6 +675,9 @@ export function EPBShellForm({
               .select("*")
               .in("section_id", sectionIds)
               .order("created_at", { ascending: false });
+            
+            if (aborted) return;
+            
             if (snapshotData) {
               // Group by section_id
               const snapshotsBySection: Record<string, EPBShellSnapshot[]> = {};
@@ -682,6 +698,9 @@ export function EPBShellForm({
               .select("*")
               .in("section_id", sectionIds)
               .order("created_at", { ascending: false });
+            
+            if (aborted) return;
+            
             if (examplesData) {
               // Group by section_id
               const examplesBySection: Record<string, EPBSavedExample[]> = {};
@@ -697,12 +716,17 @@ export function EPBShellForm({
             }
           }
           
+          if (aborted) return;
+          
           // Load duty description snapshots
           const { data: dutySnapshots } = await supabase
             .from("epb_duty_description_snapshots")
             .select("*")
             .eq("shell_id", shellData.id)
             .order("created_at", { ascending: false });
+          
+          if (aborted) return;
+          
           if (dutySnapshots) {
             setDutyDescriptionSnapshots(dutySnapshots as DutyDescriptionSnapshot[]);
           }
@@ -713,20 +737,34 @@ export function EPBShellForm({
             .select("*")
             .eq("shell_id", shellData.id)
             .order("created_at", { ascending: false });
+          
+          if (aborted) return;
+          
           if (dutyExamples) {
             setDutyDescriptionExamples(dutyExamples as DutyDescriptionExample[]);
           }
+          
+          console.log("[EPB Load] Completed for:", selectedRatee.id);
         } else {
           setCurrentShell(null);
         }
       } catch (error) {
-        console.error("Failed to load shell:", error);
+        if (!aborted) {
+          console.error("Failed to load shell:", error);
+        }
       } finally {
-        setIsLoadingShell(false);
+        if (!aborted) {
+          setIsLoadingShell(false);
+        }
       }
     }
 
     loadShell();
+    
+    // Cleanup: abort this load if effect re-runs (selectedRatee changed)
+    return () => {
+      aborted = true;
+    };
   }, [initializedFor, selectedRatee, cycleYear, profile, supabase, setCurrentShell, setIsLoadingShell, setSnapshots, setSavedExamples]);
 
   // Track previous visibility state to detect transitions
