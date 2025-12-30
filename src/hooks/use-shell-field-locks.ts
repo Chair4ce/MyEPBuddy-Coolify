@@ -50,18 +50,35 @@ export function useShellFieldLocks({
     
     setIsLoading(true);
     try {
+      // RPC returns columns with out_ prefix to avoid ambiguity
+      type RPCLockResult = {
+        out_field_key: string;
+        out_user_id: string;
+        out_user_name: string;
+        out_user_rank: string | null;
+        out_acquired_at: string;
+        out_expires_at: string;
+      };
+      
       const { data, error } = await supabase
         .rpc("get_shell_field_locks", { p_shell_id: shellId } as never) as { 
-          data: ShellFieldLock[] | null; 
+          data: RPCLockResult[] | null; 
           error: Error | null; 
         };
       
       if (error) throw error;
       
-      // Convert to record keyed by field_key
+      // Convert to record keyed by field_key, mapping from out_ prefixed columns
       const lockRecord: Record<string, ShellFieldLock> = {};
-      (data || []).forEach((lock: ShellFieldLock) => {
-        lockRecord[lock.field_key] = lock;
+      (data || []).forEach((row) => {
+        lockRecord[row.out_field_key] = {
+          field_key: row.out_field_key,
+          user_id: row.out_user_id,
+          user_name: row.out_user_name,
+          user_rank: row.out_user_rank,
+          acquired_at: row.out_acquired_at,
+          expires_at: row.out_expires_at,
+        };
       });
       
       setLocks(lockRecord);
