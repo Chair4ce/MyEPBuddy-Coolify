@@ -1059,6 +1059,48 @@ export type Database = {
           },
         ]
       }
+      epb_shell_field_locks: {
+        Row: {
+          acquired_at: string
+          expires_at: string
+          field_key: string
+          id: string
+          shell_id: string
+          user_id: string
+        }
+        Insert: {
+          acquired_at?: string
+          expires_at?: string
+          field_key: string
+          id?: string
+          shell_id: string
+          user_id: string
+        }
+        Update: {
+          acquired_at?: string
+          expires_at?: string
+          field_key?: string
+          id?: string
+          shell_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "epb_shell_field_locks_shell_id_fkey"
+            columns: ["shell_id"]
+            isOneToOne: false
+            referencedRelation: "epb_shells"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "epb_shell_field_locks_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       epb_shell_sections: {
         Row: {
           created_at: string
@@ -2451,6 +2493,14 @@ export type Database = {
           success: boolean
         }[]
       }
+      acquire_shell_field_lock: {
+        Args: { p_field_key: string; p_shell_id: string; p_user_id: string }
+        Returns: {
+          locked_by_name: string
+          locked_by_rank: string
+          success: boolean
+        }[]
+      }
       approve_award_request: { Args: { p_request_id: string }; Returns: string }
       archive_prior_subordinate: {
         Args: { team_member_id: string }
@@ -2611,6 +2661,17 @@ export type Database = {
           session_id: string
         }[]
       }
+      get_shell_field_locks: {
+        Args: { p_shell_id: string }
+        Returns: {
+          acquired_at: string
+          expires_at: string
+          field_key: string
+          user_id: string
+          user_name: string
+          user_rank: string
+        }[]
+      }
       get_shell_section_locks: {
         Args: { p_shell_id: string }
         Returns: {
@@ -2667,10 +2728,18 @@ export type Database = {
         Args: { p_section_id: string; p_user_id: string }
         Returns: boolean
       }
+      refresh_shell_field_lock: {
+        Args: { p_field_key: string; p_shell_id: string; p_user_id: string }
+        Returns: boolean
+      }
       reject_prior_data_review: { Args: { p_review_id: string }; Returns: Json }
       release_section_lock: {
         Args: { p_section_id: string; p_user_id: string }
         Returns: boolean
+      }
+      release_shell_field_lock: {
+        Args: { p_field_key: string; p_shell_id: string; p_user_id: string }
+        Returns: undefined
       }
       sync_managed_account_data: { Args: { link_id: string }; Returns: Json }
       update_managed_member_dates: {

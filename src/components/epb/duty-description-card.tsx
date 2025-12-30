@@ -47,6 +47,11 @@ interface DutyDescriptionCardProps {
   savedExamples?: DutyDescriptionExample[];
   onSaveExample?: (text: string, note?: string) => Promise<void>;
   onDeleteExample?: (id: string) => Promise<void>;
+  // Lock props for single-user mode
+  isLockedByOther?: boolean;
+  lockedByInfo?: { name: string; rank: string | null } | null;
+  onAcquireLock?: () => Promise<{ success: boolean; lockedBy?: string }>;
+  onReleaseLock?: () => Promise<void>;
 }
 
 export function DutyDescriptionCard({
@@ -60,6 +65,10 @@ export function DutyDescriptionCard({
   savedExamples = [],
   onSaveExample,
   onDeleteExample,
+  isLockedByOther = false,
+  lockedByInfo,
+  onAcquireLock,
+  onReleaseLock,
 }: DutyDescriptionCardProps) {
   const maxChars = MAX_DUTY_DESCRIPTION_CHARACTERS;
   
@@ -121,14 +130,31 @@ export function DutyDescriptionCard({
     setIsDutyDescriptionDirty(value !== currentDutyDescription);
   };
 
-  // Handle focus
-  const handleTextFocus = () => {
+  // Handle focus - acquire lock
+  const handleTextFocus = async () => {
+    // Mark as editing IMMEDIATELY (optimistic)
     setIsEditing(true);
+    
+    if (onAcquireLock) {
+      const result = await onAcquireLock();
+      if (!result.success) {
+        // Revert editing state if lock acquisition failed
+        setIsEditing(false);
+        toast.error(`This field is being edited by ${result.lockedBy || "another user"}`);
+        textareaRef.current?.blur();
+      }
+    }
   };
 
-  // Handle blur - save on blur
+  // Handle blur - release lock and save
   const handleTextBlur = async () => {
     setIsEditing(false);
+    
+    // Release lock
+    if (onReleaseLock) {
+      await onReleaseLock();
+    }
+    
     // Auto-save on blur if changed
     if (localText !== currentDutyDescription && localText.length <= maxChars) {
       try {
@@ -324,6 +350,16 @@ export function DutyDescriptionCard({
       {/* Content */}
       {!isCollapsed && (
         <CardContent className="pt-0 space-y-3 sm:space-y-4 animate-in slide-in-from-top-2 duration-200 px-3 sm:px-6">
+          {/* Locked by indicator */}
+          {isLockedByOther && lockedByInfo && (
+            <div className="flex items-center gap-2 px-3 py-2 bg-amber-500/10 border border-amber-500/30 rounded-md text-sm text-amber-600 dark:text-amber-400">
+              <div className="size-2 rounded-full bg-amber-500 animate-pulse" />
+              <span>
+                {lockedByInfo.rank ? `${lockedByInfo.rank} ${lockedByInfo.name}` : lockedByInfo.name} is editing...
+              </span>
+            </div>
+          )}
+          
           {/* Textarea */}
           <div className="space-y-3">
             <textarea
@@ -332,11 +368,13 @@ export function DutyDescriptionCard({
               onChange={(e) => handleTextChange(e.target.value)}
               onFocus={handleTextFocus}
               onBlur={handleTextBlur}
-              placeholder='e.g., "Leads 36 Amn & 12 total force members directing 24/7 O&M of 730 enterprise domain controllers by administering & securing enterprise Directory Services on a $14B cyber weapon system..."'
+              placeholder={isLockedByOther ? "Waiting for edit to complete..." : 'e.g., "Leads 36 Amn & 12 total force members directing 24/7 O&M of 730 enterprise domain controllers by administering & securing enterprise Directory Services on a $14B cyber weapon system..."'}
+              disabled={isLockedByOther}
               rows={5}
               className={cn(
                 "flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50 resize-none",
-                isOverLimit && "border-destructive focus-visible:ring-destructive"
+                isOverLimit && "border-destructive focus-visible:ring-destructive",
+                isLockedByOther && "bg-muted/50 border-amber-500/30"
               )}
             />
 

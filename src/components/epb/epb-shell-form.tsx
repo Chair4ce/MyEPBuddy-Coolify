@@ -50,6 +50,7 @@ import { DutyDescriptionCard } from "./duty-description-card";
 import { RealtimeCursors } from "./realtime-cursors";
 import { useEPBCollaboration } from "@/hooks/use-epb-collaboration";
 import { useSectionLocks } from "@/hooks/use-section-locks";
+import { useShellFieldLocks } from "@/hooks/use-shell-field-locks";
 import { useIdleDetection } from "@/hooks/use-idle-detection";
 import type { EPBShell, EPBShellSection, EPBShellSnapshot, EPBSavedExample, Accomplishment, Profile, ManagedMember, UserLLMSettings, Rank, DutyDescriptionSnapshot, DutyDescriptionExample } from "@/types/database";
 
@@ -148,6 +149,12 @@ export function EPBShellForm({
 
   // Section locks hook - only active when multi-user mode is OFF
   const sectionLocks = useSectionLocks({
+    shellId: currentShell?.id || null,
+    enabled: !isMultiUserMode,
+  });
+  
+  // Shell field locks for duty description - only active when multi-user mode is OFF
+  const fieldLocks = useShellFieldLocks({
     shellId: currentShell?.id || null,
     enabled: !isMultiUserMode,
   });
@@ -1662,6 +1669,11 @@ export function EPBShellForm({
           savedExamples={dutyDescriptionExamples}
           onSaveExample={handleSaveDutyDescriptionExample}
           onDeleteExample={handleDeleteDutyDescriptionExample}
+          // Lock props for single-user mode
+          isLockedByOther={!isMultiUserMode && fieldLocks.isLockedByOther("duty_description")}
+          lockedByInfo={!isMultiUserMode ? fieldLocks.getLockedByInfo("duty_description") : null}
+          onAcquireLock={() => fieldLocks.acquireLock("duty_description")}
+          onReleaseLock={() => fieldLocks.releaseLock("duty_description")}
         />
 
         {STANDARD_MGAS.map((mpa) => {

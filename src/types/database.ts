@@ -542,6 +542,15 @@ export interface EPBSectionLock {
   expires_at: string;
 }
 
+export interface ShellFieldLock {
+  field_key: string;
+  user_id: string;
+  user_name: string;
+  user_rank: string | null;
+  acquired_at: string;
+  expires_at: string;
+}
+
 // ============================================
 // AWARD SHELL TYPES (mirrors EPB Shell structure)
 // ============================================
