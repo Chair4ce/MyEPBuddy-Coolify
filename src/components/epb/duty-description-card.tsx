@@ -130,27 +130,21 @@ export function DutyDescriptionCard({
     setIsDutyDescriptionDirty(value !== currentDutyDescription);
   };
 
-  // Handle focus - acquire lock
+  // Handle focus - set presence (no blocking, just show who's editing)
   const handleTextFocus = async () => {
-    // Mark as editing IMMEDIATELY (optimistic)
     setIsEditing(true);
     
+    // Set presence indicator (doesn't block other users)
     if (onAcquireLock) {
-      const result = await onAcquireLock();
-      if (!result.success) {
-        // Revert editing state if lock acquisition failed
-        setIsEditing(false);
-        toast.error(`This field is being edited by ${result.lockedBy || "another user"}`);
-        textareaRef.current?.blur();
-      }
+      await onAcquireLock();
     }
   };
 
-  // Handle blur - release lock and save
+  // Handle blur - clear presence and save
   const handleTextBlur = async () => {
     setIsEditing(false);
     
-    // Release lock
+    // Clear presence
     if (onReleaseLock) {
       await onReleaseLock();
     }
@@ -350,12 +344,12 @@ export function DutyDescriptionCard({
       {/* Content */}
       {!isCollapsed && (
         <CardContent className="pt-0 space-y-3 sm:space-y-4 animate-in slide-in-from-top-2 duration-200 px-3 sm:px-6">
-          {/* Locked by indicator */}
+          {/* Presence indicator - shows who else is editing (collaborative, not blocking) */}
           {isLockedByOther && lockedByInfo && (
-            <div className="flex items-center gap-2 px-3 py-2 bg-amber-500/10 border border-amber-500/30 rounded-md text-sm text-amber-600 dark:text-amber-400">
-              <div className="size-2 rounded-full bg-amber-500 animate-pulse" />
+            <div className="flex items-center gap-2 px-3 py-2 bg-blue-500/10 border border-blue-500/30 rounded-md text-sm text-blue-600 dark:text-blue-400">
+              <div className="size-2 rounded-full bg-blue-500 animate-pulse" />
               <span>
-                {lockedByInfo.rank ? `${lockedByInfo.rank} ${lockedByInfo.name}` : lockedByInfo.name} is editing...
+                {lockedByInfo.rank ? `${lockedByInfo.rank} ${lockedByInfo.name}` : lockedByInfo.name} is also editing
               </span>
             </div>
           )}
@@ -368,13 +362,12 @@ export function DutyDescriptionCard({
               onChange={(e) => handleTextChange(e.target.value)}
               onFocus={handleTextFocus}
               onBlur={handleTextBlur}
-              placeholder={isLockedByOther ? "Waiting for edit to complete..." : 'e.g., "Leads 36 Amn & 12 total force members directing 24/7 O&M of 730 enterprise domain controllers by administering & securing enterprise Directory Services on a $14B cyber weapon system..."'}
-              disabled={isLockedByOther}
+              placeholder='e.g., "Leads 36 Amn & 12 total force members directing 24/7 O&M of 730 enterprise domain controllers by administering & securing enterprise Directory Services on a $14B cyber weapon system..."'
               rows={5}
               className={cn(
                 "flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50 resize-none",
                 isOverLimit && "border-destructive focus-visible:ring-destructive",
-                isLockedByOther && "bg-muted/50 border-amber-500/30"
+                isLockedByOther && "border-blue-500/30 ring-1 ring-blue-500/20"
               )}
             />
 

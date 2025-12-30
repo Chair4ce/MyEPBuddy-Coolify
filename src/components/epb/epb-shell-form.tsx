@@ -810,10 +810,45 @@ export function EPBShellForm({
       )
       .subscribe();
 
+    // Also subscribe to duty_description changes on the shell itself
+    const shellChannel = supabase
+      .channel(`shell-updates:${currentShell.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "epb_shells",
+          filter: `id=eq.${currentShell.id}`,
+        },
+        (payload) => {
+          const updatedShell = payload.new as EPBShell;
+          
+          // Only update duty_description if changed by someone else
+          // and user is not currently editing it
+          if (updatedShell.duty_description !== undefined) {
+            const currentDraft = useEPBShellStore.getState().dutyDescriptionDraft;
+            const isDirty = useEPBShellStore.getState().isDutyDescriptionDirty;
+            
+            // Only update if user is not editing (not dirty)
+            if (!isDirty && updatedShell.duty_description !== currentDraft) {
+              useEPBShellStore.getState().setDutyDescriptionDraft(updatedShell.duty_description || "");
+              // Also update the shell in store
+              setCurrentShell({
+                ...currentShell,
+                duty_description: updatedShell.duty_description,
+              });
+            }
+          }
+        }
+      )
+      .subscribe();
+
     return () => {
       supabase.removeChannel(channel);
+      supabase.removeChannel(shellChannel);
     };
-  }, [currentShell?.id, profile, supabase, updateSection, isPageVisible]);
+  }, [currentShell?.id, profile, supabase, updateSection, isPageVisible, setCurrentShell]);
 
   // Load accomplishments for the selected ratee
   useEffect(() => {

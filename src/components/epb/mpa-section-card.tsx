@@ -42,6 +42,7 @@ import {
   Bookmark,
   BookMarked,
   Trash2,
+  Users,
 } from "lucide-react";
 import { useEPBShellStore, type MPAWorkspaceMode, type SourceType } from "@/stores/epb-shell-store";
 import { LoadedActionCard } from "./loaded-action-card";
@@ -476,23 +477,17 @@ export function MPASectionCard({
     }
   };
 
-  // Acquire lock when textarea gains focus
+  // Set presence when textarea gains focus (no blocking, collaborative editing)
   const handleTextFocus = async () => {
     // Store the original text before editing begins (for idle snapshot)
     originalTextOnFocusRef.current = localText;
     
-    // Mark as editing IMMEDIATELY (optimistic, enables idle detection)
+    // Mark as editing IMMEDIATELY (enables idle detection)
     setIsEditing(true);
     
+    // Set presence indicator (doesn't block other users)
     if (onAcquireLock && !isCollaborating) {
-      const result = await onAcquireLock();
-      if (!result.success) {
-        // Lock failed - blur the textarea to prevent editing and revert
-        setIsEditing(false);
-        textareaRef.current?.blur();
-        toast.error(`This section is locked by ${result.lockedBy || "another user"}`);
-        return;
-      }
+      await onAcquireLock();
     }
   };
 
@@ -753,16 +748,16 @@ export function MPASectionCard({
             <span className="font-medium text-xs sm:text-sm truncate">
               {mpa?.label || section.mpa}
             </span>
-            {/* Lock indicator for single-user mode - hide on mobile */}
+            {/* Presence indicator for collaborative editing - hide on mobile */}
             {isLockedByOther && lockedByInfo && (
               <Badge
                 variant="outline"
-                className="text-[9px] sm:text-[10px] shrink-0 bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30 gap-0.5 sm:gap-1 hidden sm:flex"
-                title={`${lockedByInfo.rank || ""} ${lockedByInfo.name} is currently editing this section`}
+                className="text-[9px] sm:text-[10px] shrink-0 bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/30 gap-0.5 sm:gap-1 hidden sm:flex"
+                title={`${lockedByInfo.rank || ""} ${lockedByInfo.name} is also editing this section`}
               >
-                <Lock className="size-2.5 sm:size-3" />
+                <Users className="size-2.5 sm:size-3" />
                 <span className="hidden md:inline">{lockedByInfo.rank || ""} {lockedByInfo.name.split(" ")[0]} editing</span>
-                <span className="md:hidden">Locked</span>
+                <span className="md:hidden">Collab</span>
               </Badge>
             )}
             {/* Mobile lock indicator */}
@@ -865,16 +860,16 @@ export function MPASectionCard({
         <CardContent className="pt-0 space-y-3 sm:space-y-4 animate-in slide-in-from-top-2 duration-200 px-3 sm:px-6">
             {/* Working Statement Area - ALWAYS at top */}
             <div className="space-y-3">
-              {/* Editing indicator when locked by another user */}
+              {/* Presence indicator - shows who else is editing (collaborative) */}
               {isLockedByOther && lockedByInfo && (
-                <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 text-xs animate-in fade-in-0 duration-200">
+                <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400 text-xs animate-in fade-in-0 duration-200">
                   <div className="flex items-center gap-1.5">
                     <span className="relative flex size-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full size-2 bg-amber-500"></span>
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full size-2 bg-blue-500"></span>
                     </span>
                     <span className="font-medium">
-                      {lockedByInfo.rank ? `${lockedByInfo.rank} ${lockedByInfo.name}` : lockedByInfo.name} is editing...
+                      {lockedByInfo.rank ? `${lockedByInfo.rank} ${lockedByInfo.name}` : lockedByInfo.name} is also editing
                     </span>
                   </div>
                 </div>
@@ -886,13 +881,12 @@ export function MPASectionCard({
                 onChange={(e) => handleTextChange(e.target.value)}
                 onFocus={handleTextFocus}
                 onBlur={handleTextBlur}
-                placeholder={isLockedByOther ? "Waiting for edit to complete..." : `Enter your ${mpa?.label || "statement"} here...`}
-                disabled={isLockedByOther}
+                placeholder={`Enter your ${mpa?.label || "statement"} here...`}
                 rows={5}
                 className={cn(
                   "flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50 resize-none",
                   isOverLimit && "border-destructive focus-visible:ring-destructive",
-                  isLockedByOther && "bg-muted/50 cursor-not-allowed"
+                  isLockedByOther && "border-blue-500/30 ring-1 ring-blue-500/20"
                 )}
               />
               
@@ -1358,9 +1352,9 @@ export function MPASectionCard({
                         Generated Revisions ({generatedRevisions.length})
                       </h5>
                       {isLockedByOther && lockedByInfo && (
-                        <span className="text-[10px] text-amber-600 flex items-center gap-1">
-                          <Lock className="size-3" />
-                          Save to use later
+                        <span className="text-[10px] text-blue-600 flex items-center gap-1">
+                          <Users className="size-3" />
+                          Collaborative editing
                         </span>
                       )}
                     </div>
@@ -1644,9 +1638,9 @@ export function MPASectionCard({
                         Generated Statements ({generatedStatements.length})
                       </h5>
                       {isLockedByOther && lockedByInfo && (
-                        <span className="text-[10px] text-amber-600 flex items-center gap-1">
-                          <Lock className="size-3" />
-                          Save to use later
+                        <span className="text-[10px] text-blue-600 flex items-center gap-1">
+                          <Users className="size-3" />
+                          Collaborative editing
                         </span>
                       )}
                     </div>
