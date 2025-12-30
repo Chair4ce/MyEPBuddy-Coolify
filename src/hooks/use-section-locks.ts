@@ -90,9 +90,26 @@ export function useSectionLocks({
           schema: "public",
           table: "epb_section_locks",
         },
-        () => {
-          // Refetch locks on any change
-          fetchLocks();
+        (payload) => {
+          // Optimistically update local state from payload for faster UI update
+          if (payload.eventType === "INSERT" || payload.eventType === "UPDATE") {
+            const newLock = payload.new as EPBSectionLock;
+            if (newLock && newLock.mpa_key) {
+              setLocks((prev) => ({
+                ...prev,
+                [newLock.mpa_key]: newLock,
+              }));
+            }
+          } else if (payload.eventType === "DELETE") {
+            const oldLock = payload.old as EPBSectionLock;
+            if (oldLock && oldLock.mpa_key) {
+              setLocks((prev) => {
+                const next = { ...prev };
+                delete next[oldLock.mpa_key];
+                return next;
+              });
+            }
+          }
         }
       )
       .subscribe();

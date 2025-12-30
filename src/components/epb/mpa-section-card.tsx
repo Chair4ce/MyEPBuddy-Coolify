@@ -481,18 +481,19 @@ export function MPASectionCard({
     // Store the original text before editing begins (for idle snapshot)
     originalTextOnFocusRef.current = localText;
     
+    // Mark as editing IMMEDIATELY (optimistic, enables idle detection)
+    setIsEditing(true);
+    
     if (onAcquireLock && !isCollaborating) {
       const result = await onAcquireLock();
       if (!result.success) {
-        // Lock failed - blur the textarea to prevent editing
+        // Lock failed - blur the textarea to prevent editing and revert
+        setIsEditing(false);
         textareaRef.current?.blur();
         toast.error(`This section is locked by ${result.lockedBy || "another user"}`);
         return;
       }
     }
-    
-    // Mark as editing (enables idle detection)
-    setIsEditing(true);
   };
 
   // Sync local text to Zustand on blur, save, and release lock
