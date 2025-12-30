@@ -74,6 +74,9 @@ interface EPBShellState {
   isLoadingShell: boolean;
   isCreatingShell: boolean;
   
+  // Version counter - increments each time ratee changes to force component remounts
+  loadVersion: number;
+  
   // Autosave debounce tracking
   autosaveTimers: Record<string, NodeJS.Timeout | null>;
   
@@ -160,6 +163,7 @@ export const useEPBShellStore = create<EPBShellState>((set, get) => ({
   isSavingDutyDescription: false,
   isLoadingShell: false,
   isCreatingShell: false,
+  loadVersion: 0,
   autosaveTimers: {},
 
   setSelectedRatee: (ratee) => {
@@ -169,8 +173,8 @@ export const useEPBShellStore = create<EPBShellState>((set, get) => ({
       if (timer) clearTimeout(timer);
     });
 
-    // Reset all state when switching members
-    set({
+    // Reset all state when switching members and increment loadVersion
+    set((state) => ({
       selectedRatee: ratee,
       currentShell: null,
       sections: {},
@@ -180,7 +184,8 @@ export const useEPBShellStore = create<EPBShellState>((set, get) => ({
       autosaveTimers: {},
       dutyDescriptionDraft: "",
       isDutyDescriptionDirty: false,
-    });
+      loadVersion: state.loadVersion + 1,
+    }));
   },
   
   setCurrentShell: (shell) => {
@@ -393,7 +398,7 @@ export const useEPBShellStore = create<EPBShellState>((set, get) => ({
       if (timer) clearTimeout(timer);
     });
 
-    set({
+    set((state) => ({
       selectedRatee: null,
       currentShell: null,
       sections: {},
@@ -406,8 +411,9 @@ export const useEPBShellStore = create<EPBShellState>((set, get) => ({
       isSavingDutyDescription: false,
       isLoadingShell: false,
       isCreatingShell: false,
+      loadVersion: state.loadVersion + 1,
       autosaveTimers: {},
-    });
+    }));
   },
 }));
 

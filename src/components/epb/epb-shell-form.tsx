@@ -104,6 +104,7 @@ export function EPBShellForm({
     setIsLoadingShell,
     isCreatingShell,
     setIsCreatingShell,
+    loadVersion,
     reset,
   } = useEPBShellStore();
 
@@ -1693,7 +1694,7 @@ export function EPBShellForm({
 
         {/* Duty Description Card - Placed at the top above MPAs */}
         <DutyDescriptionCard
-          key={`duty-desc-${selectedRatee?.id || 'new'}-${currentShell?.id || ''}`}
+          key={`duty-desc-${loadVersion}-${selectedRatee?.id || 'new'}`}
           currentDutyDescription={currentShell?.duty_description || ""}
           isCollapsed={isDutyDescriptionCollapsed}
           onToggleCollapse={() => setIsDutyDescriptionCollapsed(!isDutyDescriptionCollapsed)}
@@ -1720,7 +1721,7 @@ export function EPBShellForm({
           const isLockedByOther = !isMultiUserMode && sectionLocks.isLockedByOther(mpa.key);
 
           return (
-            <div key={`${selectedRatee?.id || 'new'}-${currentShell?.id || ''}-${mpa.key}`} data-mpa-key={mpa.key}>
+            <div key={`${loadVersion}-${mpa.key}`} data-mpa-key={mpa.key}>
               <MPASectionCard
                 section={section}
                 isCollapsed={collapsedSections[mpa.key] ?? false}
