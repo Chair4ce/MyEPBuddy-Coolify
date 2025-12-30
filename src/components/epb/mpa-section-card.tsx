@@ -247,9 +247,9 @@ export function MPASectionCard({
   const aiGeneratePanelRef = useRef<HTMLDivElement>(null);
   const revisePanelRef = useRef<HTMLDivElement>(null);
   
-  // LOCAL state for textarea - only syncs to Zustand on blur (like /award page)
+  // LOCAL state for textarea - initialized from section prop (source of truth)
   // This prevents constant re-renders during typing which causes ref composition loops
-  const [localText, setLocalText] = useState(state.draftText);
+  const [localText, setLocalText] = useState(section.statement_text || "");
   
   // Track if user is currently focused on the textarea
   const [isEditing, setIsEditing] = useState(false);

@@ -83,7 +83,8 @@ export function DutyDescriptionCard({
   } = useEPBShellStore();
 
   const [copied, setCopied] = useState(false);
-  const [localText, setLocalText] = useState(dutyDescriptionDraft || currentDutyDescription || "");
+  // Initialize from prop (source of truth), not from store
+  const [localText, setLocalText] = useState(currentDutyDescription || "");
   const [isEditing, setIsEditing] = useState(false);
   const [showRevisePanel, setShowRevisePanel] = useState(false);
   const [reviseContext, setReviseContext] = useState("");
