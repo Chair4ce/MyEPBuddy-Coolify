@@ -169,12 +169,17 @@ export const useEPBShellStore = create<EPBShellState>((set, get) => ({
       if (timer) clearTimeout(timer);
     });
 
-    // Reset section states and shell when switching members
+    // Reset all state when switching members
     set({
       selectedRatee: ratee,
+      currentShell: null,
+      sections: {},
       sectionStates: {},
+      snapshots: {},
+      savedExamples: {},
       autosaveTimers: {},
-      // Don't clear the shell here - let the loadShell effect handle it
+      dutyDescriptionDraft: "",
+      isDutyDescriptionDirty: false,
     });
   },
   
