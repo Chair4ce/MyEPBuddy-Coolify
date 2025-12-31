@@ -127,7 +127,7 @@ export function AwardRequestsPanel({
       case "quarterly":
         return <AwardIcon className="size-4 text-blue-500" />;
       case "annual":
-        return <Trophy className="size-4 text-purple-500" />;
+        return <Trophy className="size-4 text-primary" />;
       case "special":
         return <Star className="size-4 text-emerald-500" />;
       default:

@@ -1,8 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
-import OpenAI from "openai";
-import Anthropic from "@anthropic-ai/sdk";
-import { getUserLLMSettings } from "@/app/actions/api-keys";
+import { createOpenAI } from "@ai-sdk/openai";
+import { createAnthropic } from "@ai-sdk/anthropic";
+import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { createXai } from "@ai-sdk/xai";
+import { generateText } from "ai";
+import { getDecryptedApiKeys } from "@/app/actions/api-keys";
 
 export const maxDuration = 60;
 
@@ -12,6 +15,52 @@ interface AdaptSentenceRequest {
   targetMax: number;
   mpaContext: string; // e.g., "Executing the Mission"
   preserveSentenceIndex: number; // Which sentence to try to preserve more (0 or 1)
+}
+
+// Get model provider for a specific model
+function getModelProvider(
+  modelId: string,
+  userKeys?: {
+    openai_key?: string | null;
+    anthropic_key?: string | null;
+    google_key?: string | null;
+    grok_key?: string | null;
+  } | null
+) {
+  const provider = modelId.startsWith("claude")
+    ? "anthropic"
+    : modelId.startsWith("gemini")
+      ? "google"
+      : modelId.startsWith("grok")
+        ? "xai"
+        : "openai";
+
+  switch (provider) {
+    case "anthropic": {
+      const customAnthropic = createAnthropic({
+        apiKey: userKeys?.anthropic_key || process.env.ANTHROPIC_API_KEY || "",
+      });
+      return customAnthropic(modelId);
+    }
+    case "google": {
+      const customGoogle = createGoogleGenerativeAI({
+        apiKey: userKeys?.google_key || process.env.GOOGLE_GENERATIVE_AI_API_KEY || "",
+      });
+      return customGoogle(modelId);
+    }
+    case "xai": {
+      const customXai = createXai({
+        apiKey: userKeys?.grok_key || process.env.XAI_API_KEY || "",
+      });
+      return customXai(modelId);
+    }
+    default: {
+      const customOpenai = createOpenAI({
+        apiKey: userKeys?.openai_key || process.env.OPENAI_API_KEY || "",
+      });
+      return customOpenai(modelId);
+    }
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -29,10 +78,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "At least one sentence is required" }, { status: 400 });
   }
 
-  // Get user's LLM settings
-  const llmSettings = await getUserLLMSettings(user.id);
-  const model = llmSettings?.model || "gpt-4o-mini";
-  const isAnthropic = model.startsWith("claude");
+  // Get user's LLM settings and API keys
+  const { data: userSettings } = await supabase
+    .from("user_settings")
+    .select("preferred_model")
+    .eq("user_id", user.id)
+    .single();
+  
+  const userKeys = await getDecryptedApiKeys(user.id);
+  const model = userSettings?.preferred_model || "gpt-4o-mini";
+  const modelProvider = getModelProvider(model, userKeys);
 
   const currentLength = (sentence1?.length || 0) + (sentence2?.length || 0) + (sentence1 && sentence2 ? 1 : 0);
   const needsTrimming = currentLength > targetMax;
@@ -71,38 +126,15 @@ ${needsTrimming ? `MUST TRIM: ${charsToTrim} characters` : `EXTRA SPACE: ${avail
 Return ONLY the adapted statement (both sentences combined). Do not include any explanation or character counts.`;
 
   try {
-    let adaptedStatement: string;
+    const { text } = await generateText({
+      model: modelProvider,
+      system: systemPrompt,
+      prompt: userPrompt,
+      temperature: 0.7,
+      maxTokens: 500,
+    });
 
-    if (isAnthropic) {
-      const anthropic = new Anthropic({
-        apiKey: llmSettings?.decryptedKey || process.env.ANTHROPIC_API_KEY,
-      });
-
-      const response = await anthropic.messages.create({
-        model,
-        max_tokens: 500,
-        system: systemPrompt,
-        messages: [{ role: "user", content: userPrompt }],
-      });
-
-      adaptedStatement = (response.content[0] as { type: string; text: string }).text.trim();
-    } else {
-      const openai = new OpenAI({
-        apiKey: llmSettings?.decryptedKey || process.env.OPENAI_API_KEY,
-      });
-
-      const response = await openai.chat.completions.create({
-        model,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        max_tokens: 500,
-        temperature: 0.7,
-      });
-
-      adaptedStatement = response.choices[0]?.message?.content?.trim() || "";
-    }
+    const adaptedStatement = text.trim();
 
     // Verify the result fits
     if (adaptedStatement.length > targetMax) {
@@ -130,4 +162,3 @@ Return ONLY the adapted statement (both sentences combined). Do not include any 
     );
   }
 }
-

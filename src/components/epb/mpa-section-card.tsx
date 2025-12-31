@@ -42,11 +42,14 @@ import {
   BookMarked,
   Trash2,
   Users,
+  Rows2,
 } from "lucide-react";
 import { useEPBShellStore, type MPAWorkspaceMode, type SourceType } from "@/stores/epb-shell-store";
 import { LoadedActionCard } from "./loaded-action-card";
 import { ActionSelectorSheet } from "./action-selector-sheet";
 import { SentencePills, type DraggedSentence } from "./sentence-pills";
+import { SentenceDropOverlay } from "./sentence-drop-overlay";
+import { SplitViewEditor } from "./split-view-editor";
 // Per-section collaboration removed - using page-level collaboration instead
 import type { EPBShellSection, EPBShellSnapshot, EPBSavedExample, Accomplishment } from "@/types/database";
 import { useStyleFeedback, getMpaCategory } from "@/hooks/use-style-feedback";
@@ -87,6 +90,9 @@ interface MPASectionCardProps {
   onSentenceDragEnd?: () => void;
   onSentenceDrop?: (data: DraggedSentence, targetMpa: string, targetIndex: number) => void;
   draggedSentence?: DraggedSentence | null;
+  // Split view mode
+  isSplitView?: boolean;
+  onToggleSplitView?: () => void;
 }
 
 interface GenerateOptions {
@@ -209,6 +215,9 @@ export function MPASectionCard({
   onSentenceDragEnd,
   onSentenceDrop,
   draggedSentence,
+  // Split view
+  isSplitView = false,
+  onToggleSplitView,
 }: MPASectionCardProps) {
   const { mpa, isHLR, maxChars } = getMPAInfo(section.mpa);
   
@@ -806,6 +815,30 @@ export function MPASectionCard({
               <ChevronUp className="size-3.5 sm:size-4 text-muted-foreground group-hover:text-foreground transition-colors ml-auto shrink-0" />
             )}
           </button>
+          {/* Split view toggle button - only for non-HLR sections */}
+          {!isHLR && onToggleSplitView && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  className={cn(
+                    "inline-flex items-center justify-center rounded-md size-6 shrink-0 transition-colors",
+                    isSplitView
+                      ? "text-primary hover:bg-primary/10"
+                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                  )}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToggleSplitView();
+                  }}
+                >
+                  <Rows2 className="size-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{isSplitView ? "Combined view" : "Split view (S1 & S2)"}</p>
+              </TooltipContent>
+            </Tooltip>
+          )}
           {/* Completion toggle button */}
           {onToggleComplete && (
             <Tooltip>
@@ -878,44 +911,92 @@ export function MPASectionCard({
                 </div>
               )}
 
-              <textarea
-                ref={textareaRef}
-                value={localText}
-                onChange={(e) => handleTextChange(e.target.value)}
-                onFocus={handleTextFocus}
-                onBlur={handleTextBlur}
-                placeholder={`Enter your ${mpa?.label || "statement"} here...`}
-                rows={5}
-                className={cn(
-                  "flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50 resize-none",
-                  isOverLimit && "border-destructive focus-visible:ring-destructive"
-                )}
-              />
-              
-              {/* Action bar below textarea */}
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span className={cn("text-xs tabular-nums", getCharacterCountColor(charCount, maxChars))}>
-                    {charCount}/{maxChars}
-                  </span>
+              {/* Textarea or Split View Editor */}
+              {isSplitView && !isHLR ? (
+                <SplitViewEditor
+                  text={localText}
+                  onChange={handleTextChange}
+                  maxChars={maxChars}
+                  disabled={isLockedByOther}
+                  placeholder={`Enter your ${mpa?.label || "statement"} here...`}
+                />
+              ) : (
+                <div className="relative">
+                  <textarea
+                    ref={textareaRef}
+                    value={localText}
+                    onChange={(e) => handleTextChange(e.target.value)}
+                    onFocus={handleTextFocus}
+                    onBlur={handleTextBlur}
+                    placeholder={`Enter your ${mpa?.label || "statement"} here...`}
+                    rows={5}
+                    className={cn(
+                      "flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50 resize-none",
+                      isOverLimit && "border-destructive focus-visible:ring-destructive"
+                    )}
+                  />
                   
-                  {/* Inline Sentence Pills for drag-drop swap */}
-                  {!isHLR && (hasContent || draggedSentence) && (
-                    <SentencePills
+                  {/* Drop overlay - shows when dragging a sentence from another MPA */}
+                  {!isHLR && !isLockedByOther && (
+                    <SentenceDropOverlay
                       statementText={localText}
                       mpaKey={section.mpa}
-                      mpaLabel={mpa?.label || section.mpa}
-                      maxChars={maxChars}
-                      onDragStart={onSentenceDragStart}
-                      onDragEnd={onSentenceDragEnd}
-                      onDrop={(data, targetIndex) => onSentenceDrop?.(data, section.mpa, targetIndex)}
                       draggedSentence={draggedSentence}
-                      disabled={isLockedByOther}
+                      onDrop={(data, targetIndex) => onSentenceDrop?.(data, section.mpa, targetIndex)}
                     />
                   )}
                 </div>
-                
-                <div className="flex items-center gap-1">
+              )}
+              
+              {/* Action bar below textarea - hidden in split view */}
+              {!isSplitView && (
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className={cn("text-xs tabular-nums", getCharacterCountColor(charCount, maxChars))}>
+                      {charCount}/{maxChars}
+                    </span>
+                    
+                    {/* Inline Sentence Pills for drag-drop swap */}
+                    {!isHLR && (hasContent || draggedSentence) && (
+                      <SentencePills
+                        statementText={localText}
+                        mpaKey={section.mpa}
+                        mpaLabel={mpa?.label || section.mpa}
+                        maxChars={maxChars}
+                        onDragStart={onSentenceDragStart}
+                        onDragEnd={onSentenceDragEnd}
+                        onDrop={(data, targetIndex) => onSentenceDrop?.(data, section.mpa, targetIndex)}
+                        draggedSentence={draggedSentence}
+                        disabled={isLockedByOther}
+                      />
+                    )}
+                  </div>
+                  
+                  <div className="flex items-center gap-1">
+                    {hasUnsavedChanges && (
+                      <button 
+                        onClick={handleReset} 
+                        className="h-7 px-2.5 rounded-md text-xs hover:bg-accent hover:text-accent-foreground inline-flex items-center justify-center"
+                      >
+                        <RotateCcw className="size-3 mr-1" />
+                        <span className="hidden sm:inline">Reset</span>
+                      </button>
+                    )}
+                    <button 
+                      onClick={handleCopy} 
+                      disabled={!hasContent}
+                      className="h-7 px-2.5 rounded-md text-xs hover:bg-accent hover:text-accent-foreground inline-flex items-center justify-center disabled:opacity-50 disabled:pointer-events-none"
+                    >
+                      {copied ? <Check className="size-3 mr-1" /> : <Copy className="size-3 mr-1" />}
+                      <span className="hidden sm:inline">Copy</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+              
+              {/* Action bar for split view - just copy/reset buttons */}
+              {isSplitView && (
+                <div className="flex items-center justify-end gap-1">
                   {hasUnsavedChanges && (
                     <button 
                       onClick={handleReset} 
@@ -934,7 +1015,7 @@ export function MPASectionCard({
                     <span className="hidden sm:inline">Copy</span>
                   </button>
                 </div>
-              </div>
+              )}
             </div>
 
             {/* AI Options Bar - below working statement */}

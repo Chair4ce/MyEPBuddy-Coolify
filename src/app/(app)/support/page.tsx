@@ -119,8 +119,8 @@ export default function SupportPage() {
               </p>
             </div>
             <div className="text-center space-y-3">
-              <div className="size-12 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center mx-auto">
-                <Heart className="size-6 text-purple-600 dark:text-purple-400" />
+              <div className="size-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
+                <Heart className="size-6 text-primary" />
               </div>
               <h4 className="font-medium">Community Growth</h4>
               <p className="text-sm text-muted-foreground">

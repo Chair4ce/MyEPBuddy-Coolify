@@ -114,13 +114,13 @@ export function SentencePills({
                 "flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-medium transition-all",
                 "border-2 border-dashed cursor-pointer",
                 isHovering 
-                  ? "border-violet-500 bg-violet-100 dark:bg-violet-900/50 scale-105" 
-                  : "border-violet-300 dark:border-violet-600 hover:border-violet-400 hover:bg-violet-100/50 dark:hover:bg-violet-900/30",
+                  ? "border-primary bg-primary/10 scale-105" 
+                  : "border-muted-foreground/30 hover:border-primary/50 hover:bg-primary/5",
               )}
             >
               <span className={cn(
                 "font-bold",
-                index === 0 ? "text-blue-600 dark:text-blue-400" : "text-emerald-600 dark:text-emerald-400"
+                index === 0 ? "text-primary" : "text-primary"
               )}>
                 S{index + 1}
               </span>
@@ -160,16 +160,14 @@ export function SentencePills({
             onMouseDown={(e) => e.stopPropagation()}
             className={cn(
               "group flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-medium cursor-grab active:cursor-grabbing transition-all select-none",
-              "border bg-background hover:bg-accent hover:border-violet-300 dark:hover:border-violet-700",
+              "border bg-background hover:bg-accent hover:border-primary/40",
               "relative z-10",
-              isBeingDragged && "opacity-50 border-dashed border-violet-400",
+              isBeingDragged && "opacity-50 border-dashed border-primary/60",
             )}
             title={`Drag to swap with another MPA. "${sentence.text.slice(0, 60)}..."`}
           >
-            <GripVertical className="size-2.5 text-muted-foreground group-hover:text-violet-500 transition-colors" />
-            <span className={cn(
-              index === 0 ? "text-blue-600 dark:text-blue-400" : "text-emerald-600 dark:text-emerald-400"
-            )}>
+            <GripVertical className="size-2.5 text-muted-foreground group-hover:text-primary transition-colors" />
+            <span className="text-primary">
               S{index + 1}
             </span>
             <span className="text-muted-foreground">

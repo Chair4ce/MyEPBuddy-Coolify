@@ -122,7 +122,7 @@ function ImpactButton({
     none: { label: "Auto", icon: null, activeClass: "bg-primary text-primary-foreground border-primary" },
     time: { label: "Time", icon: <Clock className="size-3" />, activeClass: "bg-emerald-600 text-white border-emerald-600" },
     cost: { label: "Cost", icon: <DollarSign className="size-3" />, activeClass: "bg-blue-600 text-white border-blue-600" },
-    resources: { label: "Resources", icon: <Boxes className="size-3" />, activeClass: "bg-purple-600 text-white border-purple-600" },
+    resources: { label: "Resources", icon: <Boxes className="size-3" />, activeClass: "bg-primary text-primary-foreground border-primary" },
     custom: { label: customValue || "Custom", icon: <Pencil className="size-3" />, activeClass: "bg-orange-600 text-white border-orange-600" },
   };
 

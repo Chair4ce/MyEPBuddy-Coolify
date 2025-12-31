@@ -160,7 +160,7 @@ export function ArchiveEPBDialog({
           <>
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
-                <Archive className="size-5 text-violet-500" />
+                <Archive className="size-5 text-primary" />
                 Archive EPB
               </DialogTitle>
               <DialogDescription className="text-left">
@@ -255,7 +255,7 @@ export function ArchiveEPBDialog({
           <>
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
-                <Archive className="size-5 text-violet-500" />
+                <Archive className="size-5 text-primary" />
                 Name Your Archive
               </DialogTitle>
               <DialogDescription className="text-left">
@@ -322,7 +322,7 @@ export function ArchiveEPBDialog({
               <Button
                 onClick={handleArchive}
                 disabled={isArchiving}
-                className="w-full sm:w-auto gap-1.5 bg-violet-600 hover:bg-violet-700"
+                className="w-full sm:w-auto gap-1.5"
               >
                 {isArchiving ? (
                   <Loader2 className="size-4 animate-spin" />
@@ -340,14 +340,14 @@ export function ArchiveEPBDialog({
             {/* Success State */}
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
-                <CheckCircle2 className="size-5 text-violet-500" />
+                <CheckCircle2 className="size-5 text-primary" />
                 EPB Archived Successfully!
               </DialogTitle>
             </DialogHeader>
 
             <div className="py-8 text-center space-y-4">
-              <div className="size-16 mx-auto rounded-full bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center">
-                <Sparkles className="size-8 text-violet-600 dark:text-violet-400" />
+              <div className="size-16 mx-auto rounded-full bg-primary/10 flex items-center justify-center">
+                <Sparkles className="size-8 text-primary" />
               </div>
               <div>
                 <p className="text-2xl font-bold">

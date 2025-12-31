@@ -91,7 +91,7 @@ const CURSOR_COLORS = [
   "#22c55e", // green
   "#06b6d4", // cyan
   "#3b82f6", // blue
-  "#8b5cf6", // violet
+  "#3b82f6", // blue
   "#ec4899", // pink
 ];
 

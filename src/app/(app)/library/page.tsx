@@ -1120,7 +1120,7 @@ export default function LibraryPage() {
                 className={cn(
                   "flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors",
                   editedUseAsLlmExample
-                    ? "bg-violet-50 dark:bg-violet-950/20 border-violet-300 dark:border-violet-800"
+                    ? "bg-primary/5 border-primary/30"
                     : "bg-card hover:bg-muted/50"
                 )}
               >
@@ -1131,7 +1131,7 @@ export default function LibraryPage() {
                 />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <Sparkles className={cn("size-4", editedUseAsLlmExample ? "text-violet-600" : "text-muted-foreground")} />
+                    <Sparkles className={cn("size-4", editedUseAsLlmExample ? "text-primary" : "text-muted-foreground")} />
                     <span className="text-sm font-medium">Include in AI Prompt as Example</span>
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">

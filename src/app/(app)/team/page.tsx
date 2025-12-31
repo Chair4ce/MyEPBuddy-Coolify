@@ -1283,7 +1283,7 @@ export default function TeamPage() {
                                 : node.data.member_status === "archived"
                                 ? "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 border-gray-300"
                                 : node.data.member_status === "pending_link"
-                                ? "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border-purple-300"
+                                ? "bg-primary/10 text-primary border-primary/30"
                                 : isPlaceholder 
                                 ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border-amber-300"
                                 : "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 border-green-300"

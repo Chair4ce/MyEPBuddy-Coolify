@@ -201,7 +201,7 @@ export function EPBShellShareDialog({
       case "supervisor":
         return { label: "Supervisor", icon: Shield, color: "bg-green-500/10 text-green-600 border-green-500/30" };
       case "shared":
-        return { label: "Shared", icon: Share2, color: "bg-purple-500/10 text-purple-600 border-purple-500/30" };
+        return { label: "Shared", icon: Share2, color: "bg-primary/10 text-primary border-primary/30" };
     }
   };
 

@@ -123,9 +123,9 @@ export function ArchivedEPBHeader({
 
   return (
     <>
-      <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-violet-50 dark:bg-violet-950/20 border border-violet-200 dark:border-violet-800">
+      <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-primary/5 border border-primary/20">
         <div className="flex items-center gap-2 min-w-0">
-          <Archive className="size-4 text-violet-600 shrink-0" />
+          <Archive className="size-4 text-primary shrink-0" />
           <span className="text-sm font-medium truncate">{epbLabel}</span>
           <Badge variant="secondary" className="shrink-0 text-xs">
             {statementCount} statements
@@ -161,7 +161,7 @@ export function ArchivedEPBHeader({
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => openShareDialog("user")}>
-                <User className="size-4 mr-2 text-purple-500" />
+                <User className="size-4 mr-2 text-primary" />
                 Share with User...
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -187,7 +187,7 @@ export function ArchivedEPBHeader({
             <>
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
-                  <Share2 className="size-5 text-purple-500" />
+                  <Share2 className="size-5 text-primary" />
                   Share All Statements
                 </DialogTitle>
                 <DialogDescription>

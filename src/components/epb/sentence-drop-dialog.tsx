@@ -60,10 +60,10 @@ export function SentenceDropDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-md mx-auto">
+      <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-2xl mx-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Sparkles className="size-5 text-violet-500" />
+            <Sparkles className="size-5 text-primary" />
             Move Sentence
           </DialogTitle>
           <DialogDescription className="text-left">
@@ -75,51 +75,41 @@ export function SentenceDropDialog({
           {/* Source sentence preview */}
           <div className="space-y-2">
             <div className="flex items-center gap-2">
-              <span className={cn(
-                "text-xs font-bold px-1.5 py-0.5 rounded",
-                sourceIndex === 0 
-                  ? "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400" 
-                  : "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400"
-              )}>
+              <span className="text-sm font-bold px-2 py-1 rounded bg-primary/10 text-primary">
                 S{sourceIndex + 1}
               </span>
-              <span className="text-xs text-muted-foreground">
-                from {sourceMpaLabel} ({sourceSentence.text.length} chars)
+              <span className="text-sm text-muted-foreground">
+                from <span className="font-medium text-foreground">{sourceMpaLabel}</span> ({sourceSentence.text.length} chars)
               </span>
             </div>
-            <p className="text-xs text-muted-foreground bg-muted/50 p-2 rounded-md line-clamp-2">
+            <p className="text-sm text-foreground bg-muted/50 p-3 rounded-md border">
               {sourceSentence.text}
             </p>
           </div>
 
           {/* Arrow */}
           <div className="flex justify-center">
-            <div className="size-8 rounded-full bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center">
-              <ArrowLeftRight className="size-4 text-violet-600" />
+            <div className="size-10 rounded-full bg-primary/10 flex items-center justify-center">
+              <ArrowLeftRight className="size-5 text-primary" />
             </div>
           </div>
 
           {/* Target position preview */}
           <div className="space-y-2">
             <div className="flex items-center gap-2">
-              <span className={cn(
-                "text-xs font-bold px-1.5 py-0.5 rounded",
-                targetIndex === 0 
-                  ? "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400" 
-                  : "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400"
-              )}>
+              <span className="text-sm font-bold px-2 py-1 rounded bg-primary/10 text-primary">
                 S{targetIndex + 1}
               </span>
-              <span className="text-xs text-muted-foreground">
-                in {targetMpaLabel} {targetSentence ? `(${targetSentence.text.length} chars)` : "(empty)"}
+              <span className="text-sm text-muted-foreground">
+                in <span className="font-medium text-foreground">{targetMpaLabel}</span> {targetSentence ? `(${targetSentence.text.length} chars)` : "(empty)"}
               </span>
             </div>
             {targetSentence ? (
-              <p className="text-xs text-muted-foreground bg-muted/50 p-2 rounded-md line-clamp-2">
+              <p className="text-sm text-foreground bg-muted/50 p-3 rounded-md border">
                 {targetSentence.text}
               </p>
             ) : (
-              <p className="text-xs text-muted-foreground italic bg-muted/50 p-2 rounded-md">
+              <p className="text-sm text-muted-foreground italic bg-muted/50 p-3 rounded-md border border-dashed">
                 No existing sentence at this position
               </p>
             )}
@@ -127,8 +117,8 @@ export function SentenceDropDialog({
 
           {/* AI resize notice */}
           <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/50 border">
-            <Sparkles className="size-4 text-violet-500 shrink-0 mt-0.5" />
-            <p className="text-xs text-muted-foreground">
+            <Sparkles className="size-4 text-primary shrink-0 mt-0.5" />
+            <p className="text-sm text-muted-foreground">
               AI will automatically resize sentences to fit within the character limits 
               ({targetMaxChars} for {targetMpaLabel}{canSwap ? `, ${sourceMaxChars} for ${sourceMpaLabel}` : ""})
             </p>
@@ -164,7 +154,7 @@ export function SentenceDropDialog({
           <Button
             onClick={onReplace}
             disabled={isProcessing}
-            className="w-full sm:w-auto gap-1.5 bg-violet-600 hover:bg-violet-700"
+            className="w-full sm:w-auto gap-1.5"
           >
             {isProcessing ? (
               <Loader2 className="size-4 animate-spin" />
@@ -178,4 +168,3 @@ export function SentenceDropDialog({
     </Dialog>
   );
 }
-

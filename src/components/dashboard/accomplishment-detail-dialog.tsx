@@ -540,7 +540,7 @@ export function AccomplishmentDetailDialog({
                 onClick={() => setShowChain(!showChain)}
               >
                 <span className="flex items-center gap-2 text-sm font-medium">
-                  <GitBranch className="size-4 text-violet-500" />
+                  <GitBranch className="size-4 text-primary" />
                   Chain of Command
                 </span>
                 {showChain ? (

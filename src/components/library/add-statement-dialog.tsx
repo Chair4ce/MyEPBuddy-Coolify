@@ -598,7 +598,7 @@ export function AddStatementDialog({
             className={cn(
               "flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors",
               useAsLlmExample
-                ? "bg-violet-50 dark:bg-violet-950/20 border-violet-300 dark:border-violet-800"
+                ? "bg-primary/5 border-primary/30"
                 : "bg-card hover:bg-muted/50"
             )}
           >
@@ -609,7 +609,7 @@ export function AddStatementDialog({
             />
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <Sparkles className={cn("size-4", useAsLlmExample ? "text-violet-600" : "text-muted-foreground")} />
+                <Sparkles className={cn("size-4", useAsLlmExample ? "text-primary" : "text-muted-foreground")} />
                 <span className="text-sm font-medium">Use as AI Example</span>
               </div>
               <p className="text-xs text-muted-foreground mt-1">

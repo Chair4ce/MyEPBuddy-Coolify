@@ -117,7 +117,7 @@ export function StatementCard(props: StatementCardProps) {
                       <UsersIcon className="size-3.5 text-green-500" />
                     )}
                     {shares.some(s => s.share_type === "user") && (
-                      <User className="size-3.5 text-purple-500" />
+                      <User className="size-3.5 text-primary" />
                     )}
                   </div>
                 )}
@@ -244,7 +244,7 @@ export function StatementCard(props: StatementCardProps) {
                   </Badge>
                 )}
                 {statement.share_type === "user" && (
-                  <Badge variant="outline" className="text-xs shrink-0 gap-1 text-purple-600 border-purple-200 bg-purple-50 dark:bg-purple-900/20">
+                  <Badge variant="outline" className="text-xs shrink-0 gap-1 text-primary border-primary/20 bg-primary/5">
                     <User className="size-3" />
                     Direct
                   </Badge>

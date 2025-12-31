@@ -155,7 +155,7 @@ export function ActionSelectorSheet({
                 variant="outline"
                 className={cn(
                   statementNumber === 1 && "border-blue-500/50 text-blue-600",
-                  statementNumber === 2 && "border-purple-500/50 text-purple-600"
+                  statementNumber === 2 && "border-primary/50 text-primary"
                 )}
               >
                 Statement {statementNumber}

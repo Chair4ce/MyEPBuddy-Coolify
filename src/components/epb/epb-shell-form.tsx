@@ -42,6 +42,7 @@ import {
   Sparkles,
   ClipboardCheck,
   Archive,
+  Rows2,
 } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -104,6 +105,9 @@ export function EPBShellForm({
     setSectionCollapsed,
     expandAll,
     collapseAll,
+    splitViewSections,
+    toggleSplitView,
+    setAllSplitView,
     syncRemoteState,
     isLoadingShell,
     setIsLoadingShell,
@@ -1755,9 +1759,9 @@ export function EPBShellForm({
                         {sharedEPBOptions.map((opt) => (
                           <SelectItem key={opt.value} value={opt.value}>
                             <span className="flex items-center gap-2">
-                              <Share2 className="size-4 text-purple-500" />
+                              <Share2 className="size-4 text-primary" />
                               {opt.label}
-                              <Badge variant="secondary" className="text-[10px] bg-purple-500/10 text-purple-600 border-purple-500/30">
+                              <Badge variant="secondary" className="text-[10px] bg-primary/10 text-primary border-primary/30">
                                 Shared
                               </Badge>
                             </span>
@@ -1835,7 +1839,7 @@ export function EPBShellForm({
             disabled={isTogglingMode}
             className={cn(
               "h-7 sm:h-8 gap-1.5 sm:gap-2 rounded-full px-2 sm:px-4 text-xs sm:text-sm",
-              isMultiUserMode && "bg-violet-600 hover:bg-violet-700"
+              isMultiUserMode && "bg-primary hover:bg-primary/90"
             )}
             title={isMultiUserMode ? "Collaboration enabled" : "Enable collaboration"}
           >
@@ -1925,6 +1929,27 @@ export function EPBShellForm({
             </>
           )}
         </Button>
+        
+        {/* Split View Toggle */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setAllSplitView(!Object.values(splitViewSections).some(Boolean))}
+              className={cn(
+                "h-8 px-3 text-sm",
+                Object.values(splitViewSections).some(Boolean) && "text-primary border-primary/30"
+              )}
+            >
+              <Rows2 className="size-4 mr-1.5" />
+              <span className="hidden sm:inline">Split View</span>
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>Toggle split sentence view for all MPAs</p>
+          </TooltipContent>
+        </Tooltip>
         
         {/* Assessment Button - Top */}
         {isEPBReadyForAssessment() && (
@@ -2066,6 +2091,9 @@ export function EPBShellForm({
                 onSentenceDragEnd={handleSentenceDragEnd}
                 onSentenceDrop={handleSentenceDrop}
                 draggedSentence={draggedSentence}
+                // Split view
+                isSplitView={splitViewSections[mpa.key] ?? false}
+                onToggleSplitView={() => toggleSplitView(mpa.key)}
               />
             </div>
           );

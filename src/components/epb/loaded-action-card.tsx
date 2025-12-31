@@ -46,7 +46,7 @@ export function LoadedActionCard({
         "rounded-lg border bg-card transition-all duration-200",
         isExpanded ? "shadow-sm" : "shadow-none",
         statementNumber === 1 && "border-l-2 border-l-blue-500",
-        statementNumber === 2 && "border-l-2 border-l-purple-500"
+        statementNumber === 2 && "border-l-2 border-l-primary"
       )}
     >
       {/* Header - Always visible */}
@@ -74,7 +74,7 @@ export function LoadedActionCard({
               className={cn(
                 "text-[10px] shrink-0",
                 statementNumber === 1 && "border-blue-500/50 text-blue-600",
-                statementNumber === 2 && "border-purple-500/50 text-purple-600"
+                statementNumber === 2 && "border-primary/50 text-primary"
               )}
             >
               S{statementNumber}

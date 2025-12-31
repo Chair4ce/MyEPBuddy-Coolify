@@ -39,9 +39,9 @@ const AWARD_TYPE_COLORS: Record<AwardType, { bg: string; text: string; border: s
     border: "border-blue-300 dark:border-blue-700",
   },
   annual: {
-    bg: "bg-purple-100 dark:bg-purple-900/30",
-    text: "text-purple-700 dark:text-purple-300",
-    border: "border-purple-300 dark:border-purple-700",
+    bg: "bg-primary/10",
+    text: "text-primary",
+    border: "border-primary/30",
   },
   special: {
     bg: "bg-emerald-100 dark:bg-emerald-900/30",
@@ -54,7 +54,7 @@ const AWARD_TYPE_COLORS: Record<AwardType, { bg: string; text: string; border: s
 const LEVEL_COLORS: Record<AwardLevel, string> = {
   squadron: "text-slate-600 dark:text-slate-400",
   group: "text-blue-600 dark:text-blue-400",
-  wing: "text-purple-600 dark:text-purple-400",
+  wing: "text-primary",
   majcom: "text-amber-600 dark:text-amber-400",
   haf: "text-emerald-600 dark:text-emerald-400",
 };

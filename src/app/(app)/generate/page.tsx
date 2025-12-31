@@ -393,7 +393,7 @@ export default function GeneratePage() {
                   {cycleYear}
                 </Badge>
                 {currentShell?.status === 'archived' && (
-                  <Badge variant="secondary" className="shrink-0 text-[10px] sm:text-xs bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400">
+                  <Badge variant="secondary" className="shrink-0 text-[10px] sm:text-xs bg-primary/10 text-primary">
                     Archived
                   </Badge>
                 )}

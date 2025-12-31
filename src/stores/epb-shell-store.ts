@@ -65,6 +65,9 @@ interface EPBShellState {
   // Collapsed state for each MPA section
   collapsedSections: Record<string, boolean>;
   
+  // Split view state for each MPA section (shows S1/S2 separately)
+  splitViewSections: Record<string, boolean>;
+  
   // Duty description draft state
   dutyDescriptionDraft: string;
   isDutyDescriptionDirty: boolean;
@@ -103,6 +106,11 @@ interface EPBShellState {
   setAllCollapsedSections: (collapsedSections: Record<string, boolean>) => void;
   expandAll: () => void;
   collapseAll: () => void;
+  
+  // Split view management
+  toggleSplitView: (mpa: string) => void;
+  setSplitView: (mpa: string, enabled: boolean) => void;
+  setAllSplitView: (enabled: boolean) => void;
   
   // Bulk state updates for collaboration sync
   syncRemoteState: (sections: Record<string, { draftText: string; mode: string }>, collapsedSections: Record<string, boolean>) => void;
@@ -158,6 +166,7 @@ export const useEPBShellStore = create<EPBShellState>((set, get) => ({
   savedExamples: {},
   sectionStates: {},
   collapsedSections: {},
+  splitViewSections: {},
   dutyDescriptionDraft: "",
   isDutyDescriptionDirty: false,
   isSavingDutyDescription: false,
@@ -179,6 +188,7 @@ export const useEPBShellStore = create<EPBShellState>((set, get) => ({
       currentShell: null,
       sections: {},
       sectionStates: {},
+      splitViewSections: {},
       snapshots: {},
       savedExamples: {},
       autosaveTimers: {},
@@ -323,6 +333,31 @@ export const useEPBShellStore = create<EPBShellState>((set, get) => ({
     })),
 
   expandAll: () => set({ collapsedSections: {} }),
+  
+  toggleSplitView: (mpa) =>
+    set((state) => ({
+      splitViewSections: {
+        ...state.splitViewSections,
+        [mpa]: !state.splitViewSections[mpa],
+      },
+    })),
+    
+  setSplitView: (mpa, enabled) =>
+    set((state) => ({
+      splitViewSections: {
+        ...state.splitViewSections,
+        [mpa]: enabled,
+      },
+    })),
+    
+  setAllSplitView: (enabled) =>
+    set((state) => {
+      const splitViewSections: Record<string, boolean> = {};
+      Object.keys(state.sections).forEach((mpa) => {
+        splitViewSections[mpa] = enabled;
+      });
+      return { splitViewSections };
+    }),
 
   collapseAll: () =>
     set((state) => {
@@ -406,6 +441,7 @@ export const useEPBShellStore = create<EPBShellState>((set, get) => ({
       savedExamples: {},
       sectionStates: {},
       collapsedSections: {},
+      splitViewSections: {},
       dutyDescriptionDraft: "",
       isDutyDescriptionDirty: false,
       isSavingDutyDescription: false,

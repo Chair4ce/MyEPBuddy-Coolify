@@ -193,7 +193,7 @@ export function AwardShellShareDialog({
       case "owner":
         return { label: "Owner", icon: Crown, color: "bg-amber-500/10 text-amber-600 border-amber-500/30" };
       case "supervisor":
-        return { label: "Supervisor", icon: Shield, color: "bg-purple-500/10 text-purple-600 border-purple-500/30" };
+        return { label: "Supervisor", icon: Shield, color: "bg-primary/10 text-primary border-primary/30" };
       case "shared":
         return { label: "Shared", icon: Share2, color: "bg-green-500/10 text-green-600 border-green-500/30" };
     }

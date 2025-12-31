@@ -544,7 +544,7 @@ export default function SettingsPage() {
             <div
               className={`px-3 py-1.5 rounded-full text-sm font-medium ${
                 profile?.role === "admin"
-                  ? "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300"
+                  ? "bg-primary/10 text-primary"
                   : "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300"
               }`}
             >
