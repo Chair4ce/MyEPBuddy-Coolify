@@ -49,6 +49,9 @@ import { useUserStore } from "@/stores/user-store";
 import { useEPBShellStore, type SelectedRatee } from "@/stores/epb-shell-store";
 import { MPASectionCard } from "./mpa-section-card";
 import { DutyDescriptionCard } from "./duty-description-card";
+import type { DraggedSentence } from "./sentence-pills";
+import { SentenceDropDialog } from "./sentence-drop-dialog";
+import { parseStatement, combineSentences, type ParsedSentence } from "@/lib/sentence-utils";
 import { RealtimeCursors } from "./realtime-cursors";
 import { useEPBCollaboration } from "@/hooks/use-epb-collaboration";
 import { useSectionLocks } from "@/hooks/use-section-locks";
@@ -124,6 +127,20 @@ export function EPBShellForm({
   
   // EPB Archive state
   const [showArchiveDialog, setShowArchiveDialog] = useState(false);
+  
+  // Sentence drag-drop state
+  const [draggedSentence, setDraggedSentence] = useState<DraggedSentence | null>(null);
+  const [isAdaptingSentence, setIsAdaptingSentence] = useState(false);
+  const [pendingDrop, setPendingDrop] = useState<{
+    sourceMpa: string;
+    sourceIndex: number;
+    sourceSentence: ParsedSentence;
+    targetMpa: string;
+    targetIndex: number;
+    targetSentence: ParsedSentence | null;
+    sourceOtherSentence: ParsedSentence | null;
+    targetOtherSentence: ParsedSentence | null;
+  } | null>(null);
   
   // One-time tip for duty description
   const [hasDismissedDutyDescriptionTip, setHasDismissedDutyDescriptionTip] = useState(() => {
@@ -342,6 +359,208 @@ export function EPBShellForm({
       setCurrentShell({ ...currentShell, duty_description_complete: !newValue });
       toast.error("Failed to update completion status");
       console.error("Toggle duty description complete error:", error);
+    }
+  };
+
+  // Sentence drag-drop handlers
+  const handleSentenceDragStart = (data: DraggedSentence) => {
+    setDraggedSentence(data);
+  };
+
+  const handleSentenceDragEnd = () => {
+    setDraggedSentence(null);
+  };
+
+  const handleSentenceDrop = (
+    data: DraggedSentence,
+    targetMpa: string,
+    targetIndex: number
+  ) => {
+    if (!profile) return;
+    
+    const sourceSection = sections[data.sourceMpa];
+    const targetSection = sections[targetMpa];
+    
+    if (!sourceSection || !targetSection) {
+      toast.error("Could not find source or target section");
+      return;
+    }
+
+    // Parse both statements
+    const sourceParsed = parseStatement(sourceSection.statement_text);
+    const targetParsed = parseStatement(targetSection.statement_text);
+    
+    // Get the sentence being moved
+    const movingSentence = data.sentence;
+    
+    // Get the target's existing sentence at the drop position
+    const targetExistingSentence = targetParsed.sentences[targetIndex] || null;
+    
+    // Get the source's other sentence (the one staying)
+    const sourceOtherIndex = data.sourceIndex === 0 ? 1 : 0;
+    const sourceOtherSentence = sourceParsed.sentences[sourceOtherIndex] || null;
+    
+    // Get the target's other sentence (the one staying)
+    const targetOtherIndex = targetIndex === 0 ? 1 : 0;
+    const targetOtherSentence = targetParsed.sentences[targetOtherIndex] || null;
+
+    // Clear dragged state and show confirmation dialog
+    setDraggedSentence(null);
+    setPendingDrop({
+      sourceMpa: data.sourceMpa,
+      sourceIndex: data.sourceIndex,
+      sourceSentence: movingSentence,
+      targetMpa,
+      targetIndex,
+      targetSentence: targetExistingSentence,
+      sourceOtherSentence,
+      targetOtherSentence,
+    });
+  };
+
+  // Handle Replace action - just move the sentence, don't swap back
+  const handleSentenceReplace = async () => {
+    if (!pendingDrop) return;
+    
+    const { sourceMpa, sourceIndex, sourceSentence, targetMpa, targetIndex, sourceOtherSentence, targetOtherSentence } = pendingDrop;
+    
+    const targetMpaInfo = STANDARD_MGAS.find(m => m.key === targetMpa);
+    const targetMaxChars = targetMpa === "hlr_assessment" ? MAX_HLR_CHARACTERS : MAX_STATEMENT_CHARACTERS;
+
+    setIsAdaptingSentence(true);
+
+    try {
+      // Build new source statement (remove the moved sentence)
+      const newSourceStatement = sourceOtherSentence?.text || "";
+
+      // Build new target statement (add the moved sentence at target position)
+      let newTargetStatement: string;
+      if (targetIndex === 0) {
+        newTargetStatement = combineSentences(sourceSentence.text, targetOtherSentence?.text || "");
+      } else {
+        newTargetStatement = combineSentences(targetOtherSentence?.text || "", sourceSentence.text);
+      }
+
+      // Check if AI adaptation is needed for target
+      if (newTargetStatement.length > targetMaxChars) {
+        const targetS1 = targetIndex === 0 ? sourceSentence.text : (targetOtherSentence?.text || "");
+        const targetS2 = targetIndex === 1 ? sourceSentence.text : (targetOtherSentence?.text || "");
+        
+        const response = await fetch("/api/adapt-sentence", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sentence1: targetS1,
+            sentence2: targetS2,
+            targetMax: targetMaxChars,
+            mpaContext: targetMpaInfo?.label || targetMpa,
+            preserveSentenceIndex: targetIndex,
+          }),
+        });
+        
+        const result = await response.json();
+        if (result.adaptedStatement) {
+          newTargetStatement = result.adaptedStatement;
+        }
+      }
+
+      // Save both sections
+      await Promise.all([
+        handleSaveSection(sourceMpa, newSourceStatement),
+        handleSaveSection(targetMpa, newTargetStatement),
+      ]);
+
+      toast.success("Sentence moved successfully");
+    } catch (error) {
+      console.error("Sentence replace error:", error);
+      toast.error("Failed to move sentence");
+    } finally {
+      setIsAdaptingSentence(false);
+      setPendingDrop(null);
+    }
+  };
+
+  // Handle Swap action - exchange sentences between MPAs, both get AI resized
+  const handleSentenceSwap = async () => {
+    if (!pendingDrop || !pendingDrop.targetSentence) return;
+    
+    const { sourceMpa, sourceIndex, sourceSentence, targetMpa, targetIndex, targetSentence, sourceOtherSentence, targetOtherSentence } = pendingDrop;
+    
+    const sourceMpaInfo = STANDARD_MGAS.find(m => m.key === sourceMpa);
+    const targetMpaInfo = STANDARD_MGAS.find(m => m.key === targetMpa);
+    const sourceMaxChars = sourceMpa === "hlr_assessment" ? MAX_HLR_CHARACTERS : MAX_STATEMENT_CHARACTERS;
+    const targetMaxChars = targetMpa === "hlr_assessment" ? MAX_HLR_CHARACTERS : MAX_STATEMENT_CHARACTERS;
+
+    setIsAdaptingSentence(true);
+
+    try {
+      // Build new source statement (incoming sentence from target + other source sentence)
+      let newSourceStatement: string;
+      if (sourceIndex === 0) {
+        newSourceStatement = combineSentences(targetSentence.text, sourceOtherSentence?.text || "");
+      } else {
+        newSourceStatement = combineSentences(sourceOtherSentence?.text || "", targetSentence.text);
+      }
+
+      // Build new target statement (incoming sentence from source + other target sentence)
+      let newTargetStatement: string;
+      if (targetIndex === 0) {
+        newTargetStatement = combineSentences(sourceSentence.text, targetOtherSentence?.text || "");
+      } else {
+        newTargetStatement = combineSentences(targetOtherSentence?.text || "", sourceSentence.text);
+      }
+
+      // Always send BOTH to AI for resizing when swapping
+      const [sourceResponse, targetResponse] = await Promise.all([
+        fetch("/api/adapt-sentence", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sentence1: sourceIndex === 0 ? targetSentence.text : (sourceOtherSentence?.text || ""),
+            sentence2: sourceIndex === 1 ? targetSentence.text : (sourceOtherSentence?.text || ""),
+            targetMax: sourceMaxChars,
+            mpaContext: sourceMpaInfo?.label || sourceMpa,
+            preserveSentenceIndex: sourceIndex,
+          }),
+        }),
+        fetch("/api/adapt-sentence", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sentence1: targetIndex === 0 ? sourceSentence.text : (targetOtherSentence?.text || ""),
+            sentence2: targetIndex === 1 ? sourceSentence.text : (targetOtherSentence?.text || ""),
+            targetMax: targetMaxChars,
+            mpaContext: targetMpaInfo?.label || targetMpa,
+            preserveSentenceIndex: targetIndex,
+          }),
+        }),
+      ]);
+
+      const [sourceResult, targetResult] = await Promise.all([
+        sourceResponse.json(),
+        targetResponse.json(),
+      ]);
+
+      if (sourceResult.adaptedStatement) {
+        newSourceStatement = sourceResult.adaptedStatement;
+      }
+      if (targetResult.adaptedStatement) {
+        newTargetStatement = targetResult.adaptedStatement;
+      }
+
+      // Save both sections
+      await Promise.all([
+        handleSaveSection(sourceMpa, newSourceStatement),
+        handleSaveSection(targetMpa, newTargetStatement),
+      ]);
+
+      toast.success("Sentences swapped successfully");
+    } catch (error) {
+      console.error("Sentence swap error:", error);
+      toast.error("Failed to swap sentences");
+    } finally {
+      setIsAdaptingSentence(false);
+      setPendingDrop(null);
     }
   };
 
@@ -1842,6 +2061,11 @@ export function EPBShellForm({
                 savedExamples={savedExamples[section.id] || []}
                 onSaveExample={(text, note) => handleSaveExample(mpa.key, text, note)}
                 onDeleteExample={(id) => handleDeleteExample(mpa.key, id)}
+                // Sentence drag-drop
+                onSentenceDragStart={handleSentenceDragStart}
+                onSentenceDragEnd={handleSentenceDragEnd}
+                onSentenceDrop={handleSentenceDrop}
+                draggedSentence={draggedSentence}
               />
             </div>
           );
@@ -1903,6 +2127,25 @@ export function EPBShellForm({
             // Increment load version to force re-render of components
             setLoadVersion((v) => v + 1);
           }}
+        />
+      )}
+
+      {/* Sentence Drop Confirmation Dialog */}
+      {pendingDrop && (
+        <SentenceDropDialog
+          isOpen={!!pendingDrop}
+          onClose={() => setPendingDrop(null)}
+          sourceMpaLabel={STANDARD_MGAS.find(m => m.key === pendingDrop.sourceMpa)?.label || pendingDrop.sourceMpa}
+          targetMpaLabel={STANDARD_MGAS.find(m => m.key === pendingDrop.targetMpa)?.label || pendingDrop.targetMpa}
+          sourceSentence={pendingDrop.sourceSentence}
+          targetSentence={pendingDrop.targetSentence}
+          sourceIndex={pendingDrop.sourceIndex}
+          targetIndex={pendingDrop.targetIndex}
+          sourceMaxChars={pendingDrop.sourceMpa === "hlr_assessment" ? MAX_HLR_CHARACTERS : MAX_STATEMENT_CHARACTERS}
+          targetMaxChars={pendingDrop.targetMpa === "hlr_assessment" ? MAX_HLR_CHARACTERS : MAX_STATEMENT_CHARACTERS}
+          isProcessing={isAdaptingSentence}
+          onReplace={handleSentenceReplace}
+          onSwap={handleSentenceSwap}
         />
       )}
     </div>

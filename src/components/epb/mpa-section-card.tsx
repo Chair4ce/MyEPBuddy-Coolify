@@ -46,6 +46,7 @@ import {
 import { useEPBShellStore, type MPAWorkspaceMode, type SourceType } from "@/stores/epb-shell-store";
 import { LoadedActionCard } from "./loaded-action-card";
 import { ActionSelectorSheet } from "./action-selector-sheet";
+import { SentencePills, type DraggedSentence } from "./sentence-pills";
 // Per-section collaboration removed - using page-level collaboration instead
 import type { EPBShellSection, EPBShellSnapshot, EPBSavedExample, Accomplishment } from "@/types/database";
 import { useStyleFeedback, getMpaCategory } from "@/hooks/use-style-feedback";
@@ -81,6 +82,11 @@ interface MPASectionCardProps {
   savedExamples?: EPBSavedExample[];
   onSaveExample?: (text: string, note?: string) => Promise<void>;
   onDeleteExample?: (id: string) => Promise<void>;
+  // Sentence drag-drop
+  onSentenceDragStart?: (data: DraggedSentence) => void;
+  onSentenceDragEnd?: () => void;
+  onSentenceDrop?: (data: DraggedSentence, targetMpa: string, targetIndex: number) => void;
+  draggedSentence?: DraggedSentence | null;
 }
 
 interface GenerateOptions {
@@ -198,6 +204,11 @@ export function MPASectionCard({
   savedExamples = [],
   onSaveExample,
   onDeleteExample,
+  // Sentence drag-drop
+  onSentenceDragStart,
+  onSentenceDragEnd,
+  onSentenceDrop,
+  draggedSentence,
 }: MPASectionCardProps) {
   const { mpa, isHLR, maxChars } = getMPAInfo(section.mpa);
   
@@ -883,9 +894,27 @@ export function MPASectionCard({
               
               {/* Action bar below textarea */}
               <div className="flex items-center justify-between gap-2">
-                <span className={cn("text-xs tabular-nums", getCharacterCountColor(charCount, maxChars))}>
-                  {charCount}/{maxChars}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className={cn("text-xs tabular-nums", getCharacterCountColor(charCount, maxChars))}>
+                    {charCount}/{maxChars}
+                  </span>
+                  
+                  {/* Inline Sentence Pills for drag-drop swap */}
+                  {!isHLR && (hasContent || draggedSentence) && (
+                    <SentencePills
+                      statementText={localText}
+                      mpaKey={section.mpa}
+                      mpaLabel={mpa?.label || section.mpa}
+                      maxChars={maxChars}
+                      onDragStart={onSentenceDragStart}
+                      onDragEnd={onSentenceDragEnd}
+                      onDrop={(data, targetIndex) => onSentenceDrop?.(data, section.mpa, targetIndex)}
+                      draggedSentence={draggedSentence}
+                      disabled={isLockedByOther}
+                    />
+                  )}
+                </div>
+                
                 <div className="flex items-center gap-1">
                   {hasUnsavedChanges && (
                     <button 
