@@ -123,7 +123,7 @@ export function AccomplishmentDetailDialog({
         date: accomplishment.date,
         action_verb: accomplishment.action_verb,
         details: accomplishment.details,
-        impact: accomplishment.impact,
+        impact: accomplishment.impact || "",
         metrics: accomplishment.metrics || "",
         mpa: accomplishment.mpa,
         tags: Array.isArray(accomplishment.tags) ? accomplishment.tags.join(", ") : "",
