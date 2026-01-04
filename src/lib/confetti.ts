@@ -1,9 +1,10 @@
 import confetti from "canvas-confetti";
 
-// Disable web worker to avoid CSP issues
+// Confetti config with high z-index to appear above dialogs/modals
 const confettiConfig = {
-  useWorker: false,
+  useWorker: true,
   disableForReducedMotion: true,
+  zIndex: 99999,
 };
 
 // Standard celebration for new entry

@@ -61,7 +61,7 @@ export interface Accomplishment {
   date: string;
   action_verb: string;
   details: string;
-  impact: string;
+  impact: string | null; // Optional impact/result
   metrics: string | null;
   mpa: string;
   tags: string[];
@@ -856,7 +856,7 @@ export interface Database {
           date: string;
           action_verb: string;
           details: string;
-          impact: string;
+          impact: string | null;
           metrics: string | null;
           mpa: string;
           tags: Json;
@@ -872,7 +872,7 @@ export interface Database {
           date: string;
           action_verb: string;
           details: string;
-          impact: string;
+          impact?: string | null;
           metrics?: string | null;
           mpa: string;
           tags?: Json;
@@ -885,7 +885,7 @@ export interface Database {
           date?: string;
           action_verb?: string;
           details?: string;
-          impact?: string;
+          impact?: string | null;
           metrics?: string | null;
           mpa?: string;
           tags?: Json;

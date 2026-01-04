@@ -31,6 +31,7 @@ const securityHeaders = [
       `img-src ${imageSources}`,
       "font-src 'self' https://fonts.gstatic.com",
       `connect-src 'self' https://*.supabase.co https://api.openai.com https://api.anthropic.com https://generativelanguage.googleapis.com https://va.vercel-scripts.com wss://*.supabase.co ${localSupabaseUrls}`.trim(),
+      "worker-src 'self' blob:",
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'",

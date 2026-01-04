@@ -71,7 +71,7 @@ export function ActionSelectorSheet({
         (a) =>
           a.action_verb.toLowerCase().includes(query) ||
           a.details.toLowerCase().includes(query) ||
-          a.impact.toLowerCase().includes(query)
+          (a.impact && a.impact.toLowerCase().includes(query))
       );
     }
 
@@ -272,9 +272,11 @@ export function ActionSelectorSheet({
                           <p className="text-xs text-muted-foreground line-clamp-2">
                             {action.details}
                           </p>
-                          <p className="text-xs text-muted-foreground/70 line-clamp-1">
-                            Impact: {action.impact}
-                          </p>
+                          {action.impact && (
+                            <p className="text-xs text-muted-foreground/70 line-clamp-1">
+                              Impact: {action.impact}
+                            </p>
+                          )}
                         </div>
                       </div>
                     </button>

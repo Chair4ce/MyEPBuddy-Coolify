@@ -16,7 +16,7 @@ interface AccomplishmentData {
   mpa: string;
   action_verb: string;
   details: string;
-  impact: string;
+  impact: string | null;
   metrics?: string | null;
 }
 
@@ -774,8 +774,8 @@ ALL ACCOMPLISHMENTS FOR THIS CYCLE:
 ${accomplishments
   .map(
     (a, i) => `
-[${i + 1}] [${a.mpa}] ${a.action_verb}: ${a.details}
-    Impact: ${a.impact}${a.metrics ? ` | Metrics: ${a.metrics}` : ""}
+[${i + 1}] [${a.mpa}] ${a.action_verb}: ${a.details}${a.impact ? `
+    Impact: ${a.impact}` : ""}${a.metrics ? ` | Metrics: ${a.metrics}` : ""}
 `
   )
   .join("")}
@@ -823,8 +823,8 @@ RATEE: ${rateeRank} | AFSC: ${rateeAfsc || "N/A"}
 
 SOURCE ACCOMPLISHMENT:
 Action: ${acc.action_verb}
-Details: ${acc.details}
-Impact: ${acc.impact}
+Details: ${acc.details}${acc.impact ? `
+Impact: ${acc.impact}` : ""}
 ${acc.metrics ? `Metrics: ${acc.metrics}` : ""}
 
 ${mpaExamples.length > 0 ? `
@@ -914,8 +914,8 @@ ${mpaAccomplishments
   .map(
     (a, i) => `
 [${i + 1}] Action: ${a.action_verb}
-    Details: ${a.details}
-    Impact: ${a.impact}
+    Details: ${a.details}${a.impact ? `
+    Impact: ${a.impact}` : ""}
     ${a.metrics ? `Metrics: ${a.metrics}` : ""}
 `
   )

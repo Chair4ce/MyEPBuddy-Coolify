@@ -225,10 +225,7 @@ function EntriesContent() {
     <div className="space-y-6 w-full max-w-7xl">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Entries</h1>
-          <p className="text-muted-foreground">
-            Track and manage your accomplishments for the {cycleYear} cycle
-          </p>
+          <h1 className="text-2xl font-bold tracking-tight">Accomplishments</h1>
         </div>
         <Button onClick={() => setDialogOpen(true)}>
           <Plus className="size-4 mr-2" />
@@ -443,11 +440,14 @@ function EntriesContent() {
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
                                   <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                  <AlertDialogAction
-                                    onClick={() => handleDelete(entry.id)}
-                                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                  >
-                                    Delete
+                                  <AlertDialogAction asChild>
+                                    <Button
+                                      variant="destructive"
+                                      className="text-[#ffffff]"
+                                      onClick={() => handleDelete(entry.id)}
+                                    >
+                                      Delete
+                                    </Button>
                                   </AlertDialogAction>
                                 </AlertDialogFooter>
                               </AlertDialogContent>
@@ -472,8 +472,7 @@ function EntriesContent() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-2 flex-wrap">
                       <Badge variant="outline">
-                        {mgas.find((m) => m.key === entry.mpa)?.label ||
-                          entry.mpa}
+                        {mgas.find((m) => m.key === entry.mpa)?.label || entry.mpa}
                       </Badge>
                       <span className="text-sm text-muted-foreground">
                         {new Date(entry.date).toLocaleDateString("en-US", {
@@ -537,11 +536,14 @@ function EntriesContent() {
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                           <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={() => handleDelete(entry.id)}
-                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                          >
-                            Delete
+                          <AlertDialogAction asChild>
+                            <Button
+                              variant="destructive"
+                              className="text-[#ffffff]"
+                              onClick={() => handleDelete(entry.id)}
+                            >
+                              Delete
+                            </Button>
                           </AlertDialogAction>
                         </AlertDialogFooter>
                       </AlertDialogContent>
@@ -556,12 +558,14 @@ function EntriesContent() {
                   </p>
                   <p className="text-sm">{entry.details}</p>
                 </div>
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">
-                    Impact
-                  </p>
-                  <p className="text-sm">{entry.impact}</p>
-                </div>
+                {entry.impact && (
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">
+                      Impact
+                    </p>
+                    <p className="text-sm">{entry.impact}</p>
+                  </div>
+                )}
                 {entry.metrics && (
                   <div>
                     <p className="text-sm font-medium text-muted-foreground">

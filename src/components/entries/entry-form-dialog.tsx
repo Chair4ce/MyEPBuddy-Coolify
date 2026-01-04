@@ -74,9 +74,9 @@ export function EntryFormDialog({
         date: editEntry.date,
         action_verb: editEntry.action_verb,
         details: editEntry.details,
-        impact: editEntry.impact,
+        impact: editEntry.impact || "",
         metrics: editEntry.metrics || "",
-        mpa: editEntry.mpa,
+        mpa: editEntry.mpa || "miscellaneous", // Default to Miscellaneous if null
         tags: Array.isArray(editEntry.tags) ? editEntry.tags.join(", ") : "",
       });
     } else {
@@ -86,16 +86,16 @@ export function EntryFormDialog({
         details: "",
         impact: "",
         metrics: "",
-        mpa: mgas[0]?.key || "",
+        mpa: "executing_mission", // Default to Executing the Mission
         tags: "",
       });
     }
-  }, [editEntry, open, mgas]);
+  }, [editEntry, open]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
-    if (!form.action_verb || !form.details || !form.impact || !form.mpa) {
+    if (!form.action_verb || !form.details) {
       toast.error("Please fill in all required fields");
       return;
     }
@@ -121,7 +121,7 @@ export function EntryFormDialog({
           date: form.date,
           action_verb: form.action_verb,
           details: form.details,
-          impact: form.impact,
+          impact: form.impact || null,
           metrics: form.metrics || null,
           mpa: form.mpa,
           tags,
@@ -144,7 +144,7 @@ export function EntryFormDialog({
           date: form.date,
           action_verb: form.action_verb,
           details: form.details,
-          impact: form.impact,
+          impact: form.impact || null,
           metrics: form.metrics || null,
           mpa: form.mpa,
           tags,
@@ -181,11 +181,8 @@ export function EntryFormDialog({
       <DialogContent className="w-[calc(100%-1rem)] max-w-2xl max-h-[85dvh] overflow-y-auto p-4 sm:p-6">
         <DialogHeader className="pr-6">
           <DialogTitle className="text-base sm:text-lg">
-            {editEntry ? "Edit Entry" : "New Accomplishment Entry"}
+            {editEntry ? "Edit Entry" : "Add Accomplishment"}
           </DialogTitle>
-          <DialogDescription className="text-xs sm:text-sm">
-            Record your accomplishment with action, details, and impact.
-          </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-4">
@@ -204,7 +201,7 @@ export function EntryFormDialog({
             </div>
 
             <div className="space-y-1.5 sm:space-y-2">
-              <Label htmlFor="mpa" className="text-sm">Major Performance Area *</Label>
+              <Label htmlFor="mpa" className="text-sm">Major Performance Area</Label>
               <Select
                 value={form.mpa}
                 onValueChange={(value) => setForm({ ...form, mpa: value })}
@@ -254,9 +251,9 @@ export function EntryFormDialog({
 
           <div className="space-y-1.5 sm:space-y-2">
             <Label htmlFor="impact" className="text-sm">
-              Impact/Result *
+              Impact/Result
               <span className="text-muted-foreground font-normal ml-1 sm:ml-2 text-xs sm:text-sm">
-                What was the outcome?
+                (optional) What was the outcome?
               </span>
             </Label>
             <Textarea
@@ -264,7 +261,6 @@ export function EntryFormDialog({
               placeholder="Describe the impact, results, or benefits..."
               value={form.impact}
               onChange={(e) => setForm({ ...form, impact: e.target.value })}
-              required
               className="min-h-[60px] sm:min-h-[80px] resize-y text-sm"
               aria-label="Impact or result"
             />
@@ -304,7 +300,7 @@ export function EntryFormDialog({
             />
           </div>
 
-          <DialogFooter className="pt-2 sm:pt-4 gap-2 sm:gap-0">
+          <DialogFooter className="pt-2 sm:pt-4 gap-4">
             <Button
               type="button"
               variant="outline"

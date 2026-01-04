@@ -483,15 +483,17 @@ export function AccomplishmentDetailDialog({
                   </div>
 
                   {/* Impact */}
-                  <div className="space-y-2">
-                    <h4 className="text-sm font-medium flex items-center gap-2">
-                      <BarChart3 className="size-4 text-emerald-500 shrink-0" />
-                      Impact & Results
-                    </h4>
-                    <p className="text-sm leading-relaxed break-words">
-                      {accomplishment.impact}
-                    </p>
-                  </div>
+                  {accomplishment.impact && (
+                    <div className="space-y-2">
+                      <h4 className="text-sm font-medium flex items-center gap-2">
+                        <BarChart3 className="size-4 text-emerald-500 shrink-0" />
+                        Impact & Results
+                      </h4>
+                      <p className="text-sm leading-relaxed break-words">
+                        {accomplishment.impact}
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 {/* Metrics and Tags row */}

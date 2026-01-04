@@ -9,6 +9,7 @@ export const ENTRY_MGAS: MajorGradedArea[] = [
   { key: "leading_people", label: "Leading People" },
   { key: "managing_resources", label: "Managing Resources" },
   { key: "improving_unit", label: "Improving the Unit" },
+  { key: "miscellaneous", label: "Miscellaneous" },
 ];
 
 // All MPAs including HLR (for statement generation)
@@ -23,6 +24,7 @@ export const MPA_ABBREVIATIONS: Record<string, string> = {
   leading_people: "LP",
   managing_resources: "MR",
   improving_unit: "IU",
+  miscellaneous: "Misc",
   hlr_assessment: "HLR",
 };
 
