@@ -45,6 +45,8 @@ interface GenerateRequest {
   usedVerbs?: string[]; // Verbs already used in this cycle - avoid repeating
   generatePerAccomplishment?: boolean; // When true, generate one full statement per accomplishment
   dutyDescription?: string; // Optional - member's duty description for context
+  // HLR-specific: all EPB MPA statements for holistic assessment generation
+  epbStatements?: { mpa: string; label: string; statement: string }[];
 }
 
 // Overused/cliché verbs that should be avoided
@@ -460,15 +462,16 @@ export async function POST(request: Request) {
     }
 
     const body: GenerateRequest = await request.json();
-    const { rateeId, rateeRank, rateeAfsc, cycleYear, model, writingStyle, communityMpaFilter, communityAfscFilter, accomplishments, selectedMPAs, customContext, customContextOptions, generatePerAccomplishment, dutyDescription } = body;
+    const { rateeId, rateeRank, rateeAfsc, cycleYear, model, writingStyle, communityMpaFilter, communityAfscFilter, accomplishments, selectedMPAs, customContext, customContextOptions, generatePerAccomplishment, dutyDescription, epbStatements } = body;
 
-    // Either accomplishments or customContext must be provided
+    // Either accomplishments, customContext, or epbStatements must be provided
     const hasAccomplishments = accomplishments && accomplishments.length > 0;
     const hasCustomContext = customContext && customContext.trim().length > 0;
+    const hasEPBStatements = epbStatements && epbStatements.length > 0;
 
-    if (!rateeRank || (!hasAccomplishments && !hasCustomContext)) {
+    if (!rateeRank || (!hasAccomplishments && !hasCustomContext && !hasEPBStatements)) {
       return NextResponse.json(
-        { error: "Missing required fields - provide accomplishments or custom context" },
+        { error: "Missing required fields - provide accomplishments, custom context, or EPB statements" },
         { status: 400 }
       );
     }
@@ -531,13 +534,13 @@ export async function POST(request: Request) {
       const isHLR = mpa.key === "hlr_assessment";
       const mpaAccomplishments = isHLR ? accomplishments : (accomplishmentsByMPA[mpa.key] || []);
 
-      // Skip if no source material (unless using custom context)
-      if (!hasCustomContext && mpaAccomplishments.length === 0 && !isHLR) {
+      // Skip if no source material (unless using custom context or EPB statements for HLR)
+      if (!hasCustomContext && !hasEPBStatements && mpaAccomplishments.length === 0 && !isHLR) {
         continue;
       }
 
-      // Skip HLR if no accomplishments at all (but allow with custom context)
-      if (!hasCustomContext && isHLR && accomplishments.length === 0) {
+      // Skip HLR if no source material (accomplishments, custom context, or EPB statements)
+      if (isHLR && !hasCustomContext && !hasEPBStatements && accomplishments.length === 0) {
         continue;
       }
 
@@ -609,31 +612,41 @@ Assess how well the input aligns with this MPA. After generating statements, pro
           const impact2Instruction = buildImpactInstruction(impactFocus2, 2);
           
           if (isHLR) {
-            userPrompt = `REWRITE and TRANSFORM 2 pieces of raw input into HIGH-QUALITY Higher Level Reviewer (HLR) Assessment statements from the Commander's perspective.
+            // Build rank-appropriate promotion push language
+            const promotionLang = {
+              "AB": "promote ahead of peers", "Amn": "promote now, future NCO", 
+              "A1C": "promote to SrA immediately", "SrA": "my strongest BTZ recommendation",
+              "SSgt": "promote to TSgt now, ready for flight leadership",
+              "TSgt": "promote to MSgt immediately, SNCO material",
+              "MSgt": "promote to SMSgt now, ready for superintendent",
+              "SMSgt": "my #1 for CMSgt", "CMSgt": "the standard for our force"
+            };
+            const rankPromo = promotionLang[rateeRank as keyof typeof promotionLang] || "promote immediately";
+            
+            userPrompt = `REWRITE and TRANSFORM 2 pieces of raw input into HIGH-QUALITY HLR Assessment statements from the COMMANDER'S perspective.
 
 RATEE: ${rateeRank} | AFSC: ${rateeAfsc || "N/A"}
 
 ${charLimitText}
 
-=== RAW INPUT 1 (REWRITE THIS - DO NOT COPY VERBATIM) ===
+=== RAW INPUT 1 (REWRITE THIS) ===
 ${customContext}
 ${impact1Instruction}
 
-=== RAW INPUT 2 (REWRITE THIS - DO NOT COPY VERBATIM) ===
+=== RAW INPUT 2 (REWRITE THIS) ===
 ${customContext2}
 ${impact2Instruction}
 ${customDirInstruction}
-HLR TRANSFORMATION REQUIREMENTS:
-1. DO NOT copy input verbatim - REWRITE with Commander's voice and improved structure
-2. Generate 2 DISTINCT statements - one from each source context
-3. Both statements COMBINED must fit within ${effectiveMaxChars} characters (~${charLimitPerStatement} each)
-4. READABILITY IS KEY: Each statement must be scannable in 2-3 seconds
-5. Maximum 3-4 action clauses per statement - avoid laundry lists
-6. Place the STRONGEST IMPACT at the END of each statement
-7. Use PARALLEL verb structure throughout each statement
-8. Write from Commander's perspective - strategic endorsement
-9. Use definitive language: "My top performer", "Ready for immediate promotion"
-10. Convert any dashes (--) to commas for proper format
+
+THE ENDING IS CRITICAL - Each statement must END with a strong promotion push.
+For ${rateeRank}: "${rankPromo}"
+
+REQUIREMENTS:
+1. DO NOT copy input verbatim - REWRITE with Commander's voice
+2. Both statements COMBINED must fit within ${effectiveMaxChars} characters (~${charLimitPerStatement} each)
+3. Maximum 3-4 action clauses per statement - NO laundry lists
+4. END STRONG: Last phrase = promotion recommendation tied to their unique value
+5. Use definitive language: "My #1", "must promote", "ready for next level"
 
 Format as JSON array:
 ["Rewritten statement 1", "Rewritten statement 2"]`;
@@ -691,33 +704,40 @@ Format as JSON object:
           const impactInstruction = buildImpactInstruction(impactFocus);
           
           if (isHLR) {
-            userPrompt = `REWRITE and TRANSFORM the raw input into a HIGH-QUALITY Higher Level Reviewer (HLR) Assessment statement from the Commander's perspective.
+            // Build rank-appropriate promotion push language
+            const promotionLang = {
+              "AB": "promote ahead of peers", "Amn": "promote now, future NCO", 
+              "A1C": "promote to SrA immediately", "SrA": "my strongest BTZ recommendation",
+              "SSgt": "promote to TSgt now, ready for flight leadership",
+              "TSgt": "promote to MSgt immediately, SNCO material",
+              "MSgt": "promote to SMSgt now, ready for superintendent",
+              "SMSgt": "my #1 for CMSgt", "CMSgt": "the standard for our force"
+            };
+            const rankPromo = promotionLang[rateeRank as keyof typeof promotionLang] || "promote immediately";
+            
+            userPrompt = `REWRITE and TRANSFORM the raw input into a HIGH-QUALITY HLR Assessment statement from the COMMANDER'S perspective.
 
 RATEE: ${rateeRank} | AFSC: ${rateeAfsc || "N/A"}
 
-=== RAW INPUT (REWRITE THIS - DO NOT COPY VERBATIM) ===
+=== RAW INPUT (REWRITE THIS) ===
 ${customContext}
 ${impactInstruction}
 ${customDirInstruction}
-HLR TRANSFORMATION REQUIREMENTS:
-1. DO NOT copy input verbatim - REWRITE with Commander's voice and improved structure
+
+THE ENDING IS CRITICAL - The statement must END with a strong promotion push.
+For ${rateeRank}: "${rankPromo}"
+
+REQUIREMENTS:
+1. DO NOT copy input verbatim - REWRITE with Commander's voice
 2. ${charLimitText}
-3. READABILITY IS KEY: Statement must be scannable in 2-3 seconds
-4. Maximum 3-4 action clauses - avoid laundry lists of 5+ actions
-5. Place STRONGEST IMPACT at the END of the statement
-6. Use PARALLEL verb structure throughout
-7. Write from Commander's perspective - strategic endorsement
-8. Use definitive language: "My top performer", "Ready for immediate promotion"
-9. Convert any dashes (--) to commas for proper format
-
-CRITICAL - DO NOT FABRICATE:
-- NEVER invent numbers, dollar amounts, or metrics not in the input
-- If input is vague, enhance structure and language only, not content substance
-
-BANNED: "Spearheaded", "Orchestrated", "Synergized", "Leveraged", "Facilitated"
+3. Maximum 3-4 action clauses - NO laundry lists
+4. END STRONG: Last phrase = promotion recommendation tied to their unique value
+5. Highlight what makes THIS Airman uniquely valuable
 
 STRUCTURE:
-[Strategic assessment] + [Key accomplishment] + [BIGGEST IMPACT LAST]
+[Commander's assessment] + [Unique value from input] + [PROMOTION PUSH - what you want for them]
+
+BANNED: "Spearheaded", "Orchestrated", "Synergized", "Leveraged", "Facilitated"
 
 Format as JSON array:
 ["Rewritten HLR statement"]`;
@@ -764,11 +784,98 @@ Format as JSON object:
 {"statements": ["Rewritten statement"], "relevancy_score": 85}`;
           }
         }
-      } else if (isHLR) {
-        // HLR-specific prompt - Commander's perspective, holistic assessment
-        userPrompt = `Generate 2-3 HIGH-QUALITY Higher Level Reviewer (HLR) Assessment statements from the Commander's perspective.
+      } else if (isHLR && hasEPBStatements) {
+        // HLR from EPB Statements - Commander's holistic assessment from all MPA statements
+        // Build rank-appropriate promotion push language
+        const promotionLanguage = {
+          "AB": "promote ahead of peers, ready for increased responsibility",
+          "Amn": "promote now, future NCO in the making", 
+          "A1C": "promote to SrA immediately, exceptional potential",
+          "SrA": "my strongest BTZ recommendation, promote now",
+          "SSgt": "promote to TSgt now, ready to lead at flight level",
+          "TSgt": "promote to MSgt immediately, SNCO material today",
+          "MSgt": "promote to SMSgt now, ready for superintendent duties",
+          "SMSgt": "my #1 choice for CMSgt, promote immediately",
+          "CMSgt": "the standard for our enlisted force, retain and challenge"
+        };
+        const rankPromotion = promotionLanguage[rateeRank as keyof typeof promotionLanguage] || "promote immediately";
+        
+        userPrompt = `Generate 2-3 HIGH-QUALITY Higher Level Reviewer (HLR) Assessment statements from the COMMANDER'S perspective.
 
 RATEE: ${rateeRank} | AFSC: ${rateeAfsc || "N/A"}
+${dutyDescription ? `DUTY DESCRIPTION: ${dutyDescription}` : ""}
+
+=== THE MEMBER'S EPB STATEMENTS ===
+Review these MPA statements and extract what makes this Airman UNIQUELY VALUABLE:
+
+${epbStatements!.map((s) => `[${s.label}]
+${s.statement}
+`).join("\n")}
+
+=== COMMANDER'S HLR INTENT ===
+The HLR is the Commander's personal endorsement. You are writing AS THE COMMANDER who:
+1. KNOWS this Airman and their unique contributions
+2. ADVOCATES for their future - what role/responsibility do they deserve?
+3. PUNCHES THE ENDING with a strong promotion recommendation
+
+THE ENDING IS CRITICAL:
+Every HLR statement must END with a strong, definitive statement of what the Commander wants for this Airman.
+- NOT generic ("promote now") but SPECIFIC to their demonstrated performance
+- Connect their achievements to WHY they deserve the next level
+- For ${rateeRank}: Consider endings like "${rankPromotion}"
+
+EXAMPLES OF STRONG ENDINGS (tailor based on their actual achievements):
+- "...select for SMSgt now, ready to lead a flight today"
+- "...my #1 of 52 TSgts, give me 10 more just like this NCO"
+- "...promote immediately, future Superintendent in the making"
+- "...must promote, the backbone our squadron needs at the next level"
+- "...fast-track to Senior NCO, this is what right looks like"
+
+STRUCTURE:
+[Commander's assessment/ranking] + [UNIQUE value this Airman brings - synthesized from EPB] + [PROMOTION PUSH - what you want for them]
+
+REQUIREMENTS:
+1. TARGET: ${Math.floor(effectiveMaxChars * 0.65)}-${effectiveMaxChars} characters per statement
+2. SYNTHESIZE the EPB - identify 2-3 strongest themes across all MPAs
+3. Highlight what makes THIS Airman different/valuable
+4. Maximum 3-4 action clauses - NO laundry lists
+5. END STRONG: The last phrase should be the promotion recommendation
+
+GOOD EXAMPLES:
+"My #1 of 47 SSgts--this leader delivered 100% mission success across 12 contingency ops while developing 8 Amn to BTZ, promote to TSgt immediately, ready for flight leadership."
+
+"Exceptional NCO who saved $2.3M through innovative resource management and mentored our next generation of cyber warriors--must promote, exactly what we need at the Senior NCO level."
+
+BAD EXAMPLES (weak endings, generic):
+"Drove mission success and mentored Airmen, my strongest recommendation." (ending too generic)
+"Top performer, promote now." (no connection to their unique value)
+
+BANNED: "Spearheaded", "Orchestrated", "Synergized", "Leveraged", "Facilitated"
+
+Generate EXACTLY 2-3 statements. Each must END with a strong, specific promotion push.
+
+Format as JSON array only:
+["Statement 1", "Statement 2", "Statement 3"]`;
+      } else if (isHLR) {
+        // HLR-specific prompt - Commander's perspective, holistic assessment (from accomplishments)
+        // Build rank-appropriate promotion push language
+        const promotionLanguage = {
+          "AB": "promote ahead of peers, ready for increased responsibility",
+          "Amn": "promote now, future NCO in the making", 
+          "A1C": "promote to SrA immediately, exceptional potential",
+          "SrA": "my strongest BTZ recommendation, promote now",
+          "SSgt": "promote to TSgt now, ready to lead at flight level",
+          "TSgt": "promote to MSgt immediately, SNCO material today",
+          "MSgt": "promote to SMSgt now, ready for superintendent duties",
+          "SMSgt": "my #1 choice for CMSgt, promote immediately",
+          "CMSgt": "the standard for our enlisted force, retain and challenge"
+        };
+        const rankPromotion = promotionLanguage[rateeRank as keyof typeof promotionLanguage] || "promote immediately";
+        
+        userPrompt = `Generate 2-3 HIGH-QUALITY Higher Level Reviewer (HLR) Assessment statements from the COMMANDER'S perspective.
+
+RATEE: ${rateeRank} | AFSC: ${rateeAfsc || "N/A"}
+${dutyDescription ? `DUTY DESCRIPTION: ${dutyDescription}` : ""}
 
 ALL ACCOMPLISHMENTS FOR THIS CYCLE:
 ${accomplishments
@@ -780,30 +887,40 @@ ${accomplishments
   )
   .join("")}
 
-HLR ASSESSMENT REQUIREMENTS:
-1. TARGET: ${Math.floor(effectiveMaxChars * 0.65)}-${effectiveMaxChars} characters per statement. PRIORITIZE READABILITY.
-2. READABILITY IS #1 PRIORITY: Each statement must be scannable in 2-3 seconds by board members
-3. SENTENCE STRUCTURE (CRITICAL):
-   - Maximum 3-4 action clauses per statement - NO laundry lists of 5+ actions
-   - Use PARALLEL verb structure (consistent tense throughout)
-   - Place STRONGEST IMPACT and PROMOTION RECOMMENDATION at the END
-   - If it sounds like a run-on when read aloud, rewrite it
-4. Write from Commander's perspective - strategic endorsement
-5. Synthesize OVERALL performance across all MPAs into cohesive narrative
-6. Use definitive language: "My top performer", "Ready for immediate promotion"
+=== COMMANDER'S HLR INTENT ===
+The HLR is the Commander's personal endorsement. You are writing AS THE COMMANDER who:
+1. KNOWS this Airman and their unique contributions
+2. ADVOCATES for their future - what role/responsibility do they deserve?
+3. PUNCHES THE ENDING with a strong promotion recommendation
 
-STRUCTURE EACH STATEMENT:
-[Strategic assessment] + [Key accomplishment synthesis] + [BIGGEST IMPACT + PROMOTION REC LAST]
+THE ENDING IS CRITICAL:
+Every HLR statement must END with a strong, definitive statement of what the Commander wants for this Airman.
+For ${rateeRank}: Consider endings like "${rankPromotion}"
 
-GOOD EXAMPLE (readable, strong ending):
-"My #1 of 47 SSgts, drove 100% mission success across 12 contingency ops, mentored 8 Amn to BTZ, directed $2.3M equipment modernization, ready to lead at flight level."
+EXAMPLES OF STRONG ENDINGS:
+- "...select for SMSgt now, ready to lead a flight today"
+- "...my #1 of 52 TSgts, give me 10 more just like this NCO"
+- "...promote immediately, future Superintendent in the making"
+- "...must promote, the backbone our squadron needs at the next level"
 
-BAD EXAMPLE (run-on, laundry list):
-"My top performer, drove mission success, mentored Amn, directed modernization, enhanced capability, improved readiness, supported operations, my strongest recommendation."
+REQUIREMENTS:
+1. TARGET: ${Math.floor(effectiveMaxChars * 0.65)}-${effectiveMaxChars} characters per statement
+2. Maximum 3-4 action clauses - NO laundry lists
+3. Synthesize accomplishments into what makes this Airman UNIQUELY valuable
+4. END STRONG: The last phrase must be the promotion recommendation
+
+STRUCTURE:
+[Commander's assessment/ranking] + [Synthesized unique value] + [PROMOTION PUSH]
+
+GOOD EXAMPLE:
+"My #1 of 47 SSgts--drove 100% mission success across 12 contingency ops while developing 8 Amn to BTZ, promote to TSgt immediately, ready for flight leadership."
+
+BAD EXAMPLE (weak ending):
+"My top performer, drove mission success, mentored Amn, my strongest recommendation." (ending too generic)
 
 BANNED: "Spearheaded", "Orchestrated", "Synergized", "Leveraged", "Facilitated"
 
-Generate EXACTLY 2-3 statements. Each must be READABLE in 2-3 seconds.
+Generate EXACTLY 2-3 statements. Each must END with a strong, specific promotion push.
 
 Format as JSON array only:
 ["Statement 1", "Statement 2", "Statement 3"]`;

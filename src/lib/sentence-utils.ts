@@ -66,15 +66,16 @@ export function parseStatement(text: string): ParsedStatement {
       // Check if it's a percentage pattern like "90%."
       const isPercentage = i > 0 && normalized[i - 1] === '%';
       
-      // Check if next char is space followed by capital letter or end of string
+      // Check if next char is space followed by any letter or end of string
       const nextChar = normalized[i + 1];
       const charAfterSpace = normalized[i + 2];
       
-      // End of sentence if: end of string, OR space followed by capital letter
+      // End of sentence if: end of string, OR space followed by any letter (not just capital)
+      // This allows for cases like "Sentence one. and sentence two." to be split correctly
       const isEndOfSentence = !nextChar || 
-        (nextChar === ' ' && charAfterSpace && /[A-Z]/.test(charAfterSpace));
+        (nextChar === ' ' && charAfterSpace && /[A-Za-z]/.test(charAfterSpace));
       
-      // Also consider it end of sentence if percentage followed by space and capital
+      // Also consider it end of sentence if percentage followed by space and letter
       const isPercentageEnd = isPercentage && isEndOfSentence;
       
       if (!isAbbreviation && !isDecimal && (isEndOfSentence || isPercentageEnd)) {
@@ -138,20 +139,56 @@ export function parseStatement(text: string): ParsedStatement {
 }
 
 /**
+ * Sanitize text input - remove potentially harmful characters and normalize
+ * Preserves alphanumeric, common punctuation, and whitespace
+ */
+export function sanitizeStatementText(text: string): string {
+  if (!text) return "";
+  
+  // Remove null bytes and control characters (except newline, tab, carriage return)
+  let sanitized = text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
+  
+  // Normalize various unicode dashes and quotes to their ASCII equivalents
+  sanitized = sanitized
+    .replace(/[\u2018\u2019\u201A\u201B]/g, "'") // Single quotes
+    .replace(/[\u201C\u201D\u201E\u201F]/g, '"') // Double quotes
+    .replace(/[\u2010\u2011\u2012\u2013\u2014\u2015]/g, "-") // Dashes
+    .replace(/\u2026/g, "...") // Ellipsis character to three dots
+    .replace(/[\u00A0\u2000-\u200B\u202F\u205F\u3000]/g, " "); // Various spaces to regular space
+  
+  // Normalize multiple consecutive periods to single period (ellipsis handling)
+  sanitized = sanitized.replace(/\.{2,}/g, ".");
+  
+  // Collapse multiple spaces into one
+  sanitized = sanitized.replace(/\s+/g, " ");
+  
+  return sanitized.trim();
+}
+
+/**
  * Combine two sentences into a statement
+ * Both sentences will have periods added when combined
  */
 export function combineSentences(sentence1: string, sentence2: string): string {
-  const s1 = sentence1.trim();
-  const s2 = sentence2.trim();
+  // Sanitize and trim inputs
+  const s1 = sanitizeStatementText(sentence1);
+  const s2 = sanitizeStatementText(sentence2);
   
   if (!s1 && !s2) return "";
-  if (!s1) return s2;
-  if (!s2) return s1;
   
-  // Ensure first sentence ends with period
+  // Single sentence: add period if not present
+  if (!s1) {
+    return s2.endsWith('.') ? s2 : s2 + '.';
+  }
+  if (!s2) {
+    return s1.endsWith('.') ? s1 : s1 + '.';
+  }
+  
+  // Both sentences: ensure both end with periods
   const s1WithPeriod = s1.endsWith('.') ? s1 : s1 + '.';
+  const s2WithPeriod = s2.endsWith('.') ? s2 : s2 + '.';
   
-  return `${s1WithPeriod} ${s2}`;
+  return `${s1WithPeriod} ${s2WithPeriod}`;
 }
 
 /**

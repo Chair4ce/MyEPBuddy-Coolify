@@ -1439,6 +1439,8 @@ export function EPBShellForm({
       statement1Context?: string;
       statement2Context?: string;
       versionCount?: number;
+      // HLR-specific: use all EPB statements to generate holistic assessment
+      useEPBStatements?: boolean;
     }
   ): Promise<string[]> => {
     if (!selectedRatee) return [];
@@ -1477,6 +1479,19 @@ export function EPBShellForm({
       context = options.customContext || options.statement1Context || "";
     }
 
+    // Collect all MPA statements for HLR "Use EPB Statements" feature
+    let epbStatements: { mpa: string; label: string; statement: string }[] | undefined;
+    if (options.useEPBStatements && mpa === "hlr_assessment") {
+      const coreMPAs = ENTRY_MGAS.map((m) => m.key);
+      epbStatements = Object.values(sections)
+        .filter((s) => coreMPAs.includes(s.mpa) && s.mpa !== "hlr_assessment" && s.statement_text && s.statement_text.trim().length > 10)
+        .map((s) => ({
+          mpa: s.mpa,
+          label: STANDARD_MGAS.find((m) => m.key === s.mpa)?.label || s.mpa,
+          statement: s.statement_text,
+        }));
+    }
+
     try {
       // Generate multiple versions in parallel
       const generateOne = async (): Promise<string | null> => {
@@ -1502,6 +1517,8 @@ export function EPBShellForm({
               metrics: a.metrics,
             })),
             dutyDescription: currentShell?.duty_description || "",
+            // HLR-specific: pass all EPB statements for holistic assessment
+            epbStatements: options.useEPBStatements ? epbStatements : undefined,
           }),
         });
 
@@ -1631,6 +1648,15 @@ export function EPBShellForm({
     
     return sectionsWithContent.length > 0;
   }, [currentShell, sections]);
+
+  // Get count of MPA sections with meaningful content (for HLR "Use EPB Statements" feature)
+  // Excludes HLR itself since we're using other MPAs to generate HLR
+  const getFilledMPACount = useCallback(() => {
+    const coreMPAs = ENTRY_MGAS.map((m) => m.key);
+    return Object.values(sections).filter(
+      (s) => coreMPAs.includes(s.mpa) && s.mpa !== "hlr_assessment" && s.statement_text && s.statement_text.trim().length > 10
+    ).length;
+  }, [sections]);
 
   // Check if all core MPAs are complete
   const isEPBComplete = useCallback(() => {
@@ -2100,6 +2126,8 @@ export function EPBShellForm({
                 // Split view
                 isSplitView={splitViewSections[mpa.key] ?? false}
                 onToggleSplitView={() => toggleSplitView(mpa.key)}
+                // HLR-specific: count of MPA sections with content (for "Use EPB Statements" option)
+                epbStatementsCount={mpa.key === "hlr_assessment" ? getFilledMPACount() : 0}
               />
             </div>
           );

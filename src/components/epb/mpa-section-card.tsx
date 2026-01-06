@@ -93,6 +93,8 @@ interface MPASectionCardProps {
   // Split view mode
   isSplitView?: boolean;
   onToggleSplitView?: () => void;
+  // HLR-specific: EPB statements count for "Use EPB" source option
+  epbStatementsCount?: number;
 }
 
 interface GenerateOptions {
@@ -103,6 +105,8 @@ interface GenerateOptions {
   statement1Context?: string;
   statement2Context?: string;
   versionCount?: number;
+  // HLR-specific: use all EPB statements to generate holistic assessment
+  useEPBStatements?: boolean;
 }
 
 // Get MPA display info
@@ -113,7 +117,7 @@ function getMPAInfo(mpaKey: string) {
   return { mpa, isHLR, maxChars };
 }
 
-// Source toggle component
+// Source toggle component (2 options for regular MPAs)
 function SourceToggle({
   sourceType,
   onSourceChange,
@@ -155,6 +159,82 @@ function SourceToggle({
         <FileText className="size-3.5 sm:size-4" />
         <span className="font-medium hidden sm:inline">Custom Context</span>
         <span className="font-medium sm:hidden">Custom</span>
+      </button>
+    </div>
+  );
+}
+
+// HLR-specific source toggle with 3 options (includes EPB Summary)
+function HLRSourceToggle({
+  sourceType,
+  onSourceChange,
+  actionsCount,
+  epbStatementsCount,
+}: {
+  sourceType: SourceType;
+  onSourceChange: (source: SourceType) => void;
+  actionsCount: number;
+  epbStatementsCount: number;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5 p-1.5 sm:p-2 rounded-lg bg-muted/30 border">
+      {/* Top row: Actions and Custom */}
+      <div className="flex items-center gap-1.5">
+        <button
+          onClick={() => onSourceChange("actions")}
+          className={cn(
+            "flex-1 flex items-center justify-center gap-1 sm:gap-2 py-1.5 px-2 sm:px-3 rounded-md text-xs sm:text-sm transition-all",
+            sourceType === "actions"
+              ? "bg-primary text-primary-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted"
+          )}
+        >
+          <Zap className="size-3.5 sm:size-4" />
+          <span className="font-medium hidden sm:inline">Actions</span>
+          <span className="font-medium sm:hidden">Actions</span>
+          {actionsCount > 0 && sourceType === "actions" && (
+            <Badge variant="secondary" className="text-[9px] sm:text-[10px] bg-primary-foreground/20">
+              {actionsCount}
+            </Badge>
+          )}
+        </button>
+        <button
+          onClick={() => onSourceChange("custom")}
+          className={cn(
+            "flex-1 flex items-center justify-center gap-1 sm:gap-2 py-1.5 px-2 sm:px-3 rounded-md text-xs sm:text-sm transition-all",
+            sourceType === "custom"
+              ? "bg-primary text-primary-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted"
+          )}
+        >
+          <FileText className="size-3.5 sm:size-4" />
+          <span className="font-medium hidden sm:inline">Custom</span>
+          <span className="font-medium sm:hidden">Custom</span>
+        </button>
+      </div>
+      {/* Bottom row: EPB Summary (full width, highlighted for HLR) */}
+      <button
+        onClick={() => onSourceChange("epb-summary")}
+        className={cn(
+          "w-full flex items-center justify-center gap-1.5 sm:gap-2 py-2 px-3 rounded-md text-xs sm:text-sm transition-all",
+          sourceType === "epb-summary"
+            ? "bg-amber-600 text-white shadow-sm"
+            : "text-muted-foreground hover:text-foreground hover:bg-amber-100 dark:hover:bg-amber-900/30 border border-amber-300/50 dark:border-amber-700/50"
+        )}
+      >
+        <Crown className="size-3.5 sm:size-4" />
+        <span className="font-medium">Use EPB Statements</span>
+        {epbStatementsCount > 0 && (
+          <Badge 
+            variant="secondary" 
+            className={cn(
+              "text-[9px] sm:text-[10px]",
+              sourceType === "epb-summary" ? "bg-white/20" : "bg-amber-200/50 dark:bg-amber-800/50"
+            )}
+          >
+            {epbStatementsCount} MPAs
+          </Badge>
+        )}
       </button>
     </div>
   );
@@ -218,6 +298,8 @@ export function MPASectionCard({
   // Split view
   isSplitView = false,
   onToggleSplitView,
+  // HLR-specific
+  epbStatementsCount = 0,
 }: MPASectionCardProps) {
   const { mpa, isHLR, maxChars } = getMPAInfo(section.mpa);
   
@@ -639,6 +721,8 @@ export function MPASectionCard({
         statement1Context: state.statement1Context,
         statement2Context: state.statement2Context,
         versionCount: generateVersionCount,
+        // HLR-specific: use EPB statements when source type is "epb-summary"
+        useEPBStatements: state.sourceType === "epb-summary" && isHLR,
       });
       if (results.length > 0) {
         setGeneratedStatements(results);
@@ -758,7 +842,9 @@ export function MPASectionCard({
   // Check if we can generate
   const canGenerate = state.sourceType === "actions"
     ? (state.statement1ActionIds.length > 0 || (state.usesTwoStatements && state.statement2ActionIds.length > 0))
-    : state.statement1Context.trim().length > 0;
+    : state.sourceType === "epb-summary"
+      ? epbStatementsCount > 0
+      : state.statement1Context.trim().length > 0;
 
   return (
     <Card
@@ -919,6 +1005,11 @@ export function MPASectionCard({
                   maxChars={maxChars}
                   disabled={isLockedByOther}
                   placeholder={`Enter your ${mpa?.label || "statement"} here...`}
+                  mpaKey={section.mpa}
+                  onDragStart={onSentenceDragStart}
+                  onDragEnd={onSentenceDragEnd}
+                  onDrop={(data, targetIndex) => onSentenceDrop?.(data, section.mpa, targetIndex)}
+                  draggedSentence={draggedSentence}
                 />
               ) : (
                 <div className="relative">
@@ -931,7 +1022,7 @@ export function MPASectionCard({
                     placeholder={`Enter your ${mpa?.label || "statement"} here...`}
                     rows={5}
                     className={cn(
-                      "flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50 resize-none",
+                      "flex w-full rounded-md border-2 border-border/60 bg-transparent px-3 py-2 text-sm shadow-sm ring-1 ring-ring/10 transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50 resize-none",
                       isOverLimit && "border-destructive focus-visible:ring-destructive"
                     )}
                   />
@@ -1536,12 +1627,21 @@ export function MPASectionCard({
                   </h4>
                 </div>
 
-                {/* Source Toggle */}
-                <SourceToggle
-                  sourceType={state.sourceType}
-                  onSourceChange={(source) => updateSectionState(section.mpa, { sourceType: source })}
-                  actionsCount={mpaAccomplishments.length}
-                />
+                {/* Source Toggle - HLR gets 3 options including "Use EPB Statements" */}
+                {isHLR ? (
+                  <HLRSourceToggle
+                    sourceType={state.sourceType}
+                    onSourceChange={(source) => updateSectionState(section.mpa, { sourceType: source })}
+                    actionsCount={mpaAccomplishments.length}
+                    epbStatementsCount={epbStatementsCount}
+                  />
+                ) : (
+                  <SourceToggle
+                    sourceType={state.sourceType}
+                    onSourceChange={(source) => updateSectionState(section.mpa, { sourceType: source })}
+                    actionsCount={mpaAccomplishments.length}
+                  />
+                )}
 
                 {/* Two-statement toggle */}
                 <div className="flex items-center justify-between p-2 rounded-lg bg-background/50 border">
@@ -1670,6 +1770,29 @@ export function MPASectionCard({
                           rows={3}
                           className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] resize-none"
                         />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* EPB Summary source (HLR only) - uses all MPA statements for holistic assessment */}
+                {state.sourceType === "epb-summary" && isHLR && (
+                  <div className="space-y-3 p-3 rounded-lg bg-amber-50/50 dark:bg-amber-900/10 border border-amber-200/50 dark:border-amber-800/30">
+                    <div className="flex items-start gap-2">
+                      <Crown className="size-4 text-amber-600 shrink-0 mt-0.5" />
+                      <div className="space-y-1">
+                        <span className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                          Generate HLR from EPB Statements
+                        </span>
+                        <p className="text-xs text-muted-foreground">
+                          The AI will analyze all {epbStatementsCount} MPA statements in your EPB to generate a holistic 
+                          Commander&apos;s perspective assessment, synthesizing key accomplishments and impacts.
+                        </p>
+                      </div>
+                    </div>
+                    {epbStatementsCount === 0 && (
+                      <div className="p-2 rounded bg-amber-100/50 dark:bg-amber-900/20 text-xs text-amber-700 dark:text-amber-300">
+                        No MPA statements found. Add content to your MPA sections first.
                       </div>
                     )}
                   </div>

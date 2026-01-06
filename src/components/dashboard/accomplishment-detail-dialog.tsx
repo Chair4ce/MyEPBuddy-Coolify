@@ -23,6 +23,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { toast } from "@/components/ui/sonner";
 import {
   Calendar,
@@ -99,6 +109,58 @@ export function AccomplishmentDetailDialog({
     mpa: "",
     tags: "",
   });
+  
+  // Unsaved changes confirmation
+  const [showDiscardDialog, setShowDiscardDialog] = useState(false);
+  const [pendingClose, setPendingClose] = useState(false);
+
+  // Check if there are unsaved changes
+  const hasUnsavedChanges = () => {
+    if (!accomplishment || !isEditing) return false;
+    const originalTags = Array.isArray(accomplishment.tags) ? accomplishment.tags.join(", ") : "";
+    return (
+      editForm.date !== accomplishment.date ||
+      editForm.action_verb !== accomplishment.action_verb ||
+      editForm.details !== accomplishment.details ||
+      editForm.impact !== (accomplishment.impact || "") ||
+      editForm.metrics !== (accomplishment.metrics || "") ||
+      editForm.mpa !== accomplishment.mpa ||
+      editForm.tags !== originalTags
+    );
+  };
+
+  // Handle dialog close with change detection
+  const handleOpenChange = (newOpen: boolean) => {
+    if (!newOpen && isEditing && hasUnsavedChanges()) {
+      setPendingClose(true);
+      setShowDiscardDialog(true);
+    } else {
+      onOpenChange(newOpen);
+      if (!newOpen) {
+        setIsEditing(false);
+      }
+    }
+  };
+
+  // Discard changes and close
+  const handleDiscardChanges = () => {
+    setShowDiscardDialog(false);
+    setPendingClose(false);
+    setIsEditing(false);
+    // Reset form to original values
+    if (accomplishment) {
+      setEditForm({
+        date: accomplishment.date,
+        action_verb: accomplishment.action_verb,
+        details: accomplishment.details,
+        impact: accomplishment.impact || "",
+        metrics: accomplishment.metrics || "",
+        mpa: accomplishment.mpa,
+        tags: Array.isArray(accomplishment.tags) ? accomplishment.tags.join(", ") : "",
+      });
+    }
+    onOpenChange(false);
+  };
 
   // Check if current user is in the chain of supervision
   const isInChain = accomplishment?.supervisor_chain?.some(
@@ -268,7 +330,8 @@ export function AccomplishmentDetailDialog({
   const unresolvedCount = comments.filter((c) => !c.is_resolved).length;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="w-[calc(100vw-1rem)] max-w-4xl max-h-[90dvh] flex flex-col p-0 gap-0 overflow-hidden">
         {/* Header - Fixed at top */}
         <div className="shrink-0 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent border-b px-4 py-3 sm:px-6 sm:py-4">
@@ -309,69 +372,90 @@ export function AccomplishmentDetailDialog({
                   </DialogDescription>
                 </div>
               </div>
-              {/* Actions row */}
-              <div className="flex items-center gap-2 flex-wrap">
-                <Badge variant="outline" className="text-xs shrink-0">
-                  {mpaLabel}
-                </Badge>
-                {isInChain && !isEditing && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setIsEditing(true)}
-                    className="h-7 px-2 text-xs shrink-0"
-                  >
-                    <Pencil className="size-3 mr-1" />
-                    Edit
-                  </Button>
-                )}
-              </div>
+              {/* MPA Badge - mr-8 accounts for Dialog close button */}
+              <Badge variant="outline" className="text-xs shrink-0 self-start sm:self-center mr-8">
+                {mpaLabel}
+              </Badge>
             </div>
           </DialogHeader>
         </div>
 
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto min-h-0">
-          <div className="p-4 sm:p-6 space-y-5">
+          <div className="p-4 sm:p-6 space-y-5 relative">
+            {/* Edit button - positioned in top right of content area */}
+            {isInChain && !isEditing && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setIsEditing(true)}
+                className="absolute top-4 right-4 sm:top-6 sm:right-6 size-8 text-muted-foreground hover:text-foreground"
+                aria-label="Edit accomplishment"
+              >
+                <Pencil className="size-4" />
+              </Button>
+            )}
             {isEditing ? (
               // Edit Form
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-date" className="text-sm">Date</Label>
+              <div className="space-y-5">
+                {/* Edit Mode Header */}
+                <div className="flex items-center justify-between pb-2 border-b">
+                  <div className="flex items-center gap-2">
+                    <Pencil className="size-4 text-primary" />
+                    <span className="text-sm font-medium">Edit Accomplishment</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setIsEditing(false)}
+                      disabled={isSubmitting}
+                      className="h-8 px-3 text-xs"
+                    >
+                      <X className="size-3.5 mr-1" />
+                      Cancel
+                    </Button>
+                    <Button 
+                      size="sm" 
+                      onClick={handleSubmitEdit} 
+                      disabled={isSubmitting} 
+                      className="h-8 px-3 text-xs"
+                    >
+                      {isSubmitting ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      ) : (
+                        <>
+                          <Check className="size-3.5 mr-1" />
+                          Save
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Row 1: Date & Action Verb */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="edit-date" className="text-xs font-medium text-muted-foreground">
+                      Date
+                    </Label>
                     <Input
                       id="edit-date"
                       type="date"
                       value={editForm.date}
                       onChange={(e) => setEditForm({ ...editForm, date: e.target.value })}
-                      className="h-9"
+                      className="h-9 text-sm"
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-mpa" className="text-sm">Major Performance Area</Label>
-                    <Select
-                      value={editForm.mpa}
-                      onValueChange={(value) => setEditForm({ ...editForm, mpa: value })}
-                    >
-                      <SelectTrigger id="edit-mpa" className="h-9">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {ENTRY_MGAS.map((mpa) => (
-                          <SelectItem key={mpa.key} value={mpa.key}>
-                            {mpa.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-action" className="text-sm">Action Verb</Label>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="edit-action" className="text-xs font-medium text-muted-foreground">
+                      Action Verb
+                    </Label>
                     <Select
                       value={editForm.action_verb}
                       onValueChange={(value) => setEditForm({ ...editForm, action_verb: value })}
                     >
-                      <SelectTrigger className="h-9">
+                      <SelectTrigger className="h-9 text-sm">
                         <SelectValue placeholder="Select verb" />
                       </SelectTrigger>
                       <SelectContent>
@@ -385,40 +469,74 @@ export function AccomplishmentDetailDialog({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-details" className="text-sm">Details</Label>
-                    <Textarea
-                      id="edit-details"
-                      value={editForm.details}
-                      onChange={(e) => setEditForm({ ...editForm, details: e.target.value })}
-                      className="min-h-[100px] text-sm"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-impact" className="text-sm">Impact</Label>
-                    <Textarea
-                      id="edit-impact"
-                      value={editForm.impact}
-                      onChange={(e) => setEditForm({ ...editForm, impact: e.target.value })}
-                      className="min-h-[100px] text-sm"
-                    />
-                  </div>
+                {/* Row 2: MPA - Full Width */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="edit-mpa" className="text-xs font-medium text-muted-foreground">
+                    Major Performance Area
+                  </Label>
+                  <Select
+                    value={editForm.mpa}
+                    onValueChange={(value) => setEditForm({ ...editForm, mpa: value })}
+                  >
+                    <SelectTrigger id="edit-mpa" className="h-9 text-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ENTRY_MGAS.map((mpa) => (
+                        <SelectItem key={mpa.key} value={mpa.key}>
+                          {mpa.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-metrics" className="text-sm">Metrics</Label>
+                {/* Row 3: Details - Full Width */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="edit-details" className="text-xs font-medium text-muted-foreground">
+                    Details
+                  </Label>
+                  <Textarea
+                    id="edit-details"
+                    value={editForm.details}
+                    onChange={(e) => setEditForm({ ...editForm, details: e.target.value })}
+                    className="min-h-[80px] text-sm resize-none"
+                    placeholder="What was accomplished..."
+                  />
+                </div>
+
+                {/* Row 4: Impact - Full Width */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="edit-impact" className="text-xs font-medium text-muted-foreground">
+                    Impact
+                  </Label>
+                  <Textarea
+                    id="edit-impact"
+                    value={editForm.impact}
+                    onChange={(e) => setEditForm({ ...editForm, impact: e.target.value })}
+                    className="min-h-[80px] text-sm resize-none"
+                    placeholder="What was the result or impact..."
+                  />
+                </div>
+
+                {/* Row 5: Metrics & Tags */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="edit-metrics" className="text-xs font-medium text-muted-foreground">
+                      Metrics
+                    </Label>
                     <Input
                       id="edit-metrics"
                       value={editForm.metrics}
                       onChange={(e) => setEditForm({ ...editForm, metrics: e.target.value })}
-                      placeholder="e.g., 15% increase, 200 hours saved"
+                      placeholder="e.g., 15% increase, 200 hours"
                       className="h-9 text-sm"
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-tags" className="text-sm">Tags (comma separated)</Label>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="edit-tags" className="text-xs font-medium text-muted-foreground">
+                      Tags (comma separated)
+                    </Label>
                     <Input
                       id="edit-tags"
                       value={editForm.tags}
@@ -427,27 +545,6 @@ export function AccomplishmentDetailDialog({
                       className="h-9 text-sm"
                     />
                   </div>
-                </div>
-
-                <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => setIsEditing(false)}
-                    disabled={isSubmitting}
-                    className="h-9"
-                  >
-                    Cancel
-                  </Button>
-                  <Button onClick={handleSubmitEdit} disabled={isSubmitting} className="h-9">
-                    {isSubmitting ? (
-                      <>
-                        <Loader2 className="size-4 mr-2 animate-spin" />
-                        Saving...
-                      </>
-                    ) : (
-                      "Save Changes"
-                    )}
-                  </Button>
                 </div>
               </div>
             ) : (
@@ -469,32 +566,29 @@ export function AccomplishmentDetailDialog({
                   </Badge>
                 </div>
 
-                {/* Details and Impact - 2 column on larger screens */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  {/* Details */}
+                {/* Details */}
+                <div className="space-y-2">
+                  <h4 className="text-sm font-medium flex items-center gap-2">
+                    <Target className="size-4 text-primary shrink-0" />
+                    What They Did
+                  </h4>
+                  <p className="text-sm leading-relaxed break-words text-muted-foreground">
+                    {accomplishment.details}
+                  </p>
+                </div>
+
+                {/* Impact */}
+                {accomplishment.impact && (
                   <div className="space-y-2">
                     <h4 className="text-sm font-medium flex items-center gap-2">
-                      <Target className="size-4 text-primary shrink-0" />
-                      What They Did
+                      <BarChart3 className="size-4 text-emerald-500 shrink-0" />
+                      Impact & Results
                     </h4>
-                    <p className="text-sm leading-relaxed break-words">
-                      {accomplishment.details}
+                    <p className="text-sm leading-relaxed break-words text-muted-foreground">
+                      {accomplishment.impact}
                     </p>
                   </div>
-
-                  {/* Impact */}
-                  {accomplishment.impact && (
-                    <div className="space-y-2">
-                      <h4 className="text-sm font-medium flex items-center gap-2">
-                        <BarChart3 className="size-4 text-emerald-500 shrink-0" />
-                        Impact & Results
-                      </h4>
-                      <p className="text-sm leading-relaxed break-words">
-                        {accomplishment.impact}
-                      </p>
-                    </div>
-                  )}
-                </div>
+                )}
 
                 {/* Metrics and Tags row */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
@@ -746,6 +840,30 @@ export function AccomplishmentDetailDialog({
         </div>
       </DialogContent>
     </Dialog>
+
+    {/* Unsaved Changes Confirmation Dialog */}
+    <AlertDialog open={showDiscardDialog} onOpenChange={setShowDiscardDialog}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Discard unsaved changes?</AlertDialogTitle>
+          <AlertDialogDescription>
+            You have unsaved changes to this accomplishment. Are you sure you want to discard them?
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel onClick={() => {
+            setShowDiscardDialog(false);
+            setPendingClose(false);
+          }}>
+            Keep Editing
+          </AlertDialogCancel>
+          <AlertDialogAction onClick={handleDiscardChanges} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+            Discard Changes
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
 

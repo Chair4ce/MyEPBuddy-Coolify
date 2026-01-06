@@ -5,7 +5,8 @@ import type { EPBShell, EPBShellSection, EPBShellSnapshot, EPBSavedExample, Rank
 export type MPAWorkspaceMode = "view" | "edit" | "ai-assist";
 
 // Source type for statement generation
-export type SourceType = "actions" | "custom";
+// "epb-summary" is HLR-only: uses all MPA statements to generate holistic assessment
+export type SourceType = "actions" | "custom" | "epb-summary";
 
 // Local state for each MPA section (not persisted to DB)
 export interface MPASectionState {
