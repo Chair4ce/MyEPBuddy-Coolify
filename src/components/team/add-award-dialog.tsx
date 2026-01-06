@@ -20,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -568,26 +569,25 @@ export function AddAwardDialog({
                         {selectedAwardCategory && (
                           <div className="space-y-2">
                             <Label>Award Name *</Label>
-                            <Select
+                            <SearchableSelect
                               value={selectedCatalogAward}
                               onValueChange={(val) => {
                                 setSelectedCatalogAward(val);
                                 setAwardName("");
                               }}
-                            >
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select an award" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {SPECIAL_AWARDS_CATALOG.find(
+                              options={
+                                SPECIAL_AWARDS_CATALOG.find(
                                   (c) => c.key === selectedAwardCategory
-                                )?.awards.map((award) => (
-                                  <SelectItem key={award} value={award}>
-                                    {award}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                                )?.awards.map((award) => ({
+                                  value: award,
+                                  label: award,
+                                })) ?? []
+                              }
+                              placeholder="Select an award"
+                              searchPlaceholder="Search awards..."
+                              emptyMessage="No awards found."
+                              aria-label="Award name"
+                            />
                           </div>
                         )}
                       </>

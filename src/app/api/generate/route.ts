@@ -7,7 +7,7 @@ import { generateText } from "ai";
 import { NextResponse } from "next/server";
 import { DEFAULT_ACRONYMS, formatAcronymsList } from "@/lib/default-acronyms";
 import { formatAbbreviationsList } from "@/lib/default-abbreviations";
-import { STANDARD_MGAS, DEFAULT_MPA_DESCRIPTIONS, formatMPAContext } from "@/lib/constants";
+import { STANDARD_MGAS, DEFAULT_MPA_DESCRIPTIONS, formatMPAContext, MAX_STATEMENT_CHARACTERS, MAX_HLR_CHARACTERS } from "@/lib/constants";
 import { getDecryptedApiKeys } from "@/app/actions/api-keys";
 import type { MPADescriptions } from "@/types/database";
 import type { Rank, WritingStyle, UserLLMSettings, MajorGradedArea, Acronym, Abbreviation } from "@/types/database";
@@ -361,9 +361,10 @@ function buildSystemPrompt(
   const rankVerbGuidance = `Primary verbs: ${rankVerbs.primary.join(", ")}\n  Secondary verbs: ${rankVerbs.secondary.join(", ")}`;
 
   let prompt = settings.base_system_prompt || DEFAULT_SETTINGS.base_system_prompt!;
+  // Always use hardcoded MAX_STATEMENT_CHARACTERS (350) - user settings deprecated
   prompt = prompt.replace(
     /\{\{max_characters_per_statement\}\}/g,
-    String(settings.max_characters_per_statement || 350)
+    String(MAX_STATEMENT_CHARACTERS)
   );
   prompt = prompt.replace(/\{\{ratee_rank\}\}/g, rateeRank);
   prompt = prompt.replace(
@@ -518,8 +519,9 @@ export async function POST(request: Request) {
     );
 
     // Always use standard MPAs for all users
-    const maxChars = settings.max_characters_per_statement || 350;
-    const maxHlrChars = 250; // HLR has a smaller character limit
+    // Always use hardcoded constants - user settings deprecated
+    const maxChars = MAX_STATEMENT_CHARACTERS; // 350 for regular MPAs
+    const maxHlrChars = MAX_HLR_CHARACTERS; // 250 for HLR Assessment
     const mpaDescriptions: MPADescriptions = (settings as { mpa_descriptions?: MPADescriptions }).mpa_descriptions || DEFAULT_MPA_DESCRIPTIONS;
     const results: { mpa: string; statements: string[]; historyIds: string[]; relevancyScore?: number }[] = [];
 

@@ -217,7 +217,8 @@ export function StatementWorkspaceDialog({
     });
   }, [collaboration, draftStatement, selectedMpa, maxCharLimit, cycleYear, selectedSources, snapshots]);
 
-  const defaultMaxChars = epbConfig?.max_characters_per_statement || MAX_STATEMENT_CHARACTERS;
+  // Always use hardcoded MAX_STATEMENT_CHARACTERS - user settings deprecated
+  const defaultMaxChars = MAX_STATEMENT_CHARACTERS;
   const selectedModelInfo = AI_MODELS.find((m) => m.id === selectedModel);
 
   // Track if we have unsaved work

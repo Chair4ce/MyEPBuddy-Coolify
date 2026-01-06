@@ -380,7 +380,7 @@ export function SplitViewEditor({
       </div>
       
       {/* Combined total */}
-      <div className="flex items-center justify-between pt-1">
+      <div className="flex items-center justify-center w-full pt-1">
         
         <span className={cn(
           "text-xs tabular-nums font-medium",

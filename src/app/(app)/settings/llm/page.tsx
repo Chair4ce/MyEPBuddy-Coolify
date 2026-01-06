@@ -679,7 +679,6 @@ function AcronymEditor({
 
 // Type for stored settings state (excludes MPAs since they're not user-editable)
 interface SettingsState {
-  maxChars: number;
   scodDate: string;
   cycleYear: number;
   styleGuidelines: string;
@@ -704,8 +703,6 @@ export default function LLMSettingsPage() {
   const [hasExistingSettings, setHasExistingSettings] = useState(false);
 
   // Separate state for each section to prevent unnecessary re-renders
-  const [maxChars, setMaxChars] = useState(350);
-  const [maxExampleStatements, setMaxExampleStatements] = useState(6);
   const [scodDate, setScodDate] = useState("31 March");
   const [cycleYear, setCycleYear] = useState(new Date().getFullYear());
   const [styleGuidelines, setStyleGuidelines] = useState(DEFAULT_STYLE_GUIDELINES);
@@ -744,7 +741,6 @@ export default function LLMSettingsPage() {
     if (!initialState || isLoading) return false;
     
     return (
-      maxChars !== initialState.maxChars ||
       scodDate !== initialState.scodDate ||
       cycleYear !== initialState.cycleYear ||
       styleGuidelines !== initialState.styleGuidelines ||
@@ -758,7 +754,7 @@ export default function LLMSettingsPage() {
       awardStyleGuidelines !== initialState.awardStyleGuidelines ||
       JSON.stringify(awardSentencesPerCategory) !== JSON.stringify(initialState.awardSentencesPerCategory)
     );
-  }, [maxChars, scodDate, cycleYear, styleGuidelines, systemPrompt, rankVerbs, acronyms, abbreviations, mpaDescriptions, awardSystemPrompt, awardAbbreviations, awardStyleGuidelines, awardSentencesPerCategory, isLoading, initialState]);
+  }, [scodDate, cycleYear, styleGuidelines, systemPrompt, rankVerbs, acronyms, abbreviations, mpaDescriptions, awardSystemPrompt, awardAbbreviations, awardStyleGuidelines, awardSentencesPerCategory, isLoading, initialState]);
 
   // Warn user before leaving with unsaved changes (browser close/refresh)
   useEffect(() => {
@@ -832,8 +828,6 @@ export default function LLMSettingsPage() {
       if (data) {
         setHasExistingSettings(true);
         const settings = data as unknown as UserLLMSettings;
-        const loadedMaxChars = settings.max_characters_per_statement;
-        const loadedMaxExamples = settings.max_example_statements ?? 6;
         const loadedScodDate = settings.scod_date;
         const loadedCycleYear = settings.current_cycle_year;
         const loadedStyleGuidelines = settings.style_guidelines;
@@ -842,8 +836,6 @@ export default function LLMSettingsPage() {
         const loadedAcronyms = settings.acronyms;
         const loadedAbbreviations = settings.abbreviations || [];
 
-        setMaxChars(loadedMaxChars);
-        setMaxExampleStatements(loadedMaxExamples);
         setScodDate(loadedScodDate);
         setCycleYear(loadedCycleYear);
         setStyleGuidelines(loadedStyleGuidelines);
@@ -870,7 +862,6 @@ export default function LLMSettingsPage() {
 
         // Store initial state for change detection (excludes MPAs)
         setInitialState({
-          maxChars: loadedMaxChars,
           scodDate: loadedScodDate,
           cycleYear: loadedCycleYear,
           styleGuidelines: loadedStyleGuidelines,
@@ -887,7 +878,6 @@ export default function LLMSettingsPage() {
       } else {
         // No existing settings - store defaults as initial state
         setInitialState({
-          maxChars: 350,
           scodDate: "31 March",
           cycleYear: new Date().getFullYear(),
           styleGuidelines: DEFAULT_STYLE_GUIDELINES,
@@ -916,8 +906,6 @@ export default function LLMSettingsPage() {
 
     try {
       const settingsData = {
-        max_characters_per_statement: maxChars,
-        max_example_statements: maxExampleStatements,
         scod_date: scodDate,
         current_cycle_year: cycleYear,
         major_graded_areas: STANDARD_MGAS, // Always use standard MPAs
@@ -950,7 +938,6 @@ export default function LLMSettingsPage() {
 
       // Update initial state to match saved state (excludes MPAs)
       setInitialState({
-        maxChars,
         scodDate,
         cycleYear,
         styleGuidelines,
@@ -987,8 +974,6 @@ export default function LLMSettingsPage() {
   }
 
   function resetToDefaults() {
-    setMaxChars(350);
-    setMaxExampleStatements(6);
     setScodDate("31 March");
     setCycleYear(new Date().getFullYear());
     setStyleGuidelines(DEFAULT_STYLE_GUIDELINES);
@@ -1095,33 +1080,7 @@ export default function LLMSettingsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="px-3 pb-4 sm:px-6 sm:pb-6 space-y-4 sm:space-y-6">
-              <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-                <div className="space-y-1.5">
-                  <Label htmlFor="max-chars" className="text-xs sm:text-sm">Max Chars/Statement</Label>
-                  <Input
-                    id="max-chars"
-                    type="number"
-                    value={maxChars}
-                    onChange={(e) => setMaxChars(parseInt(e.target.value) || 350)}
-                    aria-describedby="max-chars-hint"
-                    className="h-9"
-                  />
-                  <p id="max-chars-hint" className="text-[10px] sm:text-xs text-muted-foreground">AFI 36-2406: 350 chars</p>
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="max-examples" className="text-xs sm:text-sm">Example Statements</Label>
-                  <Input
-                    id="max-examples"
-                    type="number"
-                    min={0}
-                    max={20}
-                    value={maxExampleStatements}
-                    onChange={(e) => setMaxExampleStatements(Math.min(20, Math.max(0, parseInt(e.target.value) || 0)))}
-                    aria-describedby="max-examples-hint"
-                    className="h-9"
-                  />
-                  <p id="max-examples-hint" className="text-[10px] sm:text-xs text-muted-foreground">0-20, reduces token cost</p>
-                </div>
+              <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label htmlFor="scod" className="text-xs sm:text-sm">SCOD Date</Label>
                   <Input
@@ -1163,27 +1122,7 @@ export default function LLMSettingsPage() {
                 </p>
               </div>
 
-              <Separator />
-
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs sm:text-sm">Major Performance Areas</Label>
-                  <Badge variant="secondary" className="text-[10px]">AFI 36-2406</Badge>
-                </div>
-                <p className="text-[10px] sm:text-xs text-muted-foreground">
-                  Standard EPB categories used for statement generation. These are defined by Air Force regulations.
-                </p>
-                <div className="grid gap-1.5">
-                  {STANDARD_MGAS.map((mpa) => (
-                    <div 
-                      key={mpa.key} 
-                      className="flex items-center gap-2 p-2 border rounded bg-muted/30 text-xs sm:text-sm"
-                    >
-                      <span className="font-medium">{mpa.label}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
+            
             </CardContent>
           </Card>
         </TabsContent>

@@ -81,7 +81,8 @@ export function AddStatementDialog({
 
   const supabase = createClient();
   const mgas = STANDARD_MGAS.filter(m => m.key !== "hlr_assessment"); // Exclude HLR from manual entry
-  const maxChars = epbConfig?.max_characters_per_statement || MAX_STATEMENT_CHARACTERS;
+  // Always use hardcoded MAX_STATEMENT_CHARACTERS - user settings deprecated
+  const maxChars = MAX_STATEMENT_CHARACTERS;
 
   // Derived state for "Share with All"
   const hasSupervisor = !!profile?.supervisor_id;

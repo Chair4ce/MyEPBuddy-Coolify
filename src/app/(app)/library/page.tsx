@@ -123,7 +123,8 @@ export default function LibraryPage() {
 
   const supabase = createClient();
   const mgas = STANDARD_MGAS;
-  const maxChars = epbConfig?.max_characters_per_statement || MAX_STATEMENT_CHARACTERS;
+  // Always use hardcoded MAX_STATEMENT_CHARACTERS - user settings deprecated
+  const maxChars = MAX_STATEMENT_CHARACTERS;
 
   const loadStatements = useCallback(async () => {
     if (!profile) return;
