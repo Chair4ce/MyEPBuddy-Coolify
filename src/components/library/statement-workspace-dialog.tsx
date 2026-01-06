@@ -45,7 +45,6 @@ import { Progress } from "@/components/ui/progress";
 import { toast } from "@/components/ui/sonner";
 import { cn, getCharacterCountColor } from "@/lib/utils";
 import { MAX_STATEMENT_CHARACTERS, STANDARD_MGAS, RANKS, AI_MODELS, getActiveCycleYear } from "@/lib/constants";
-import type { Rank } from "@/types/database";
 import {
   Loader2,
   Sparkles,
