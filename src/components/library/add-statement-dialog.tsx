@@ -28,7 +28,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/components/ui/sonner";
 import { cn, getCharacterCountColor } from "@/lib/utils";
-import { MAX_STATEMENT_CHARACTERS, STANDARD_MGAS, RANKS, AWARD_1206_CATEGORIES } from "@/lib/constants";
+import { MAX_STATEMENT_CHARACTERS, STANDARD_MGAS, RANKS, AWARD_1206_CATEGORIES, getActiveCycleYear } from "@/lib/constants";
 import { Loader2, UserCheck, Users, Globe, CheckCircle2, Trophy, Sparkles, FileText, Award } from "lucide-react";
 import type { Rank, StatementType, WinLevel } from "@/types/database";
 
@@ -117,9 +117,10 @@ export function AddStatementDialog({
     if (open && profile) {
       setSelectedAfsc(profile.afsc || "");
       setSelectedRank(profile.rank || "");
-      setCycleYear(epbConfig?.current_cycle_year || new Date().getFullYear());
+      // Cycle year is computed from the user's rank and SCOD
+      setCycleYear(getActiveCycleYear(profile.rank as Rank | null));
     }
-  }, [open, profile, epbConfig]);
+  }, [open, profile]);
 
   // Reset award-specific fields when switching to EPB
   useEffect(() => {
@@ -146,7 +147,8 @@ export function AddStatementDialog({
     setSelectedMpas([]);
     setSelectedAfsc(profile?.afsc || "");
     setSelectedRank(profile?.rank || "");
-    setCycleYear(epbConfig?.current_cycle_year || new Date().getFullYear());
+    // Cycle year is computed from the user's rank and SCOD
+    setCycleYear(getActiveCycleYear(profile?.rank as Rank | null));
     setAwardCategory("");
     setIsWinningPackage(false);
     setWinLevel("");

@@ -37,7 +37,7 @@ import { EntryFormDialog } from "@/components/entries/entry-form-dialog";
 import { toast } from "@/components/ui/sonner";
 import { deleteAccomplishment } from "@/app/actions/accomplishments";
 import { Plus, Pencil, Trash2, Filter, FileText, LayoutList, CalendarDays, Calendar } from "lucide-react";
-import { ENTRY_MGAS, AWARD_QUARTERS, getQuarterDateRange, getFiscalQuarterDateRange } from "@/lib/constants";
+import { ENTRY_MGAS, AWARD_QUARTERS, getQuarterDateRange, getFiscalQuarterDateRange, getActiveCycleYear } from "@/lib/constants";
 import { EPBProgressCard } from "@/components/epb/epb-progress-card";
 import type { Rank } from "@/types/database";
 import { Switch } from "@/components/ui/switch";
@@ -75,7 +75,8 @@ function EntriesContent() {
   const [useFiscalYear, setUseFiscalYear] = useState(false);
   
   const supabase = createClient();
-  const cycleYear = epbConfig?.current_cycle_year || new Date().getFullYear();
+  // Cycle year is computed from the user's rank and SCOD
+  const cycleYear = getActiveCycleYear(profile?.rank as Rank | null);
   // Use entry MPAs (excludes HLR which is Commander's assessment)
   const mgas = ENTRY_MGAS;
 

@@ -28,7 +28,8 @@ import {
   createAccomplishment,
   updateAccomplishment,
 } from "@/app/actions/accomplishments";
-import { DEFAULT_ACTION_VERBS, ENTRY_MGAS } from "@/lib/constants";
+import { DEFAULT_ACTION_VERBS, ENTRY_MGAS, getActiveCycleYear } from "@/lib/constants";
+import type { Rank } from "@/types/database";
 import { Loader2, Sparkles } from "lucide-react";
 import { celebrateEntry } from "@/lib/confetti";
 import type { Accomplishment } from "@/types/database";
@@ -65,7 +66,8 @@ export function EntryFormDialog({
 
   // Use entry MPAs (excludes HLR which is Commander's assessment)
   const mgas = ENTRY_MGAS;
-  const cycleYear = epbConfig?.current_cycle_year || new Date().getFullYear();
+  // Cycle year is computed from the user's rank and SCOD
+  const cycleYear = getActiveCycleYear(profile?.rank as Rank | null);
 
   // Reset form when dialog opens/closes or edit entry changes
   useEffect(() => {

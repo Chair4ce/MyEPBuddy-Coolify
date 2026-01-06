@@ -25,7 +25,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { STANDARD_MGAS, ENTRY_MGAS, MAX_STATEMENT_CHARACTERS, MAX_HLR_CHARACTERS, MAX_DUTY_DESCRIPTION_CHARACTERS } from "@/lib/constants";
+import { STANDARD_MGAS, ENTRY_MGAS, MAX_STATEMENT_CHARACTERS, MAX_HLR_CHARACTERS, MAX_DUTY_DESCRIPTION_CHARACTERS, getActiveCycleYear } from "@/lib/constants";
 import type { EPBAssessmentResult } from "@/lib/constants";
 import { EPBAssessmentDialog } from "./epb-assessment-dialog";
 import { ArchiveEPBDialog } from "./archive-epb-dialog";
@@ -892,13 +892,17 @@ export function EPBShellForm({
       setIsLoadingShell(true);
       try {
         // Build query based on ratee type
+        // Load the most recent ACTIVE (non-archived) shell for the user
+        // EPB cycles span ~12 months based on SCOD, not calendar years,
+        // so we don't filter by cycle_year - just find their active shell
         let query = supabase
           .from("epb_shells")
           .select(`
             *,
             sections:epb_shell_sections(*)
           `)
-          .eq("cycle_year", cycleYear);
+          .neq("status", "archived")
+          .order("updated_at", { ascending: false });
 
         if (selectedRatee.isManagedMember) {
           query = query.eq("team_member_id", selectedRatee.id);
@@ -906,7 +910,8 @@ export function EPBShellForm({
           query = query.eq("user_id", selectedRatee.id).is("team_member_id", null);
         }
 
-        const { data, error } = await query.maybeSingle();
+        // Get the most recent active shell (there should only be one)
+        const { data, error } = await query.limit(1).maybeSingle();
         
         // Check if this load was aborted (user switched to another ratee)
         if (aborted) {
@@ -1177,6 +1182,10 @@ export function EPBShellForm({
 
     setIsCreatingShell(true);
     try {
+      // Calculate the correct cycle year based on the ratee's rank and SCOD
+      // EPB cycles are ~12 months based on SCOD, not calendar years
+      const activeCycleYear = getActiveCycleYear(selectedRatee.rank);
+      
       const insertData: {
         user_id: string;
         team_member_id?: string;
@@ -1185,7 +1194,7 @@ export function EPBShellForm({
       } = {
         user_id: selectedRatee.isManagedMember ? profile.id : selectedRatee.id,
         created_by: profile.id,
-        cycle_year: cycleYear,
+        cycle_year: activeCycleYear,
       };
 
       if (selectedRatee.isManagedMember) {

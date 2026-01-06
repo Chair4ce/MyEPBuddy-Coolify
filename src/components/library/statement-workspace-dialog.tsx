@@ -44,7 +44,8 @@ import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "@/components/ui/sonner";
 import { cn, getCharacterCountColor } from "@/lib/utils";
-import { MAX_STATEMENT_CHARACTERS, STANDARD_MGAS, RANKS, AI_MODELS } from "@/lib/constants";
+import { MAX_STATEMENT_CHARACTERS, STANDARD_MGAS, RANKS, AI_MODELS, getActiveCycleYear } from "@/lib/constants";
+import type { Rank } from "@/types/database";
 import {
   Loader2,
   Sparkles,
@@ -262,11 +263,12 @@ export function StatementWorkspaceDialog({
       setSelectedRank(profile.rank || "");
       // Only set these if we didn't recover saved data
       if (!hasRecoveredData) {
-        setCycleYear(epbConfig?.current_cycle_year || new Date().getFullYear());
+        // EPB cycle year is computed from the user's rank and SCOD
+        setCycleYear(getActiveCycleYear(profile.rank as Rank | null));
         setMaxCharLimit(defaultMaxChars);
       }
     }
-  }, [open, profile, epbConfig, defaultMaxChars, hasRecoveredData]);
+  }, [open, profile, defaultMaxChars, hasRecoveredData]);
 
   // Auto-save workspace to localStorage when state changes
   useEffect(() => {
@@ -291,7 +293,8 @@ export function StatementWorkspaceDialog({
     setSelectedMpa("");
     setSelectedAfsc(profile?.afsc || "");
     setSelectedRank(profile?.rank || "");
-    setCycleYear(epbConfig?.current_cycle_year || new Date().getFullYear());
+    // EPB cycle year is computed from the user's rank and SCOD
+    setCycleYear(getActiveCycleYear(profile?.rank as Rank | null));
     setMaxCharLimit(defaultMaxChars);
     setSuggestions([]);
     setSearchQuery("");

@@ -145,6 +145,7 @@ export default function AwardPage() {
   const router = useRouter();
   const supabase = createClient();
   const { profile, subordinates, managedMembers, epbConfig } = useUserStore();
+  // Awards use calendar year cycles, not SCOD-based cycles
   const cycleYear = epbConfig?.current_cycle_year || new Date().getFullYear();
 
   // Award shell store (for reset functionality)

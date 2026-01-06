@@ -31,7 +31,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
-import { AI_MODELS, STANDARD_MGAS, ENTRY_MGAS } from "@/lib/constants";
+import { AI_MODELS, STANDARD_MGAS, ENTRY_MGAS, getActiveCycleYear } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import {
   Sparkles,
@@ -78,7 +78,8 @@ export default function GeneratePage() {
   const [selectedAccomplishmentIds, setSelectedAccomplishmentIds] = useState<string[]>([]);
 
   const supabase = createClient();
-  const cycleYear = userSettings?.current_cycle_year || new Date().getFullYear();
+  // Cycle year is computed from the user's rank and SCOD, not from user settings
+  const cycleYear = getActiveCycleYear(profile?.rank as import("@/types/database").Rank | null);
 
   // Build ratee selector options
   const rateeOptions = [

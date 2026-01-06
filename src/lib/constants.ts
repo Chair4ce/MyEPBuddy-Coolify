@@ -240,6 +240,19 @@ export function getCycleProgress(rank: Rank | null): number | null {
   return Math.min(100, Math.max(0, (elapsedDays / totalDays) * 100));
 }
 
+// Get the active cycle year based on rank's SCOD
+// This is the year of the user's upcoming SCOD (the evaluation cycle they're currently in)
+// For example: TSgt with Nov 30 SCOD in Jan 2026 → cycle year is 2026 (next SCOD is Nov 30, 2026)
+// But TSgt with Nov 30 SCOD in Oct 2025 → cycle year is 2025 (SCOD is Nov 30, 2025)
+export function getActiveCycleYear(rank: Rank | null): number {
+  const closeout = getStaticCloseoutDate(rank);
+  if (!closeout) {
+    // Fallback to current year if rank has no EPB (AB/Amn) or unknown
+    return new Date().getFullYear();
+  }
+  return closeout.date.getFullYear();
+}
+
 // Get urgency level based on days until closeout
 export function getCloseoutUrgency(daysUntil: number | null): "none" | "low" | "medium" | "high" | "critical" {
   if (daysUntil === null) return "none";

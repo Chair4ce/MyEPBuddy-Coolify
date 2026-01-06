@@ -70,8 +70,9 @@ import {
   ArrowRight,
   Target,
 } from "lucide-react";
-import type { UserLLMSettings, Acronym, Abbreviation, RankVerbProgression, AwardSentencesPerCategory, MPADescriptions } from "@/types/database";
-import { RANKS, STANDARD_MGAS, AWARD_1206_CATEGORIES, DEFAULT_AWARD_SENTENCES, DEFAULT_MPA_DESCRIPTIONS, ENTRY_MGAS } from "@/lib/constants";
+import type { UserLLMSettings, Acronym, Abbreviation, RankVerbProgression, AwardSentencesPerCategory, MPADescriptions, Rank } from "@/types/database";
+import { RANKS, STANDARD_MGAS, AWARD_1206_CATEGORIES, DEFAULT_AWARD_SENTENCES, DEFAULT_MPA_DESCRIPTIONS, ENTRY_MGAS, getStaticCloseoutDate, getActiveCycleYear } from "@/lib/constants";
+import Link from "next/link";
 import { Award } from "lucide-react";
 
 const DEFAULT_SYSTEM_PROMPT = `You are an expert Air Force Enlisted Performance Brief (EPB) writing assistant with deep knowledge of Air Force operations, programs, and terminology. Your sole purpose is to generate impactful, narrative-style performance statements that strictly comply with AFI 36-2406 (22 Aug 2025).
@@ -679,8 +680,7 @@ function AcronymEditor({
 
 // Type for stored settings state (excludes MPAs since they're not user-editable)
 interface SettingsState {
-  scodDate: string;
-  cycleYear: number;
+  // SCOD date and cycle year are now computed from user's rank, not stored
   styleGuidelines: string;
   systemPrompt: string;
   rankVerbs: RankVerbProgression;
@@ -702,9 +702,14 @@ export default function LLMSettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [hasExistingSettings, setHasExistingSettings] = useState(false);
 
+  // SCOD date and cycle year are computed from the user's rank
+  // These are standardized by AFI and should not be manually configured
+  const userRank = profile?.rank as Rank | null;
+  const scodInfo = getStaticCloseoutDate(userRank);
+  const computedScodDate = scodInfo?.label || null;
+  const computedCycleYear = getActiveCycleYear(userRank);
+  
   // Separate state for each section to prevent unnecessary re-renders
-  const [scodDate, setScodDate] = useState("31 March");
-  const [cycleYear, setCycleYear] = useState(new Date().getFullYear());
   const [styleGuidelines, setStyleGuidelines] = useState(DEFAULT_STYLE_GUIDELINES);
   // MPAs are standardized by AFI 36-2406 and not user-editable
   const [systemPrompt, setSystemPrompt] = useState(DEFAULT_SYSTEM_PROMPT);
@@ -737,12 +742,11 @@ export default function LLMSettingsPage() {
   const supabase = createClient();
 
   // Check if there are unsaved changes
+  // Note: SCOD date and cycle year are now computed from rank, not user-editable
   const hasChanges = useMemo(() => {
     if (!initialState || isLoading) return false;
     
     return (
-      scodDate !== initialState.scodDate ||
-      cycleYear !== initialState.cycleYear ||
       styleGuidelines !== initialState.styleGuidelines ||
       systemPrompt !== initialState.systemPrompt ||
       JSON.stringify(rankVerbs) !== JSON.stringify(initialState.rankVerbs) ||
@@ -754,7 +758,7 @@ export default function LLMSettingsPage() {
       awardStyleGuidelines !== initialState.awardStyleGuidelines ||
       JSON.stringify(awardSentencesPerCategory) !== JSON.stringify(initialState.awardSentencesPerCategory)
     );
-  }, [scodDate, cycleYear, styleGuidelines, systemPrompt, rankVerbs, acronyms, abbreviations, mpaDescriptions, awardSystemPrompt, awardAbbreviations, awardStyleGuidelines, awardSentencesPerCategory, isLoading, initialState]);
+  }, [styleGuidelines, systemPrompt, rankVerbs, acronyms, abbreviations, mpaDescriptions, awardSystemPrompt, awardAbbreviations, awardStyleGuidelines, awardSentencesPerCategory, isLoading, initialState]);
 
   // Warn user before leaving with unsaved changes (browser close/refresh)
   useEffect(() => {
@@ -819,25 +823,22 @@ export default function LLMSettingsPage() {
         .from("user_llm_settings")
         .select("*")
         .eq("user_id", profile.id)
-        .single();
+        .maybeSingle();
 
-      if (error && error.code !== "PGRST116") {
+      if (error) {
         throw error;
       }
 
       if (data) {
         setHasExistingSettings(true);
         const settings = data as unknown as UserLLMSettings;
-        const loadedScodDate = settings.scod_date;
-        const loadedCycleYear = settings.current_cycle_year;
+        // SCOD date and cycle year are now computed from rank, not loaded from settings
         const loadedStyleGuidelines = settings.style_guidelines;
         const loadedSystemPrompt = settings.base_system_prompt;
         const loadedRankVerbs = settings.rank_verb_progression;
         const loadedAcronyms = settings.acronyms;
         const loadedAbbreviations = settings.abbreviations || [];
 
-        setScodDate(loadedScodDate);
-        setCycleYear(loadedCycleYear);
         setStyleGuidelines(loadedStyleGuidelines);
         // MPAs are not user-editable, always use STANDARD_MGAS
         setSystemPrompt(loadedSystemPrompt);
@@ -860,10 +861,8 @@ export default function LLMSettingsPage() {
         setAwardStyleGuidelines(loadedAwardStyleGuidelines);
         setAwardSentencesPerCategory(loadedAwardSentences);
 
-        // Store initial state for change detection (excludes MPAs)
+        // Store initial state for change detection (SCOD/cycle year now computed from rank)
         setInitialState({
-          scodDate: loadedScodDate,
-          cycleYear: loadedCycleYear,
           styleGuidelines: loadedStyleGuidelines,
           systemPrompt: loadedSystemPrompt,
           rankVerbs: JSON.parse(JSON.stringify(loadedRankVerbs)),
@@ -878,8 +877,6 @@ export default function LLMSettingsPage() {
       } else {
         // No existing settings - store defaults as initial state
         setInitialState({
-          scodDate: "31 March",
-          cycleYear: new Date().getFullYear(),
           styleGuidelines: DEFAULT_STYLE_GUIDELINES,
           systemPrompt: DEFAULT_SYSTEM_PROMPT,
           rankVerbs: JSON.parse(JSON.stringify(DEFAULT_RANK_VERBS)),
@@ -905,9 +902,10 @@ export default function LLMSettingsPage() {
     setIsSaving(true);
 
     try {
+      // SCOD date and cycle year are computed from rank
       const settingsData = {
-        scod_date: scodDate,
-        current_cycle_year: cycleYear,
+        scod_date: computedScodDate || "Unknown",
+        current_cycle_year: computedCycleYear,
         major_graded_areas: STANDARD_MGAS, // Always use standard MPAs
         rank_verb_progression: rankVerbs,
         style_guidelines: styleGuidelines,
@@ -936,10 +934,8 @@ export default function LLMSettingsPage() {
         setHasExistingSettings(true);
       }
 
-      // Update initial state to match saved state (excludes MPAs)
+      // Update initial state to match saved state (SCOD/cycle year now computed from rank)
       setInitialState({
-        scodDate,
-        cycleYear,
         styleGuidelines,
         systemPrompt,
         rankVerbs: JSON.parse(JSON.stringify(rankVerbs)),
@@ -974,8 +970,7 @@ export default function LLMSettingsPage() {
   }
 
   function resetToDefaults() {
-    setScodDate("31 March");
-    setCycleYear(new Date().getFullYear());
+    // SCOD date and cycle year are now computed from rank, not reset
     setStyleGuidelines(DEFAULT_STYLE_GUIDELINES);
     // MPAs are not user-editable, always use STANDARD_MGAS
     setSystemPrompt(DEFAULT_SYSTEM_PROMPT);
@@ -1080,30 +1075,53 @@ export default function LLMSettingsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="px-3 pb-4 sm:px-6 sm:pb-6 space-y-4 sm:space-y-6">
-              <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label htmlFor="scod" className="text-xs sm:text-sm">SCOD Date</Label>
-                  <Input
-                    id="scod"
-                    value={scodDate}
-                    onChange={(e) => setScodDate(e.target.value)}
-                    placeholder="31 March"
-                    aria-describedby="scod-hint"
-                    className="h-9"
-                  />
-                  <p id="scod-hint" className="text-[10px] sm:text-xs text-muted-foreground">Static Close Out Date</p>
+              {/* SCOD Date and Cycle Year - Auto-computed from rank */}
+              {userRank ? (
+                <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs sm:text-sm">SCOD Date</Label>
+                    <div className="flex items-center h-9 px-3 rounded-md border bg-muted/50">
+                      <span className="text-sm font-medium">{computedScodDate}</span>
+                    </div>
+                    <p className="text-[10px] sm:text-xs text-muted-foreground">
+                      Static Close Out Date (based on your rank: {userRank})
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs sm:text-sm">Cycle Year</Label>
+                    <div className="flex items-center h-9 px-3 rounded-md border bg-muted/50">
+                      <span className="text-sm font-medium">{computedCycleYear}</span>
+                    </div>
+                    <p className="text-[10px] sm:text-xs text-muted-foreground">
+                      Current evaluation cycle
+                    </p>
+                  </div>
                 </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="cycle-year" className="text-xs sm:text-sm">Cycle Year</Label>
-                  <Input
-                    id="cycle-year"
-                    type="number"
-                    value={cycleYear}
-                    onChange={(e) => setCycleYear(parseInt(e.target.value) || new Date().getFullYear())}
-                    className="h-9"
-                  />
+              ) : (
+                <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="shrink-0 mt-0.5">
+                      <Settings className="size-5 text-amber-600 dark:text-amber-400" />
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                        Set your rank to see SCOD information
+                      </p>
+                      <p className="text-xs text-amber-700 dark:text-amber-300">
+                        Your SCOD (Static Close Out Date) and cycle year are automatically determined by your rank. 
+                        Update your profile to set your rank.
+                      </p>
+                      <Link 
+                        href="/settings" 
+                        className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 dark:text-amber-300 hover:underline mt-2"
+                      >
+                        Go to Profile Settings
+                        <ArrowRight className="size-3" />
+                      </Link>
+                    </div>
+                  </div>
                 </div>
-              </div>
+              )}
 
               <Separator />
 

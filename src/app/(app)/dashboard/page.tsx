@@ -21,7 +21,7 @@ import {
   Plus,
   TrendingUp,
 } from "lucide-react";
-import { SUPERVISOR_RANKS } from "@/lib/constants";
+import { SUPERVISOR_RANKS, getStaticCloseoutDate, getActiveCycleYear } from "@/lib/constants";
 import { PendingLinksCard } from "@/components/dashboard/pending-links-card";
 import { PendingPriorDataCard } from "@/components/dashboard/pending-prior-data-card";
 import { TeamAccomplishmentsFeed } from "@/components/dashboard/team-accomplishments-feed";
@@ -33,7 +33,11 @@ export default function DashboardPage() {
     useAccomplishmentsStore();
 
   const supabase = createClient();
-  const cycleYear = epbConfig?.current_cycle_year || new Date().getFullYear();
+  
+  // Cycle year and SCOD are computed from the user's rank
+  const userRank = profile?.rank as Rank | null;
+  const scodInfo = getStaticCloseoutDate(userRank);
+  const cycleYear = getActiveCycleYear(userRank);
 
   // Check if user is a supervisor rank
   const isSupervisorRank =
@@ -75,7 +79,7 @@ export default function DashboardPage() {
           Welcome back, {profile?.rank} {profile?.full_name?.split(" ")[0] || "Airman"}
         </h1>
         <p className="text-muted-foreground">
-          {cycleYear} EPB Cycle • SCOD: {epbConfig?.scod_date || "31 Mar"}
+          {cycleYear} EPB Cycle{scodInfo ? ` • SCOD: ${scodInfo.label}` : ""}
         </p>
       </div>
 
