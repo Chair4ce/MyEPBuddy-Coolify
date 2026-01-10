@@ -28,7 +28,8 @@ export const MPA_ABBREVIATIONS: Record<string, string> = {
   hlr_assessment: "HLR",
 };
 
-export const RANKS: { value: Rank; label: string }[] = [
+// Enlisted Ranks
+export const ENLISTED_RANKS: { value: Rank; label: string }[] = [
   { value: "AB", label: "AB (Airman Basic)" },
   { value: "Amn", label: "Amn (Airman)" },
   { value: "A1C", label: "A1C (Airman First Class)" },
@@ -38,16 +39,68 @@ export const RANKS: { value: Rank; label: string }[] = [
   { value: "MSgt", label: "MSgt (Master Sergeant)" },
   { value: "SMSgt", label: "SMSgt (Senior Master Sergeant)" },
   { value: "CMSgt", label: "CMSgt (Chief Master Sergeant)" },
+];
+
+// Officer Ranks
+export const OFFICER_RANKS: { value: Rank; label: string }[] = [
+  { value: "2d Lt", label: "2d Lt (Second Lieutenant)" },
+  { value: "1st Lt", label: "1st Lt (First Lieutenant)" },
+  { value: "Capt", label: "Capt (Captain)" },
+  { value: "Maj", label: "Maj (Major)" },
+  { value: "Lt Col", label: "Lt Col (Lieutenant Colonel)" },
+  { value: "Col", label: "Col (Colonel)" },
+  { value: "Brig Gen", label: "Brig Gen (Brigadier General)" },
+  { value: "Maj Gen", label: "Maj Gen (Major General)" },
+  { value: "Lt Gen", label: "Lt Gen (Lieutenant General)" },
+  { value: "Gen", label: "Gen (General)" },
+];
+
+// Civilian Rank
+export const CIVILIAN_RANK: { value: Rank; label: string }[] = [
   { value: "Civilian", label: "Civilian (DoD Civilian)" },
 ];
 
-// Ranks that can supervise others
-export const SUPERVISOR_RANKS: Rank[] = ["SSgt", "TSgt", "MSgt", "SMSgt", "CMSgt", "Civilian"];
+// All Ranks (Enlisted + Officer + Civilian)
+export const RANKS: { value: Rank; label: string }[] = [
+  ...ENLISTED_RANKS,
+  ...OFFICER_RANKS,
+  ...CIVILIAN_RANK,
+];
+
+// Ranks that can supervise others (all officers, NCOs, and civilians)
+export const SUPERVISOR_RANKS: Rank[] = [
+  "SSgt", "TSgt", "MSgt", "SMSgt", "CMSgt",
+  "2d Lt", "1st Lt", "Capt", "Maj", "Lt Col", "Col", "Brig Gen", "Maj Gen", "Lt Gen", "Gen",
+  "Civilian"
+];
+
+// Officer rank values for comparison
+const OFFICER_RANK_VALUES: Rank[] = [
+  "2d Lt", "1st Lt", "Capt", "Maj", "Lt Col", "Col", "Brig Gen", "Maj Gen", "Lt Gen", "Gen"
+];
+
+// Enlisted rank values for comparison
+const ENLISTED_RANK_VALUES: Rank[] = [
+  "AB", "Amn", "A1C", "SrA", "SSgt", "TSgt", "MSgt", "SMSgt", "CMSgt"
+];
+
+// Helper to check if a rank is an officer rank (has OPB, not EPB)
+export function isOfficer(rank: Rank | string | null): boolean {
+  if (!rank) return false;
+  return OFFICER_RANK_VALUES.includes(rank as Rank);
+}
 
 // Helper to check if a rank is a military enlisted rank (has EPB)
+export function isEnlisted(rank: Rank | string | null): boolean {
+  if (!rank) return false;
+  return ENLISTED_RANK_VALUES.includes(rank as Rank);
+}
+
+// Legacy helper - check if a rank is a military enlisted rank (has EPB)
+// Note: Officers do NOT have EPBs, they have OPBs
 export function isMilitaryEnlisted(rank: Rank | null): boolean {
   if (!rank) return false;
-  return rank !== "Civilian";
+  return isEnlisted(rank);
 }
 
 export const AI_MODELS = [
@@ -135,9 +188,17 @@ export const MAX_DUTY_DESCRIPTION_CHARACTERS = 450;
 // These are the official AF EPB static close-out dates
 // AB and Amn do not have EPBs until they become SrA
 
-export type RankTier = "airman" | "ssgt" | "tsgt" | "msgt" | "smsgt" | "cmsgt";
+// Enlisted EPB Tiers
+export type EnlistedTier = "airman" | "ssgt" | "tsgt" | "msgt" | "smsgt" | "cmsgt";
+
+// Officer OPB Tiers (O-1/O-2, O-3, O-4/O-5, O-6)
+export type OfficerTier = "o1_o2" | "o3" | "o4_o5" | "o6";
+
+// Combined Rank Tier
+export type RankTier = EnlistedTier | OfficerTier;
 
 export const RANK_TO_TIER: Record<Rank, RankTier | null> = {
+  // Enlisted Ranks (EPB)
   AB: null,       // No EPB for AB
   Amn: null,      // No EPB for Amn
   A1C: "airman",  // First EPB at SrA, but includes A1C entries
@@ -147,17 +208,36 @@ export const RANK_TO_TIER: Record<Rank, RankTier | null> = {
   MSgt: "msgt",
   SMSgt: "smsgt",
   CMSgt: "cmsgt",
-  Civilian: null, // No EPB for civilians
+  // Officer Ranks (OPB - Officer Performance Brief)
+  "2d Lt": "o1_o2",   // O-1: Oct 31
+  "1st Lt": "o1_o2",  // O-2: Oct 31
+  "Capt": "o3",       // O-3: Feb 28
+  "Maj": "o4_o5",     // O-4: May 31
+  "Lt Col": "o4_o5",  // O-5: May 31
+  "Col": "o6",        // O-6: Aug 31
+  // General Officers (different system, no SCOD)
+  "Brig Gen": null,
+  "Maj Gen": null,
+  "Lt Gen": null,
+  "Gen": null,
+  // Civilian
+  Civilian: null, // No EPB/OPB for civilians
 };
 
 // Static close-out dates (month and day) for each rank tier
 export const STATIC_CLOSEOUT_DATES: Record<RankTier, { month: number; day: number; label: string }> = {
+  // Enlisted EPB SCODs
   airman: { month: 3, day: 31, label: "March 31" },     // SrA (AB-SrA)
   ssgt: { month: 1, day: 31, label: "January 31" },     // SSgt
   tsgt: { month: 11, day: 30, label: "November 30" },   // TSgt
   msgt: { month: 9, day: 30, label: "September 30" },   // MSgt
   smsgt: { month: 7, day: 31, label: "July 31" },       // SMSgt
   cmsgt: { month: 5, day: 31, label: "May 31" },        // CMSgt
+  // Officer OPB SCODs
+  o1_o2: { month: 10, day: 31, label: "October 31" },   // 2d Lt, 1st Lt (O-1/O-2)
+  o3: { month: 2, day: 28, label: "February 28" },      // Capt (O-3)
+  o4_o5: { month: 5, day: 31, label: "May 31" },        // Maj, Lt Col (O-4/O-5)
+  o6: { month: 8, day: 31, label: "August 31" },        // Col (O-6)
 };
 
 // Get the static close-out date for a given rank
@@ -1143,3 +1223,299 @@ Respond with a valid JSON object in this exact structure:
 Assess ALL categories from the rubric. For subcategories not addressed by the statements, mark as "not_applicable" with brief explanation.`
 }
 
+
+// ============================================
+// OPB (OFFICER PERFORMANCE BRIEF) CONSTANTS
+// ============================================
+// OPB-specific configurations for officers (O-1 to O-6)
+// Based on AFI 36-2406 and ALQ-based evaluation system
+
+// Officer-focused MPA descriptions aligned with ALQs
+export const OPB_MPA_DESCRIPTIONS: MPADescriptions = {
+  executing_mission: {
+    title: "Executing the Mission",
+    description: "Effectively leverages expertise, initiative, and adaptability to produce timely, high-quality results with strategic mission impact.",
+    sub_competencies: {
+      job_proficiency: "Demonstrates expert-level knowledge and professional skill in assigned duties; achieves significant positive results that advance organizational objectives.",
+      adaptability: "Adjusts effectively to changing conditions, ambiguity, and complexity; modifies plans and approaches to overcome obstacles and seize opportunities.",
+      initiative: "Proactively identifies requirements and takes independent action to address challenges; influences mission outcomes beyond immediate scope.",
+    },
+  },
+  leading_people: {
+    title: "Leading People",
+    description: "Builds cohesive, high-performing teams through effective communication, emotional intelligence, and commitment to developing subordinates.",
+    sub_competencies: {
+      inclusion_teamwork: "Creates an inclusive climate where diverse perspectives are valued; unifies teams toward common objectives and organizational success.",
+      emotional_intelligence: "Demonstrates self-awareness and manages emotions effectively; builds strong relationships and navigates interpersonal dynamics skillfully.",
+      communication: "Articulates vision and guidance clearly at all levels; tailors messaging for strategic impact while fostering open dialogue and active listening.",
+    },
+  },
+  managing_resources: {
+    title: "Managing Resources",
+    description: "Optimizes assigned resources strategically while maintaining accountability and ensuring organizational effectiveness.",
+    sub_competencies: {
+      stewardship: "Manages time, personnel, equipment, and budgets with strategic foresight; maximizes resource utilization for mission advantage.",
+      accountability: "Takes full ownership of team actions and outcomes; demonstrates reliability, transparency, and ethical leadership under scrutiny.",
+    },
+  },
+  improving_unit: {
+    title: "Improving the Unit",
+    description: "Applies critical thinking and strategic innovation to enhance mission execution and drive organizational advancement.",
+    sub_competencies: {
+      decision_making: "Makes well-informed, timely decisions that balance risk and reward; guides organization through complex challenges with sound judgment.",
+      innovation: "Champions creative solutions and calculated improvements; institutionalizes best practices that elevate organizational performance.",
+    },
+  },
+  hlr_assessment: {
+    title: "Higher Level Reviewer Assessment",
+    description: "Senior rater's strategic endorsement synthesizing performance across all MPAs with focus on leadership potential, versatility, and future impact.",
+    sub_competencies: {},
+  },
+};
+
+// Get formatted OPB MPA context for prompts
+export function formatOPBMPAContext(mpaKey: string): string {
+  const mpa = OPB_MPA_DESCRIPTIONS[mpaKey];
+  if (!mpa) return "";
+  
+  let context = `**${mpa.title}**: ${mpa.description}`;
+  
+  const subComps = Object.entries(mpa.sub_competencies);
+  if (subComps.length > 0) {
+    context += "\n\nAirman Leadership Qualities (ALQs):";
+    subComps.forEach(([key, desc]) => {
+      const label = key.split("_").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+      context += `\n- ${label}: ${desc}`;
+    });
+  }
+  
+  return context;
+}
+
+// OPB stratification levels for officers
+export const OPB_STRATIFICATION_LEVELS = [
+  { value: "top_1", label: "#1 of [X]", description: "Absolute best officer in scope" },
+  { value: "top_3", label: "Top 3 of [X]", description: "Among the very best" },
+  { value: "top_10_percent", label: "Top 10%", description: "Exceptional performer" },
+  { value: "top_third", label: "Top Third", description: "Strong performer" },
+  { value: "definitely_promote", label: "Definitely Promote", description: "Ready for next grade" },
+  { value: "promote", label: "Promote", description: "Solid performance, ready when eligible" },
+] as const;
+
+// OPB-specific action verbs (officer-appropriate)
+export const OPB_ACTION_VERBS = [
+  // Strategic leadership
+  "Orchestrated", "Spearheaded", "Championed", "Directed", "Commanded",
+  // Decision & influence
+  "Adjudicated", "Arbitrated", "Authorized", "Sanctioned", "Endorsed",
+  // Innovation & improvement
+  "Pioneered", "Revolutionized", "Transformed", "Modernized", "Institutionalized",
+  // Team building
+  "Galvanized", "Unified", "Mentored", "Cultivated", "Empowered",
+  // Resource management
+  "Optimized", "Reallocated", "Consolidated", "Maximized", "Leveraged",
+  // Mission execution
+  "Executed", "Delivered", "Operationalized", "Synchronized", "Integrated",
+] as const;
+
+// Build OPB statement generation prompt
+export function buildOPBStatementPrompt(
+  mpaKey: string,
+  customContext: string,
+  officerRank: Rank,
+  dutyDescription?: string,
+): string {
+  const mpaContext = formatOPBMPAContext(mpaKey);
+  const isHLR = mpaKey === "hlr_assessment";
+  const maxChars = isHLR ? MAX_HLR_CHARACTERS : MAX_STATEMENT_CHARACTERS;
+  
+  const dutySection = dutyDescription?.trim()
+    ? `\n\n## DUTY DESCRIPTION (Context)\n${dutyDescription}`
+    : "";
+  
+  return `You are an expert OPB (Officer Performance Brief) writer for the U.S. Air Force, creating narrative performance statements for a ${officerRank}.
+
+## OFFICER INFORMATION
+- Rank: ${officerRank}
+- MPA: ${mpaContext}${dutySection}
+
+## OPB WRITING GUIDELINES (AFI 36-2406)
+
+1. **Narrative Format**: Write clear, action-impact statements (not bullets). Each statement should be standalone with specific behavior and measurable outcome.
+
+2. **Character Limit**: Maximum ${maxChars} characters per MPA section. Aim for 2-3 impactful statements.
+
+3. **Focus Areas**:
+   - Strategic impact beyond immediate duties
+   - Leadership and team development
+   - Innovation and process improvement
+   - Resource optimization
+   - Mission accomplishment with broader organizational effect
+
+4. **Style Guidelines**:
+   - Use active voice and strong action verbs
+   - Quantify results (metrics, percentages, dollar amounts)
+   - Connect actions to mission impact
+   - Avoid jargon; use plain English
+   - Demonstrate versatility and future potential
+
+5. **Avoid**:
+   - Generic praise without evidence
+   - Repetition of accomplishments across MPAs
+   - Fitness scores (unless failed)
+   - Prior evaluation references
+   - Prohibited content per AFI 36-2406
+
+## ACCOMPLISHMENT CONTEXT
+${customContext || "No specific context provided. Generate example statements aligned with the MPA."}
+
+## OUTPUT INSTRUCTIONS
+Generate 2-3 performance statements for the ${OPB_MPA_DESCRIPTIONS[mpaKey]?.title || "section"} MPA. Each statement should:
+- Start with a strong action verb
+- Include specific, quantifiable impact
+- Demonstrate strategic thinking and leadership
+- Stay within ${maxChars} total characters combined
+
+Format as plain text with statements separated by newlines. Do not include bullet points, numbering, or markdown.`;
+}
+
+// Build OPB HLR (Higher Level Reviewer) summary prompt
+export function buildOPBHLRPrompt(
+  mpaStatements: Record<string, string>,
+  officerRank: Rank,
+  dutyDescription?: string,
+  stratification?: string,
+): string {
+  const statementsText = Object.entries(mpaStatements)
+    .filter(([key]) => key !== "hlr_assessment")
+    .map(([key, text]) => `### ${OPB_MPA_DESCRIPTIONS[key]?.title || key}\n${text}`)
+    .join("\n\n");
+  
+  const dutySection = dutyDescription?.trim()
+    ? `\n\n## DUTY DESCRIPTION\n${dutyDescription}`
+    : "";
+  
+  const stratSection = stratification
+    ? `\n\n## STRATIFICATION GUIDANCE\nConsider stratification: ${stratification}`
+    : "";
+  
+  return `You are a senior Air Force officer writing the Higher Level Reviewer (HLR) Assessment for a ${officerRank}'s OPB.
+
+## OFFICER INFORMATION
+- Rank: ${officerRank}${dutySection}${stratSection}
+
+## RATER'S MPA STATEMENTS
+${statementsText}
+
+## HLR ASSESSMENT GUIDELINES
+
+1. **Purpose**: Provide strategic endorsement that synthesizes performance across all MPAs and signals promotion potential.
+
+2. **Character Limit**: Maximum ${MAX_HLR_CHARACTERS} characters. Be concise but impactful.
+
+3. **Include**:
+   - Concurrence/non-concurrence with rater's assessment
+   - Additional stratification if warranted (e.g., "My #2 of 15 ${officerRank}s")
+   - Future potential and recommendations (PME, command, key billets)
+   - Leadership impact beyond immediate duties
+
+4. **Focus On**:
+   - Overall performance strength across MPAs
+   - Strategic value to the organization
+   - Comparison to peers (within your scope)
+   - Readiness for increased responsibility
+
+5. **Avoid**:
+   - Repeating rater's specific accomplishments verbatim
+   - Generic endorsements without substance
+   - Veiled or unauthorized stratifications
+
+## OUTPUT INSTRUCTIONS
+Generate a concise HLR assessment (max ${MAX_HLR_CHARACTERS} characters) that:
+- Opens with stratification if applicable
+- Highlights standout performance
+- Recommends for future opportunities
+- Signals promotion potential
+
+Format as plain text without markdown or bullet points.`;
+}
+
+// Default OPB System Prompt (exported for use in components)
+export const DEFAULT_OPB_SYSTEM_PROMPT = `You are an expert Air Force Officer Performance Brief (OPB) writing assistant with deep knowledge of Air Force officer leadership, strategy, and organizational impact. Your sole purpose is to generate impactful, narrative-style performance statements that strictly comply with AFI 36-2406 (22 Aug 2025) for officers.
+
+CRITICAL RULES - NEVER VIOLATE THESE:
+- Every statement MUST be a standalone sentence demonstrating STRATEGIC IMPACT.
+- NEVER use semi-colons (;). Use commas or em-dashes (--) to connect clauses into flowing sentences.
+- Every statement MUST contain: 1) a leadership action AND 2) organizational/mission-level impact.
+- Character range: AIM for {{max_characters_per_statement}} characters. Minimum 280 characters, maximum {{max_characters_per_statement}}.
+- Generate exactly 2–3 strong statements per Major Performance Area.
+- Output pure, clean text only — no formatting.
+
+OPB vs EPB DISTINCTION (CRITICAL):
+Officer statements emphasize:
+- STRATEGIC thinking and decision-making
+- LEADERSHIP and team development
+- ORGANIZATIONAL advancement beyond immediate duties
+- FUTURE potential and promotion readiness
+- VERSATILITY across mission areas
+- BREADTH of impact (squadron → group → wing → MAJCOM → AF/DoD)
+
+CHARACTER UTILIZATION STRATEGY (CRITICAL):
+Statements should be DENSE with strategic impact. To maximize character usage:
+1. EXPAND scope: Show effects beyond immediate team (flight → squadron → wing → MAJCOM → AF/DoD/Joint)
+2. ADD strategic context: Connect to Air Force priorities, Great Power Competition, readiness
+3. CHAIN results: "transformed X, enabling Y, which positioned Z for future growth"
+4. QUANTIFY broadly: personnel influenced, budget managed, organizations affected
+5. DEMONSTRATE leadership: mentorship, culture-building, talent development
+
+CONTEXTUAL ENHANCEMENT (USE YOUR MILITARY KNOWLEDGE):
+When given limited input, ENHANCE statements using knowledge of:
+- Officer career progression and PME (SOS, IDE, SDE, AWC)
+- Strategic programs and initiatives (AFWERX, Digital AF, ACE concepts)
+- Joint operations and interoperability (CCMD, coalition, interagency)
+- Organizational leadership (culture, climate, talent management)
+- Air Force priorities (integrated deterrence, force design, mission command)
+
+RANK-APPROPRIATE STYLE FOR {{ratee_rank}}:
+Primary action verbs to use: {{primary_verbs}}
+{{rank_verb_guidance}}
+- 2d Lt/1st Lt: Team leadership with flight/squadron impact
+- Capt: Program management with squadron/group impact  
+- Maj/Lt Col: Strategic execution with group/wing/MAJCOM impact
+- Col+: Enterprise leadership with AF/DoD/Joint impact
+
+STATEMENT STRUCTURE:
+[Strategic action verb] + [leadership accomplishment with scope] + [organizational result] + [strategic/future impact]
+
+IMPACT AMPLIFICATION TECHNIQUES:
+- Connect to force readiness: "postured unit for rapid deployment"
+- Show leadership scope: "mentored X officers, developing future leaders"
+- Reference strategic value: "aligned unit with CSAF priorities"
+- Tie to joint/coalition: "enhanced interoperability with X allies"
+- Quantify influence: "policies adopted by X organizations"
+- Demonstrate versatility: "cross-functional expertise in X and Y"
+
+MAJOR PERFORMANCE AREAS (ALQ-ALIGNED):
+{{mga_list}}
+
+ADDITIONAL STYLE GUIDANCE:
+{{style_guidelines}}
+
+Using the provided accomplishment context, generate 2–3 HIGH-IMPACT statements for the specified MPA. Use your officer leadership expertise to EXPAND inputs into comprehensive statements that demonstrate strategic thinking, organizational impact, and future potential.
+
+WORD ABBREVIATIONS (AUTO-APPLY):
+{{abbreviations_list}}
+
+ACRONYMS REFERENCE:
+{{acronyms_list}}`;
+
+export const DEFAULT_OPB_STYLE_GUIDELINES = `EMPHASIZE strategic impact and leadership. Write in active voice showing command presence. Chain impacts: leadership action → organizational result → strategic benefit. Quantify scope: personnel led, budgets managed, organizations influenced. Connect to Air Force priorities and future potential. Demonstrate versatility and PME-readiness. Use standard AF abbreviations.`;
+
+// Helper functions for OPB defaults
+export function getDefaultOPBPrompt(): string {
+  return DEFAULT_OPB_SYSTEM_PROMPT;
+}
+
+export function getDefaultOPBStyleGuidelines(): string {
+  return DEFAULT_OPB_STYLE_GUIDELINES;
+}

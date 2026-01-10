@@ -24,11 +24,14 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { toast } from "@/components/ui/sonner";
 import { AvatarCropDialog } from "@/components/settings/avatar-crop-dialog";
 import { 
-  RANKS, 
+  ENLISTED_RANKS,
+  OFFICER_RANKS,
+  CIVILIAN_RANK,
   getStaticCloseoutDate, 
   getDaysUntilCloseout, 
   getCycleProgress,
-  RANK_TO_TIER 
+  RANK_TO_TIER,
+  isOfficer 
 } from "@/lib/constants";
 import { Loader2, User, Calendar, Clock, Camera, X, RotateCcw } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
@@ -480,7 +483,26 @@ export default function SettingsPage() {
                     <SelectValue placeholder="Select rank" />
                   </SelectTrigger>
                   <SelectContent>
-                    {RANKS.map((r) => (
+                    <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+                      Enlisted
+                    </div>
+                    {ENLISTED_RANKS.map((r) => (
+                      <SelectItem key={r.value} value={r.value}>
+                        {r.label}
+                      </SelectItem>
+                    ))}
+                    <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground border-t mt-1 pt-1">
+                      Officer
+                    </div>
+                    {OFFICER_RANKS.map((r) => (
+                      <SelectItem key={r.value} value={r.value}>
+                        {r.label}
+                      </SelectItem>
+                    ))}
+                    <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground border-t mt-1 pt-1">
+                      Civilian
+                    </div>
+                    {CIVILIAN_RANK.map((r) => (
                       <SelectItem key={r.value} value={r.value}>
                         {r.label}
                       </SelectItem>
@@ -585,6 +607,107 @@ function EPBCloseoutCard({ rank }: { rank: Rank | null }) {
   // Civilians don't have EPBs - don't show this card
   if (rank === "Civilian") {
     return null;
+  }
+
+  // Officers have OPBs - show OPB closeout info if they have a SCOD (O-1 to O-6)
+  if (rank && isOfficer(rank)) {
+    // General officers (O-7+) don't have standard SCODs
+    const isGeneralOfficer = ["Brig Gen", "Maj Gen", "Lt Gen", "Gen"].includes(rank);
+    
+    if (isGeneralOfficer) {
+      return (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="size-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                <Calendar className="size-5 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div>
+                <CardTitle>Officer Performance Report</CardTitle>
+                <CardDescription>
+                  Performance tracking for {rank}
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 space-y-3">
+              <p className="text-sm text-blue-800 dark:text-blue-200">
+                General Officers follow a different evaluation system than field-grade and company-grade officers.
+              </p>
+              <p className="text-sm text-blue-700 dark:text-blue-300">
+                You can use this app to manage EPBs for your enlisted subordinates and collaborate on award packages for your team.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      );
+    }
+
+    // Regular officers (O-1 to O-6) have SCODs
+    return (
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="size-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+              <Calendar className="size-5 text-blue-600 dark:text-blue-400" />
+            </div>
+            <div>
+              <CardTitle>OPR Close-out Date</CardTitle>
+              <CardDescription>
+                Static close-out date for {rank}
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* OPR Close-out date display */}
+          {closeout && (
+            <div className="flex items-center justify-between p-4 rounded-lg border bg-blue-50/50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
+              <div>
+                <p className="text-sm text-muted-foreground">OPR Close-out Date</p>
+                <p className="text-2xl font-bold text-blue-800 dark:text-blue-200">
+                  {closeout.label}, {closeout.date.getFullYear()}
+                </p>
+              </div>
+              <div className="text-right">
+                <div className="flex items-center gap-1.5 justify-end text-blue-700 dark:text-blue-300">
+                  <Clock className="size-4" />
+                  <span className="text-sm font-medium">
+                    {daysUntil !== null ? (
+                      daysUntil === 0 ? "Today!" : 
+                      daysUntil === 1 ? "Tomorrow" :
+                      daysUntil < 0 ? `${Math.abs(daysUntil)} days ago` :
+                      `${daysUntil} days`
+                    ) : "—"}
+                  </span>
+                </div>
+                <p className="text-xs mt-0.5 text-blue-600 dark:text-blue-400">
+                  {daysUntil !== null && daysUntil > 0 ? "until close-out" : daysUntil === 0 ? "" : "since close-out"}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Cycle progress */}
+          {cycleProgress !== null && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">OPR Cycle Progress</span>
+                <span className="font-medium">{Math.round(cycleProgress)}%</span>
+              </div>
+              <Progress value={cycleProgress} className="h-2" />
+            </div>
+          )}
+
+          {/* Info about OPB/OPR */}
+          <div className="text-xs text-muted-foreground bg-muted/50 rounded-lg p-3 space-y-2">
+            <p><strong>Note:</strong> Officers have OPRs (Officer Performance Reports) which follow Static Close-out Dates (SCODs) per AFI 36-2406.</p>
+            <p>While OPR-specific generation features are in development, you can still use this app to manage EPBs for your enlisted subordinates.</p>
+          </div>
+        </CardContent>
+      </Card>
+    );
   }
 
   // AB and Amn don't have EPBs

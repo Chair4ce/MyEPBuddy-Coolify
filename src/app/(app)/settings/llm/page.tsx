@@ -69,9 +69,12 @@ import {
   Search,
   ArrowRight,
   Target,
+  Info,
+  Users,
+  Sparkles,
 } from "lucide-react";
 import type { UserLLMSettings, Acronym, Abbreviation, RankVerbProgression, AwardSentencesPerCategory, MPADescriptions, Rank } from "@/types/database";
-import { RANKS, STANDARD_MGAS, AWARD_1206_CATEGORIES, DEFAULT_AWARD_SENTENCES, DEFAULT_MPA_DESCRIPTIONS, ENTRY_MGAS, getStaticCloseoutDate, getActiveCycleYear } from "@/lib/constants";
+import { RANKS, STANDARD_MGAS, AWARD_1206_CATEGORIES, DEFAULT_AWARD_SENTENCES, DEFAULT_MPA_DESCRIPTIONS, ENTRY_MGAS, getStaticCloseoutDate, getActiveCycleYear, isOfficer, ENLISTED_RANKS, OFFICER_RANKS, CIVILIAN_RANK, DEFAULT_OPB_SYSTEM_PROMPT, DEFAULT_OPB_STYLE_GUIDELINES } from "@/lib/constants";
 import Link from "next/link";
 import { Award } from "lucide-react";
 
@@ -174,6 +177,7 @@ WORD ABBREVIATIONS (AUTO-APPLY):
 const DEFAULT_AWARD_STYLE_GUIDELINES = `MAXIMIZE density for 1206 space constraints. Write in active voice. Chain impacts: action → immediate result → organizational benefit. Always quantify: numbers, percentages, dollars, time, personnel. Connect to mission readiness, compliance, or strategic goals. Use standard AF abbreviations liberally.`;
 
 const DEFAULT_RANK_VERBS: RankVerbProgression = {
+  // Enlisted Ranks
   AB: { primary: ["Assisted", "Supported", "Performed"], secondary: ["Helped", "Contributed", "Participated"] },
   Amn: { primary: ["Assisted", "Supported", "Performed"], secondary: ["Helped", "Contributed", "Executed"] },
   A1C: { primary: ["Executed", "Performed", "Supported"], secondary: ["Assisted", "Contributed", "Maintained"] },
@@ -183,6 +187,17 @@ const DEFAULT_RANK_VERBS: RankVerbProgression = {
   MSgt: { primary: ["Directed", "Spearheaded", "Orchestrated"], secondary: ["Championed", "Transformed", "Pioneered"] },
   SMSgt: { primary: ["Spearheaded", "Orchestrated", "Championed"], secondary: ["Transformed", "Pioneered", "Revolutionized"] },
   CMSgt: { primary: ["Championed", "Transformed", "Pioneered"], secondary: ["Revolutionized", "Institutionalized", "Shaped"] },
+  // Officer Ranks
+  "2d Lt": { primary: ["Led", "Managed", "Coordinated"], secondary: ["Supervised", "Executed", "Developed"] },
+  "1st Lt": { primary: ["Led", "Managed", "Directed"], secondary: ["Coordinated", "Supervised", "Developed"] },
+  "Capt": { primary: ["Directed", "Led", "Managed"], secondary: ["Spearheaded", "Coordinated", "Championed"] },
+  "Maj": { primary: ["Directed", "Spearheaded", "Orchestrated"], secondary: ["Championed", "Transformed", "Led"] },
+  "Lt Col": { primary: ["Spearheaded", "Orchestrated", "Championed"], secondary: ["Transformed", "Directed", "Pioneered"] },
+  "Col": { primary: ["Championed", "Orchestrated", "Transformed"], secondary: ["Pioneered", "Shaped", "Directed"] },
+  "Brig Gen": { primary: ["Championed", "Transformed", "Pioneered"], secondary: ["Shaped", "Institutionalized", "Revolutionized"] },
+  "Maj Gen": { primary: ["Transformed", "Pioneered", "Shaped"], secondary: ["Institutionalized", "Revolutionized", "Championed"] },
+  "Lt Gen": { primary: ["Pioneered", "Shaped", "Institutionalized"], secondary: ["Revolutionized", "Transformed", "Championed"] },
+  "Gen": { primary: ["Shaped", "Institutionalized", "Revolutionized"], secondary: ["Pioneered", "Transformed", "Championed"] },
 };
 
 
@@ -693,6 +708,9 @@ interface SettingsState {
   awardAbbreviations: Abbreviation[];
   awardStyleGuidelines: string;
   awardSentencesPerCategory: AwardSentencesPerCategory;
+  // OPB settings (Officer Performance Brief)
+  opbSystemPrompt: string;
+  opbStyleGuidelines: string;
 }
 
 export default function LLMSettingsPage() {
@@ -708,6 +726,9 @@ export default function LLMSettingsPage() {
   const scodInfo = getStaticCloseoutDate(userRank);
   const computedScodDate = scodInfo?.label || null;
   const computedCycleYear = getActiveCycleYear(userRank);
+  
+  // Check if user is an officer (ACA rubrics don't apply to officers)
+  const userIsOfficer = isOfficer(userRank);
   
   // Separate state for each section to prevent unnecessary re-renders
   const [styleGuidelines, setStyleGuidelines] = useState(DEFAULT_STYLE_GUIDELINES);
@@ -727,6 +748,10 @@ export default function LLMSettingsPage() {
   const [awardSentencesPerCategory, setAwardSentencesPerCategory] = useState<AwardSentencesPerCategory>(
     DEFAULT_AWARD_SENTENCES as unknown as AwardSentencesPerCategory
   );
+  
+  // OPB-specific settings (Officer Performance Brief)
+  const [opbSystemPrompt, setOpbSystemPrompt] = useState(DEFAULT_OPB_SYSTEM_PROMPT);
+  const [opbStyleGuidelines, setOpbStyleGuidelines] = useState(DEFAULT_OPB_STYLE_GUIDELINES);
 
   // Track initial state to detect changes (use state, not ref, to trigger re-renders)
   const [initialState, setInitialState] = useState<SettingsState | null>(null);
@@ -756,9 +781,11 @@ export default function LLMSettingsPage() {
       awardSystemPrompt !== initialState.awardSystemPrompt ||
       JSON.stringify(awardAbbreviations) !== JSON.stringify(initialState.awardAbbreviations) ||
       awardStyleGuidelines !== initialState.awardStyleGuidelines ||
-      JSON.stringify(awardSentencesPerCategory) !== JSON.stringify(initialState.awardSentencesPerCategory)
+      JSON.stringify(awardSentencesPerCategory) !== JSON.stringify(initialState.awardSentencesPerCategory) ||
+      opbSystemPrompt !== initialState.opbSystemPrompt ||
+      opbStyleGuidelines !== initialState.opbStyleGuidelines
     );
-  }, [styleGuidelines, systemPrompt, rankVerbs, acronyms, abbreviations, mpaDescriptions, awardSystemPrompt, awardAbbreviations, awardStyleGuidelines, awardSentencesPerCategory, isLoading, initialState]);
+  }, [styleGuidelines, systemPrompt, rankVerbs, acronyms, abbreviations, mpaDescriptions, awardSystemPrompt, awardAbbreviations, awardStyleGuidelines, awardSentencesPerCategory, opbSystemPrompt, opbStyleGuidelines, isLoading, initialState]);
 
   // Warn user before leaving with unsaved changes (browser close/refresh)
   useEffect(() => {
@@ -861,6 +888,13 @@ export default function LLMSettingsPage() {
         setAwardStyleGuidelines(loadedAwardStyleGuidelines);
         setAwardSentencesPerCategory(loadedAwardSentences);
 
+        // Load OPB settings
+        const loadedOpbSystemPrompt = settings.opb_system_prompt || DEFAULT_OPB_SYSTEM_PROMPT;
+        const loadedOpbStyleGuidelines = settings.opb_style_guidelines || DEFAULT_OPB_STYLE_GUIDELINES;
+        
+        setOpbSystemPrompt(loadedOpbSystemPrompt);
+        setOpbStyleGuidelines(loadedOpbStyleGuidelines);
+
         // Store initial state for change detection (SCOD/cycle year now computed from rank)
         setInitialState({
           styleGuidelines: loadedStyleGuidelines,
@@ -873,6 +907,8 @@ export default function LLMSettingsPage() {
           awardAbbreviations: JSON.parse(JSON.stringify(loadedAwardAbbreviations)),
           awardStyleGuidelines: loadedAwardStyleGuidelines,
           awardSentencesPerCategory: JSON.parse(JSON.stringify(loadedAwardSentences)),
+          opbSystemPrompt: loadedOpbSystemPrompt,
+          opbStyleGuidelines: loadedOpbStyleGuidelines,
         });
       } else {
         // No existing settings - store defaults as initial state
@@ -887,6 +923,8 @@ export default function LLMSettingsPage() {
           awardAbbreviations: [],
           awardStyleGuidelines: DEFAULT_AWARD_STYLE_GUIDELINES,
           awardSentencesPerCategory: JSON.parse(JSON.stringify(DEFAULT_AWARD_SENTENCES)),
+          opbSystemPrompt: DEFAULT_OPB_SYSTEM_PROMPT,
+          opbStyleGuidelines: DEFAULT_OPB_STYLE_GUIDELINES,
         });
       }
     } catch (error) {
@@ -919,6 +957,9 @@ export default function LLMSettingsPage() {
         award_abbreviations: awardAbbreviations,
         award_style_guidelines: awardStyleGuidelines,
         award_sentences_per_category: awardSentencesPerCategory,
+        // OPB settings
+        opb_system_prompt: opbSystemPrompt,
+        opb_style_guidelines: opbStyleGuidelines,
       };
 
       if (hasExistingSettings) {
@@ -946,6 +987,8 @@ export default function LLMSettingsPage() {
         awardAbbreviations: JSON.parse(JSON.stringify(awardAbbreviations)),
         awardStyleGuidelines,
         awardSentencesPerCategory: JSON.parse(JSON.stringify(awardSentencesPerCategory)),
+        opbSystemPrompt,
+        opbStyleGuidelines,
       });
 
       toast.success("Settings saved successfully");
@@ -1037,8 +1080,35 @@ export default function LLMSettingsPage() {
         </div>
       </div>
 
+      {/* Officer Notice */}
+      {userIsOfficer && (
+        <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/20">
+          <CardContent className="py-4">
+            <div className="flex items-start gap-3">
+              <Info className="size-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+              <div className="space-y-2 min-w-0">
+                <p className="text-sm font-medium text-blue-800 dark:text-blue-200">
+                  Officer Performance Settings
+                </p>
+                <p className="text-xs text-blue-700 dark:text-blue-300">
+                  As an officer, your OPB (Officer Performance Brief) uses narrative statements aligned with 
+                  Airman Leadership Qualities (ALQs) per AFI 36-2406. The enlisted ACA rubrics don&apos;t apply to your personal evaluations, 
+                  but these settings are still used when generating EPB statements for your enlisted subordinates.
+                </p>
+                <p className="text-xs text-blue-600 dark:text-blue-400">
+                  Access your OPB workspace from the <Link href="/generate" className="underline hover:text-blue-500">Generate page</Link> using the &quot;My OPB&quot; toggle.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Tabs defaultValue="general" className="w-full space-y-3 sm:space-y-4">
-        <TabsList className="w-full h-auto p-1 grid grid-cols-6 gap-0.5">
+        <TabsList className={cn(
+          "w-full h-auto p-1 grid gap-0.5",
+          userIsOfficer ? "grid-cols-7" : "grid-cols-6"
+        )}>
           <TabsTrigger value="general" className="flex-col sm:flex-row gap-0.5 sm:gap-1.5 text-[10px] sm:text-xs px-1 sm:px-2.5 py-1.5 sm:py-2 data-[state=active]:text-foreground">
             <Settings className="size-4 sm:size-3.5 shrink-0" />
             <span className="hidden sm:inline">General</span>
@@ -1047,6 +1117,12 @@ export default function LLMSettingsPage() {
             <Wand2 className="size-4 sm:size-3.5 shrink-0" />
             <span className="hidden sm:inline">EPB</span>
           </TabsTrigger>
+          {userIsOfficer && (
+            <TabsTrigger value="opb-prompt" className="flex-col sm:flex-row gap-0.5 sm:gap-1.5 text-[10px] sm:text-xs px-1 sm:px-2.5 py-1.5 sm:py-2 data-[state=active]:text-foreground data-[state=active]:bg-blue-100 dark:data-[state=active]:bg-blue-900/30">
+              <Sparkles className="size-4 sm:size-3.5 shrink-0" />
+              <span className="hidden sm:inline">OPB</span>
+            </TabsTrigger>
+          )}
           <TabsTrigger value="award-prompt" className="flex-col sm:flex-row gap-0.5 sm:gap-1.5 text-[10px] sm:text-xs px-1 sm:px-2.5 py-1.5 sm:py-2 data-[state=active]:text-foreground">
             <Award className="size-4 sm:size-3.5 shrink-0" />
             <span className="hidden sm:inline">Award</span>
@@ -1260,6 +1336,93 @@ export default function LLMSettingsPage() {
           </Card>
         </TabsContent>
 
+        {/* OPB System Prompt - Officers Only */}
+        {userIsOfficer && (
+          <TabsContent value="opb-prompt" className="w-full space-y-4">
+            <Card className="border-blue-200 dark:border-blue-800/50">
+              <CardHeader className="px-3 py-3 sm:px-6 sm:py-4">
+                <CardTitle className="text-base sm:text-lg flex items-center gap-2">
+                  <Sparkles className="size-4 text-blue-600 dark:text-blue-400" />
+                  OPB System Prompt
+                </CardTitle>
+                <CardDescription className="text-xs sm:text-sm">
+                  Customize the AI prompt for Officer Performance Brief (OPB) statement generation. This prompt is used when you generate your own OPB statements.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="px-3 pb-4 sm:px-6 sm:pb-6 space-y-3 sm:space-y-4">
+                <PlaceholderStatus systemPrompt={opbSystemPrompt} />
+                
+                <div className="p-3 bg-blue-50/50 dark:bg-blue-900/10 rounded-lg border border-blue-200 dark:border-blue-800/50">
+                  <div className="flex items-start gap-2">
+                    <Info className="size-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+                    <div className="text-xs text-blue-800 dark:text-blue-200 space-y-1">
+                      <p className="font-medium">Officer-Specific Prompt</p>
+                      <p className="text-blue-700 dark:text-blue-300">
+                        This prompt emphasizes strategic leadership, organizational impact, and future potential—key elements of OPB narratives per AFI 36-2406.
+                        The same abbreviations and acronyms from your EPB settings are used.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <Textarea
+                  value={opbSystemPrompt}
+                  onChange={(e) => setOpbSystemPrompt(e.target.value)}
+                  rows={12}
+                  className="font-mono text-xs sm:text-sm min-h-[200px] sm:min-h-[400px]"
+                  placeholder="Enter your custom OPB system prompt..."
+                />
+                
+                <div className="flex items-center justify-between gap-2 pt-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setOpbSystemPrompt(DEFAULT_OPB_SYSTEM_PROMPT)}
+                    className="h-8"
+                  >
+                    <RotateCcw className="size-3 mr-1.5" />
+                    Reset to Default
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* OPB Style Guidelines */}
+            <Card className="border-blue-200 dark:border-blue-800/50">
+              <CardHeader className="px-3 py-3 sm:px-6 sm:py-4">
+                <CardTitle className="text-base sm:text-lg flex items-center gap-2">
+                  <FileText className="size-4 text-blue-600 dark:text-blue-400" />
+                  OPB Style Guidelines
+                </CardTitle>
+                <CardDescription className="text-xs sm:text-sm">
+                  Additional style guidance appended to OPB statements. Focus on strategic language and command presence.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="px-3 pb-4 sm:px-6 sm:pb-6 space-y-3 sm:space-y-4">
+                <Textarea
+                  value={opbStyleGuidelines}
+                  onChange={(e) => setOpbStyleGuidelines(e.target.value)}
+                  rows={4}
+                  className="font-mono text-xs sm:text-sm min-h-[100px] sm:min-h-[150px]"
+                  placeholder="Enter OPB-specific style guidelines..."
+                />
+                
+                <div className="flex items-center justify-between gap-2 pt-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setOpbStyleGuidelines(DEFAULT_OPB_STYLE_GUIDELINES)}
+                    className="h-8"
+                  >
+                    <RotateCcw className="size-3 mr-1.5" />
+                    Reset to Default
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+
         {/* Award System Prompt */}
         <TabsContent value="award-prompt" className="w-full min-h-[580px]">
           <Card>
@@ -1367,7 +1530,95 @@ export default function LLMSettingsPage() {
             <CardContent className="px-3 pb-4 sm:px-6 sm:pb-6">
               {/* Mobile: Card layout */}
               <div className="grid gap-2 md:hidden">
-                {RANKS.map(({ value: rank }) => {
+                {/* Enlisted Ranks */}
+                <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground border-b">
+                  Enlisted
+                </div>
+                {ENLISTED_RANKS.map(({ value: rank }) => {
+                  const verbs = rankVerbs[rank] || { primary: [], secondary: [] };
+                  return (
+                    <div key={rank} className="p-2 sm:p-3 border rounded-lg space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-semibold text-sm sm:text-base">{rank}</span>
+                        <Dialog
+                          open={editingRank === rank}
+                          onOpenChange={(open) => {
+                            if (open) {
+                              setEditingRank(rank);
+                              setEditingVerbs({
+                                primary: verbs.primary.join(", "),
+                                secondary: verbs.secondary.join(", "),
+                              });
+                            } else {
+                              setEditingRank(null);
+                            }
+                          }}
+                        >
+                          <DialogTrigger asChild>
+                            <Button variant="ghost" size="sm" className="h-7 px-2">
+                              <Pencil className="size-3" />
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-lg">
+                            <DialogHeader>
+                              <DialogTitle className="text-base">Edit Verbs for {rank}</DialogTitle>
+                              <DialogDescription className="text-xs sm:text-sm">
+                                Enter comma-separated verbs
+                              </DialogDescription>
+                            </DialogHeader>
+                            <div className="space-y-3">
+                              <div className="space-y-1.5">
+                                <Label className="text-xs sm:text-sm">Primary Verbs</Label>
+                                <Input
+                                  value={editingVerbs.primary}
+                                  onChange={(e) => setEditingVerbs({ ...editingVerbs, primary: e.target.value })}
+                                  placeholder="Led, Managed, Directed"
+                                  className="h-9 text-sm"
+                                />
+                              </div>
+                              <div className="space-y-1.5">
+                                <Label className="text-xs sm:text-sm">Secondary Verbs</Label>
+                                <Input
+                                  value={editingVerbs.secondary}
+                                  onChange={(e) => setEditingVerbs({ ...editingVerbs, secondary: e.target.value })}
+                                  placeholder="Supervised, Coordinated"
+                                  className="h-9 text-sm"
+                                />
+                              </div>
+                            </div>
+                            <DialogFooter className="flex-col gap-2 sm:flex-row">
+                              <Button onClick={() => updateRankVerbs(rank)} className="w-full sm:w-auto">Save</Button>
+                            </DialogFooter>
+                          </DialogContent>
+                        </Dialog>
+                      </div>
+                      <div className="space-y-1.5">
+                        <div>
+                          <p className="text-[10px] text-muted-foreground mb-1">Primary</p>
+                          <div className="flex flex-wrap gap-0.5">
+                            {verbs.primary.map((v) => (
+                              <Badge key={v} variant="secondary" className="text-[10px] px-1.5 py-0">{v}</Badge>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-muted-foreground mb-1">Secondary</p>
+                          <div className="flex flex-wrap gap-0.5">
+                            {verbs.secondary.map((v) => (
+                              <Badge key={v} variant="outline" className="text-[10px] px-1.5 py-0">{v}</Badge>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                
+                {/* Officer Ranks */}
+                <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground border-b mt-2">
+                  Officer
+                </div>
+                {OFFICER_RANKS.map(({ value: rank }) => {
                   const verbs = rankVerbs[rank] || { primary: [], secondary: [] };
                   return (
                     <div key={rank} className="p-2 sm:p-3 border rounded-lg space-y-2">
@@ -1460,7 +1711,94 @@ export default function LLMSettingsPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {RANKS.map(({ value: rank }) => {
+                    {/* Enlisted Section Header */}
+                    <TableRow className="bg-muted/30 hover:bg-muted/30">
+                      <TableCell colSpan={4} className="py-1.5 text-xs font-semibold text-muted-foreground">
+                        Enlisted
+                      </TableCell>
+                    </TableRow>
+                    {ENLISTED_RANKS.map(({ value: rank }) => {
+                      const verbs = rankVerbs[rank] || { primary: [], secondary: [] };
+                      return (
+                        <TableRow key={rank} className="group">
+                          <TableCell className="font-medium">{rank}</TableCell>
+                          <TableCell>
+                            <div className="flex flex-wrap gap-1">
+                              {verbs.primary.map((v) => (
+                                <Badge key={v} variant="secondary" className="text-xs">{v}</Badge>
+                              ))}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-wrap gap-1">
+                              {verbs.secondary.map((v) => (
+                                <Badge key={v} variant="outline" className="text-xs">{v}</Badge>
+                              ))}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Dialog
+                              open={editingRank === rank}
+                              onOpenChange={(open) => {
+                                if (open) {
+                                  setEditingRank(rank);
+                                  setEditingVerbs({
+                                    primary: verbs.primary.join(", "),
+                                    secondary: verbs.secondary.join(", "),
+                                  });
+                                } else {
+                                  setEditingRank(null);
+                                }
+                              }}
+                            >
+                              <DialogTrigger asChild>
+                                <Button variant="ghost" size="icon" className="size-8 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <Pencil className="size-3.5" />
+                                </Button>
+                              </DialogTrigger>
+                              <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-lg">
+                                <DialogHeader>
+                                  <DialogTitle className="text-base">Edit Verbs for {rank}</DialogTitle>
+                                  <DialogDescription className="text-xs sm:text-sm">
+                                    Enter comma-separated verbs
+                                  </DialogDescription>
+                                </DialogHeader>
+                                <div className="space-y-3">
+                                  <div className="space-y-1.5">
+                                    <Label className="text-xs sm:text-sm">Primary Verbs</Label>
+                                    <Input
+                                      value={editingVerbs.primary}
+                                      onChange={(e) => setEditingVerbs({ ...editingVerbs, primary: e.target.value })}
+                                      placeholder="Led, Managed, Directed"
+                                      className="h-9 text-sm"
+                                    />
+                                  </div>
+                                  <div className="space-y-1.5">
+                                    <Label className="text-xs sm:text-sm">Secondary Verbs</Label>
+                                    <Input
+                                      value={editingVerbs.secondary}
+                                      onChange={(e) => setEditingVerbs({ ...editingVerbs, secondary: e.target.value })}
+                                      placeholder="Supervised, Coordinated"
+                                      className="h-9 text-sm"
+                                    />
+                                  </div>
+                                </div>
+                                <DialogFooter>
+                                  <Button onClick={() => updateRankVerbs(rank)}>Save</Button>
+                                </DialogFooter>
+                              </DialogContent>
+                            </Dialog>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                    {/* Officer Section Header */}
+                    <TableRow className="bg-muted/30 hover:bg-muted/30">
+                      <TableCell colSpan={4} className="py-1.5 text-xs font-semibold text-muted-foreground">
+                        Officer
+                      </TableCell>
+                    </TableRow>
+                    {OFFICER_RANKS.map(({ value: rank }) => {
                       const verbs = rankVerbs[rank] || { primary: [], secondary: [] };
                       return (
                         <TableRow key={rank} className="group">

@@ -1,4 +1,5 @@
-export type Rank =
+// Enlisted Ranks
+export type EnlistedRank =
   | "AB"
   | "Amn"
   | "A1C"
@@ -7,8 +8,23 @@ export type Rank =
   | "TSgt"
   | "MSgt"
   | "SMSgt"
-  | "CMSgt"
-  | "Civilian";
+  | "CMSgt";
+
+// Officer Ranks
+export type OfficerRank =
+  | "2d Lt"
+  | "1st Lt"
+  | "Capt"
+  | "Maj"
+  | "Lt Col"
+  | "Col"
+  | "Brig Gen"
+  | "Maj Gen"
+  | "Lt Gen"
+  | "Gen";
+
+// All Ranks (Enlisted + Officer + Civilian)
+export type Rank = EnlistedRank | OfficerRank | "Civilian";
 
 export type UserRole = "member" | "admin";
 export type WritingStyle = "personal" | "community" | "hybrid";
@@ -383,6 +399,9 @@ export interface UserLLMSettings {
   award_style_guidelines: string;
   award_sentences_per_category: AwardSentencesPerCategory;
   award_period_text: string | null;
+  // OPB-specific settings (Officer Performance Brief)
+  opb_system_prompt: string | null;
+  opb_style_guidelines: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -690,6 +709,72 @@ export interface AwardShellSnapshot {
 }
 
 export interface AwardShellShare {
+  id: string;
+  shell_id: string;
+  owner_id: string;
+  share_type: 'user';
+  shared_with_id: string;
+  created_at: string;
+  // Joined fields
+  shared_with_profile?: Profile;
+}
+
+// ============================================
+// OPB SHELL TYPES (Officer Performance Brief)
+// ============================================
+
+export type OPBShellStatus = 'active' | 'archived';
+
+export interface OPBShell {
+  id: string;
+  user_id: string;
+  created_by: string;
+  cycle_year: number;
+  duty_description: string;
+  duty_description_complete: boolean;
+  status: OPBShellStatus;
+  archived_at: string | null;
+  archive_name: string | null;
+  created_at: string;
+  updated_at: string;
+  // Joined fields
+  sections?: OPBShellSection[];
+  owner_profile?: Profile;
+  creator_profile?: Profile;
+}
+
+export interface OPBShellSection {
+  id: string;
+  shell_id: string;
+  mpa: string;
+  statement_text: string;
+  is_complete: boolean;
+  last_edited_by: string | null;
+  created_at: string;
+  updated_at: string;
+  // Joined fields
+  snapshots?: OPBShellSnapshot[];
+}
+
+export interface OPBShellSnapshot {
+  id: string;
+  section_id: string;
+  statement_text: string;
+  created_by: string | null;
+  note: string | null;
+  created_at: string;
+}
+
+export interface OPBDutyDescriptionSnapshot {
+  id: string;
+  shell_id: string;
+  description_text: string;
+  created_by: string | null;
+  note: string | null;
+  created_at: string;
+}
+
+export interface OPBShellShare {
   id: string;
   shell_id: string;
   owner_id: string;

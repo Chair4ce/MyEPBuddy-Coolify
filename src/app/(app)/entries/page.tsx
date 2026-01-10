@@ -38,7 +38,7 @@ import { TagFilterPopover } from "@/components/entries/tag-filter-popover";
 import { toast } from "@/components/ui/sonner";
 import { deleteAccomplishment } from "@/app/actions/accomplishments";
 import { Plus, Pencil, Trash2, Filter, FileText, LayoutList, CalendarDays, Calendar } from "lucide-react";
-import { ENTRY_MGAS, AWARD_QUARTERS, getQuarterDateRange, getFiscalQuarterDateRange, getActiveCycleYear } from "@/lib/constants";
+import { ENTRY_MGAS, AWARD_QUARTERS, getQuarterDateRange, getFiscalQuarterDateRange, getActiveCycleYear, isEnlisted } from "@/lib/constants";
 import { EPBProgressCard } from "@/components/epb/epb-progress-card";
 import type { Rank } from "@/types/database";
 import { Switch } from "@/components/ui/switch";
@@ -476,8 +476,8 @@ function EntriesContent() {
                               <span className="text-xs text-muted-foreground">
                                 {new Date(entry.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                               </span>
-                              {/* Score badge - compact for quarterly view */}
-                              {hasScore && (
+                              {/* Score badge - compact for quarterly view (Enlisted only) */}
+                              {hasScore && isEnlisted(profile?.rank as Rank) && (
                                 <span className={cn(
                                   "text-[10px] font-semibold px-1.5 py-0.5 rounded",
                                   getScoreColor(overallScore)
@@ -606,35 +606,37 @@ function EntriesContent() {
                     </CardTitle>
                   </div>
                   
-                  {/* Score Display - Prominent on the right */}
+                  {/* Score Display - Prominent on the right (Enlisted only) */}
                   <div className="flex items-center gap-3 shrink-0">
-                    {hasScore ? (
-                      <TooltipProvider delayDuration={200}>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <div className={cn(
-                              "px-3 py-1.5 rounded-lg border font-semibold text-lg cursor-default",
-                              getScoreColor(overallScore)
-                            )}>
-                              {overallScore}
-                            </div>
-                          </TooltipTrigger>
-                          <TooltipContent side="left" className="max-w-xs">
-                            <div className="space-y-1">
-                              <p className="font-medium">Quality Score: {overallScore}/100</p>
-                              {entry.assessment_scores?.primary_mpa && (
-                                <p className="text-xs text-muted-foreground">
-                                  Best fit: {mgas.find(m => m.key === entry.assessment_scores?.primary_mpa)?.label || entry.assessment_scores.primary_mpa}
-                                </p>
-                              )}
-                            </div>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    ) : (
-                      <div className="px-3 py-1.5 rounded-lg border border-dashed text-muted-foreground text-sm opacity-50">
-                        --
-                      </div>
+                    {isEnlisted(profile?.rank as Rank) && (
+                      hasScore ? (
+                        <TooltipProvider delayDuration={200}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div className={cn(
+                                "px-3 py-1.5 rounded-lg border font-semibold text-lg cursor-default",
+                                getScoreColor(overallScore)
+                              )}>
+                                {overallScore}
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent side="left" className="max-w-xs">
+                              <div className="space-y-1">
+                                <p className="font-medium">Quality Score: {overallScore}/100</p>
+                                {entry.assessment_scores?.primary_mpa && (
+                                  <p className="text-xs text-muted-foreground">
+                                    Best fit: {mgas.find(m => m.key === entry.assessment_scores?.primary_mpa)?.label || entry.assessment_scores.primary_mpa}
+                                  </p>
+                                )}
+                              </div>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      ) : (
+                        <div className="px-3 py-1.5 rounded-lg border border-dashed text-muted-foreground text-sm opacity-50">
+                          --
+                        </div>
+                      )
                     )}
                     
                     <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">

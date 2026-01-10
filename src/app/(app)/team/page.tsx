@@ -103,11 +103,28 @@ import {
   getDaysUntilCloseout, 
   getStaticCloseoutDate,
   ENTRY_MGAS,
+  SUPERVISOR_RANKS,
+  ENLISTED_RANKS,
+  OFFICER_RANKS,
+  isOfficer,
+  isEnlisted,
 } from "@/lib/constants";
 
-// Ranks that can supervise others
-const SUPERVISOR_RANKS: Rank[] = ["SSgt", "TSgt", "MSgt", "SMSgt", "CMSgt"];
-const RANK_ORDER = ["CMSgt", "SMSgt", "MSgt", "TSgt", "SSgt", "SrA", "A1C", "Amn", "AB"];
+// All ranks in order for chain display (Officers first by seniority, then Enlisted)
+const RANK_ORDER = [
+  // General Officers
+  "Gen", "Lt Gen", "Maj Gen", "Brig Gen",
+  // Field Grade Officers
+  "Col", "Lt Col", "Maj",
+  // Company Grade Officers
+  "Capt", "1st Lt", "2d Lt",
+  // Senior Enlisted
+  "CMSgt", "SMSgt", "MSgt", "TSgt", "SSgt",
+  // Junior Enlisted
+  "SrA", "A1C", "Amn", "AB",
+  // Civilian
+  "Civilian",
+];
 const STORAGE_KEY = "chain-rank-colors";
 
 // Metrics for a member
@@ -149,6 +166,21 @@ type RankColors = Record<string, string>;
 
 function canSupervise(rank: Rank | null | undefined): boolean {
   return rank !== null && rank !== undefined && SUPERVISOR_RANKS.includes(rank);
+}
+
+// Check if supervisor rank can supervise subordinate rank
+// Officers can supervise any rank (enlisted or officer)
+// Enlisted can only supervise enlisted
+function canSuperviseeRank(supervisorRank: Rank | null | undefined, subordinateRank: Rank | null | undefined): boolean {
+  if (!supervisorRank || !canSupervise(supervisorRank)) return false;
+  if (!subordinateRank) return true; // Can supervise members without rank set
+  
+  // If supervisor is enlisted, they cannot supervise officers
+  if (isEnlisted(supervisorRank) && isOfficer(subordinateRank)) {
+    return false;
+  }
+  
+  return true;
 }
 
 function calculateDaysSupervised(startDate: string | null | undefined, endDate: string | null | undefined): number {
@@ -1185,9 +1217,21 @@ export default function TeamPage() {
   }
 
   function getRankOrder(rank: string): number {
+    // Higher number = more senior rank
+    // Officers rank higher than enlisted
     const order: Record<string, number> = {
+      // General Officers (highest)
+      Gen: 25, "Lt Gen": 24, "Maj Gen": 23, "Brig Gen": 22,
+      // Field Grade Officers
+      Col: 21, "Lt Col": 20, Maj: 19,
+      // Company Grade Officers
+      Capt: 18, "1st Lt": 17, "2d Lt": 16,
+      // Senior Enlisted
       CMSgt: 9, SMSgt: 8, MSgt: 7, TSgt: 6, SSgt: 5,
+      // Junior Enlisted
       SrA: 4, A1C: 3, Amn: 2, AB: 1,
+      // Civilian (treated as junior for sorting)
+      Civilian: 0,
     };
     return order[rank] || 0;
   }
@@ -1643,7 +1687,7 @@ export default function TeamPage() {
                 </Select>
                 {!canSupervise(profile?.rank) && (
                   <p className="text-[10px] sm:text-xs text-muted-foreground">
-                    Only SSgt and above can supervise others
+                    Only NCOs (SSgt+) and Officers can supervise others
                   </p>
                 )}
               </div>
@@ -1686,7 +1730,7 @@ export default function TeamPage() {
                         </p>
                         {inviteType === "be_supervised" && !canSupervise(searchedProfile.rank) && (
                           <p className="text-[10px] sm:text-xs text-red-600 dark:text-red-400 mt-1">
-                            This person cannot be a supervisor (must be SSgt+)
+                            This person cannot be a supervisor (must be SSgt+ or Officer)
                           </p>
                         )}
                       </div>
@@ -2203,7 +2247,7 @@ export default function TeamPage() {
               {!canSupervise(profile?.rank) ? (
                 <div className="text-center py-6 sm:py-8">
                   <p className="text-sm sm:text-base text-muted-foreground">
-                    Only SSgt and above can have a subordinate chain.
+                    Only NCOs (SSgt+) and Officers can have a subordinate chain.
                   </p>
                   <p className="text-xs sm:text-sm text-muted-foreground mt-2">
                     Current rank: {profile?.rank || "Unknown"}
@@ -2286,7 +2330,7 @@ export default function TeamPage() {
                   )}
                   
                   <p className="text-center text-xs text-muted-foreground border-t pt-4 mt-4">
-                    SSgt and above can add subordinates to their team
+                    NCOs (SSgt+) and Officers can add subordinates to their team
                   </p>
                 </div>
               ) : subordinates.length === 0 ? (

@@ -27,26 +27,28 @@ import {
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "@/components/ui/sonner";
 import { Loader2, UserCog, Link2, AlertCircle } from "lucide-react";
 import type { Rank, ManagedMember, Profile } from "@/types/database";
+import { ENLISTED_RANKS, OFFICER_RANKS, CIVILIAN_RANK, isOfficer } from "@/lib/constants";
 
-const RANKS: Rank[] = [
-  "AB",
-  "Amn",
-  "A1C",
-  "SrA",
-  "SSgt",
-  "TSgt",
-  "MSgt",
-  "SMSgt",
-  "CMSgt",
-  "Civilian",
-];
+// Get available subordinate ranks based on supervisor's rank
+// Officers can supervise anyone, Enlisted can only supervise enlisted
+function getAvailableSubordinateRanks(supervisorRank: Rank | null | undefined) {
+  const supervisorIsOfficer = isOfficer(supervisorRank ?? null);
+  
+  return {
+    enlisted: ENLISTED_RANKS,
+    officers: supervisorIsOfficer ? OFFICER_RANKS : [], // Only show officers if supervisor is an officer
+    civilian: CIVILIAN_RANK,
+  };
+}
 
 interface ExistingUserMatch {
   id: string;
@@ -293,23 +295,49 @@ export function EditManagedMemberDialog({
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label htmlFor="rank">Rank</Label>
-                <Select
-                  value={formData.rank}
-                  onValueChange={(v) =>
-                    setFormData({ ...formData, rank: v as Rank })
-                  }
-                >
-                  <SelectTrigger id="rank">
-                    <SelectValue placeholder="Select rank" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {RANKS.map((rank) => (
-                      <SelectItem key={rank} value={rank}>
-                        {rank}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {(() => {
+                  const availableRanks = getAvailableSubordinateRanks(profile?.rank);
+                  return (
+                    <Select
+                      value={formData.rank}
+                      onValueChange={(v) =>
+                        setFormData({ ...formData, rank: v as Rank })
+                      }
+                    >
+                      <SelectTrigger id="rank">
+                        <SelectValue placeholder="Select rank" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectLabel>Enlisted</SelectLabel>
+                          {availableRanks.enlisted.map((rank) => (
+                            <SelectItem key={rank.value} value={rank.value}>
+                              {rank.value}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                        {availableRanks.officers.length > 0 && (
+                          <SelectGroup>
+                            <SelectLabel>Officer</SelectLabel>
+                            {availableRanks.officers.map((rank) => (
+                              <SelectItem key={rank.value} value={rank.value}>
+                                {rank.value}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                        )}
+                        <SelectGroup>
+                          <SelectLabel>Civilian</SelectLabel>
+                          {availableRanks.civilian.map((rank) => (
+                            <SelectItem key={rank.value} value={rank.value}>
+                              {rank.value}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  );
+                })()}
               </div>
 
               <div className="space-y-2">

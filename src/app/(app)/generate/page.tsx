@@ -31,7 +31,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
-import { AI_MODELS, STANDARD_MGAS, ENTRY_MGAS, getActiveCycleYear } from "@/lib/constants";
+import { AI_MODELS, STANDARD_MGAS, ENTRY_MGAS, getActiveCycleYear, isOfficer, isEnlisted } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import {
   Sparkles,
@@ -52,10 +52,11 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import Link from "next/link";
-import type { Accomplishment, WritingStyle, UserLLMSettings, Profile, ManagedMember, EPBShell } from "@/types/database";
+import type { Accomplishment, WritingStyle, UserLLMSettings, Profile, ManagedMember, EPBShell, Rank } from "@/types/database";
 import { getKeyStatus } from "@/app/actions/api-keys";
 import { EPBShellForm } from "@/components/epb/epb-shell-form";
 import { EPBShellShareDialog } from "@/components/epb/epb-shell-share-dialog";
+import { OPBShellForm } from "@/components/opb/opb-shell-form";
 
 export default function GeneratePage() {
   const { profile, subordinates, managedMembers } = useUserStore();
@@ -71,6 +72,9 @@ export default function GeneratePage() {
   const [configOpen, setConfigOpen] = useState(false);
   const [showShareDialog, setShowShareDialog] = useState(false);
   
+  // Officer workspace mode: "opb" for personal OPB, "epb" for team EPBs
+  const [officerWorkspaceMode, setOfficerWorkspaceMode] = useState<"opb" | "epb">("epb");
+  
   // Accomplishment selection dialog
   const [showAccomplishmentDialog, setShowAccomplishmentDialog] = useState(false);
   const [selectedMPAForAccomplishments, setSelectedMPAForAccomplishments] = useState<string | null>(null);
@@ -80,10 +84,22 @@ export default function GeneratePage() {
   const supabase = createClient();
   // Cycle year is computed from the user's rank and SCOD, not from user settings
   const cycleYear = getActiveCycleYear(profile?.rank as import("@/types/database").Rank | null);
+  
+  // Check if current user is an officer (officers can't generate EPBs for themselves)
+  const userIsOfficer = isOfficer(profile?.rank);
+  
+  // Check if the selected ratee can have EPB generated (must be enlisted)
+  const selectedRateeIsEnlisted = selectedRatee 
+    ? isEnlisted(selectedRatee.rank) 
+    : isEnlisted(profile?.rank);
+  
+  // Officers can only generate EPBs for enlisted members, not themselves
+  const canGenerateForSelf = !userIsOfficer;
 
-  // Build ratee selector options
+  // Build ratee selector options - filter based on whether user is officer
   const rateeOptions = [
-    {
+    // Only show "self" option if user is not an officer (officers can't generate EPBs for themselves)
+    ...(canGenerateForSelf ? [{
       value: "self",
       label: `Myself (${profile?.rank} ${profile?.full_name})`,
       ratee: {
@@ -93,29 +109,35 @@ export default function GeneratePage() {
         afsc: profile?.afsc || null,
         isManagedMember: false,
       },
-    },
-    ...subordinates.map((sub) => ({
-      value: sub.id,
-      label: `${sub.rank} ${sub.full_name}`,
-      ratee: {
-        id: sub.id,
-        fullName: sub.full_name,
-        rank: sub.rank,
-        afsc: sub.afsc,
-        isManagedMember: false,
-      },
-    })),
-    ...managedMembers.map((member) => ({
-      value: `managed:${member.id}`,
-      label: `${member.rank} ${member.full_name}${member.is_placeholder ? " (Managed)" : ""}`,
-      ratee: {
-        id: member.id,
-        fullName: member.full_name,
-        rank: member.rank,
-        afsc: member.afsc,
-        isManagedMember: true,
-      },
-    })),
+    }] : []),
+    // Show enlisted subordinates only (officers in team shouldn't be shown for EPB generation)
+    ...subordinates
+      .filter(sub => isEnlisted(sub.rank))
+      .map((sub) => ({
+        value: sub.id,
+        label: `${sub.rank} ${sub.full_name}`,
+        ratee: {
+          id: sub.id,
+          fullName: sub.full_name,
+          rank: sub.rank,
+          afsc: sub.afsc,
+          isManagedMember: false,
+        },
+      })),
+    // Show enlisted managed members only
+    ...managedMembers
+      .filter(member => isEnlisted(member.rank))
+      .map((member) => ({
+        value: `managed:${member.id}`,
+        label: `${member.rank} ${member.full_name}${member.is_placeholder ? " (Managed)" : ""}`,
+        ratee: {
+          id: member.id,
+          fullName: member.full_name,
+          rank: member.rank,
+          afsc: member.afsc,
+          isManagedMember: true,
+        },
+      })),
   ];
 
   // Handle ratee selection change
@@ -133,6 +155,21 @@ export default function GeneratePage() {
 
   // Compute the current select value
   const getSelectedRateeValue = (): string => {
+    // For officers, default to first enlisted team member if available
+    if (userIsOfficer) {
+      if (!selectedRatee) {
+        const enlistedSubs = subordinates.filter(s => isEnlisted(s.rank));
+        const enlistedManaged = managedMembers.filter(m => isEnlisted(m.rank));
+        if (enlistedSubs.length > 0) return enlistedSubs[0].id;
+        if (enlistedManaged.length > 0) return `managed:${enlistedManaged[0].id}`;
+        return ""; // No valid selection for officer
+      }
+      if (!selectedRatee.isManagedMember && subordinates.some((s) => s.id === selectedRatee.id)) return selectedRatee.id;
+      if (selectedRatee.isManagedMember && managedMembers.some((m) => m.id === selectedRatee.id)) return `managed:${selectedRatee.id}`;
+      return selectedRatee.isManagedMember ? `managed:${selectedRatee.id}` : selectedRatee.id;
+    }
+    
+    // For non-officers, default to self
     if (!selectedRatee) return "self";
     if (selectedRatee.id === profile?.id && !selectedRatee.isManagedMember) return "self";
     if (!selectedRatee.isManagedMember && subordinates.some((s) => s.id === selectedRatee.id)) return selectedRatee.id;
@@ -290,31 +327,170 @@ export default function GeneratePage() {
     };
   }, [resetShellStore]);
 
+  // Check if officer has any enlisted team members (for officers, rateeOptions doesn't include "self")
+  const hasEnlistedTeamMembers = rateeOptions.length > 0;
+  
+  // Validate selectedRatee is still valid when user type or available options change
+  useEffect(() => {
+    if (!profile) return;
+    
+    // For officers in EPB mode, ensure selectedRatee is an enlisted member (not themselves)
+    if (userIsOfficer && officerWorkspaceMode === "epb") {
+      // If no ratee selected, try to select first available enlisted member
+      if (!selectedRatee && rateeOptions.length > 0) {
+        const firstOption = rateeOptions[0];
+        setSelectedRatee(firstOption.ratee as Parameters<typeof setSelectedRatee>[0]);
+      }
+      // If current ratee is not in available options (e.g., they're an officer), reset
+      else if (selectedRatee) {
+        const isValid = rateeOptions.some(opt => 
+          (opt.value === "self" && selectedRatee.id === profile.id && !selectedRatee.isManagedMember) ||
+          (opt.value === selectedRatee.id && !selectedRatee.isManagedMember) ||
+          (opt.value === `managed:${selectedRatee.id}` && selectedRatee.isManagedMember)
+        );
+        if (!isValid && rateeOptions.length > 0) {
+          const firstOption = rateeOptions[0];
+          setSelectedRatee(firstOption.ratee as Parameters<typeof setSelectedRatee>[0]);
+        } else if (!isValid && rateeOptions.length === 0) {
+          setSelectedRatee(null);
+        }
+      }
+    }
+    // For non-officers, ensure they have a valid selection (default to self)
+    else if (!userIsOfficer && !selectedRatee) {
+      setSelectedRatee({
+        id: profile.id,
+        fullName: profile.full_name || null,
+        rank: profile.rank || null,
+        afsc: profile.afsc || null,
+        isManagedMember: false,
+      });
+    }
+  }, [profile, userIsOfficer, officerWorkspaceMode, selectedRatee, rateeOptions, setSelectedRatee]);
+
   return (
     <div className="space-y-6 min-w-0 w-full max-w-7xl">
       {/* Page Header with Title and Share Button */}
       <div className="flex items-center justify-between gap-4 min-w-0">
         <div className="min-w-0">
           <h1 className="text-2xl font-bold tracking-tight truncate">
-            EPB Workspace{getMemberDisplayName() && ` - ${getMemberDisplayName()}`}
+            {userIsOfficer && officerWorkspaceMode === "opb" 
+              ? "OPB Workspace" 
+              : `EPB Workspace${getMemberDisplayName() && ` - ${getMemberDisplayName()}`}`
+            }
           </h1>
         </div>
-        {currentShell && (
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={() => setShowShareDialog(true)} 
-            className="h-8 px-3 shrink-0"
-            title="Share EPB"
-          >
-            <Share2 className="size-4" />
-            <span className="hidden sm:inline ml-1.5">Share</span>
-          </Button>
-        )}
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Officer Mode Toggle */}
+          {userIsOfficer && (
+            <div className="flex items-center p-1 bg-muted rounded-lg">
+              <button
+                onClick={() => setOfficerWorkspaceMode("opb")}
+                className={cn(
+                  "px-3 py-1.5 text-xs font-medium rounded-md transition-colors flex items-center gap-1",
+                  officerWorkspaceMode === "opb"
+                    ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <User className="size-3.5" />
+                My OPB
+                <span className="text-[9px] px-1 py-0.5 rounded bg-blue-200 dark:bg-blue-800 text-blue-700 dark:text-blue-300 font-semibold">
+                  BETA
+                </span>
+              </button>
+              <button
+                onClick={() => setOfficerWorkspaceMode("epb")}
+                className={cn(
+                  "px-3 py-1.5 text-xs font-medium rounded-md transition-colors",
+                  officerWorkspaceMode === "epb"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <Users className="size-3.5 inline-block mr-1" />
+                Team EPBs
+              </button>
+            </div>
+          )}
+          {currentShell && officerWorkspaceMode === "epb" && (
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => setShowShareDialog(true)} 
+              className="h-8 px-3 shrink-0"
+              title="Share EPB"
+            >
+              <Share2 className="size-4" />
+              <span className="hidden sm:inline ml-1.5">Share</span>
+            </Button>
+          )}
+        </div>
       </div>
 
-      {/* Share Dialog */}
-      {currentShell && (
+      {/* Officer Notice - Show based on mode */}
+      {userIsOfficer && officerWorkspaceMode === "opb" && (
+        <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/20">
+          <CardContent className="py-4">
+            <div className="flex items-start gap-3">
+              <User className="size-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+              <div className="space-y-1 min-w-0">
+                <p className="text-sm font-medium text-blue-800 dark:text-blue-200">
+                  Officer Performance Brief (OPB)
+                </p>
+                <p className="text-xs text-blue-700 dark:text-blue-300">
+                  Create your narrative performance statements using the four Major Performance Areas (MPAs) 
+                  aligned with Airman Leadership Qualities (ALQs) per AFI 36-2406.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {userIsOfficer && officerWorkspaceMode === "epb" && (
+        <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/20">
+          <CardContent className="py-4">
+            <div className="flex items-start gap-3">
+              <Users className="size-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+              <div className="space-y-1 min-w-0">
+                <p className="text-sm font-medium text-blue-800 dark:text-blue-200">
+                  Team EPB Management
+                </p>
+                <p className="text-xs text-blue-700 dark:text-blue-300">
+                  Generate EPBs for your enlisted subordinates using the Airman Comprehensive Assessment (ACA) criteria.
+                  Select a team member below to begin.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* No Enlisted Team Members Warning - for officers with no team in EPB mode */}
+      {userIsOfficer && officerWorkspaceMode === "epb" && !hasEnlistedTeamMembers && (
+        <Card className="border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-900/20">
+          <CardContent className="py-6 text-center">
+            <Users className="size-12 text-amber-500 mx-auto mb-3" />
+            <h3 className="text-lg font-semibold text-amber-800 dark:text-amber-200 mb-2">
+              No Enlisted Team Members
+            </h3>
+            <p className="text-sm text-amber-700 dark:text-amber-300 mb-4">
+              You don&apos;t have any enlisted subordinates to generate EPBs for yet. 
+              Add team members to get started.
+            </p>
+            <Button asChild>
+              <Link href="/team">
+                <UserPlus className="size-4 mr-2" />
+                Add Team Members
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Share Dialog - Only for EPB mode */}
+      {currentShell && (!userIsOfficer || officerWorkspaceMode === "epb") && (
         <EPBShellShareDialog
           shellId={currentShell.id}
           isOpen={showShareDialog}
@@ -324,8 +500,8 @@ export default function GeneratePage() {
         />
       )}
 
-      {/* Viewing EPB for Selector */}
-      {currentShell && (
+      {/* Viewing EPB for Selector - Only for EPB mode */}
+      {currentShell && (!userIsOfficer || officerWorkspaceMode === "epb") && (
         <Card className="bg-muted/30 overflow-hidden">
           <CardContent className="py-2 sm:py-3 px-3 sm:px-6">
             <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
@@ -339,18 +515,22 @@ export default function GeneratePage() {
                     <SelectValue placeholder="Select member..." />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="self">
-                      <span className="flex items-center gap-2">
-                        <User className="size-4" />
-                        Myself ({profile?.rank} {profile?.full_name})
-                      </span>
-                    </SelectItem>
-                    {subordinates.length > 0 && (
+                    {/* Only show "Myself" for non-officers */}
+                    {canGenerateForSelf && (
+                      <SelectItem value="self">
+                        <span className="flex items-center gap-2">
+                          <User className="size-4" />
+                          Myself ({profile?.rank} {profile?.full_name})
+                        </span>
+                      </SelectItem>
+                    )}
+                    {/* Only show enlisted subordinates for EPB generation */}
+                    {subordinates.filter(sub => isEnlisted(sub.rank)).length > 0 && (
                       <>
                         <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
                           Team Members
                         </div>
-                        {subordinates.map((sub) => (
+                        {subordinates.filter(sub => isEnlisted(sub.rank)).map((sub) => (
                           <SelectItem key={sub.id} value={sub.id}>
                             <span className="flex items-center gap-2">
                               <Users className="size-4" />
@@ -360,12 +540,13 @@ export default function GeneratePage() {
                         ))}
                       </>
                     )}
-                    {managedMembers.length > 0 && (
+                    {/* Only show enlisted managed members for EPB generation */}
+                    {managedMembers.filter(m => isEnlisted(m.rank)).length > 0 && (
                       <>
                         <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
                           Managed Members
                         </div>
-                        {managedMembers.map((member) => (
+                        {managedMembers.filter(m => isEnlisted(m.rank)).map((member) => (
                           <SelectItem key={member.id} value={`managed:${member.id}`}>
                             <span className="flex items-center gap-2">
                               <User className="size-4 opacity-60" />
@@ -404,7 +585,8 @@ export default function GeneratePage() {
         </Card>
       )}
 
-      {/* Configuration - Collapsible */}
+      {/* Configuration - Collapsible (Show for EPB mode or non-officers) */}
+      {(!userIsOfficer || officerWorkspaceMode === "epb") && (
       <Collapsible open={configOpen} onOpenChange={setConfigOpen}>
         <Card>
           <CollapsibleTrigger asChild>
@@ -587,9 +769,21 @@ export default function GeneratePage() {
           </CollapsibleContent>
         </Card>
       </Collapsible>
+      )}
 
-      {/* EPB Shell Form - The main workspace */}
+      {/* OPB Shell Form - For officers in OPB mode */}
+      {profile && userIsOfficer && officerWorkspaceMode === "opb" && (
+        <OPBShellForm
+          cycleYear={cycleYear}
+          model={selectedModel}
+        />
+      )}
+
+      {/* EPB Shell Form - For non-officers, or officers in EPB mode with team members */}
       {profile && (
+        !userIsOfficer || 
+        (userIsOfficer && officerWorkspaceMode === "epb" && hasEnlistedTeamMembers)
+      ) && (
         <EPBShellForm
           cycleYear={cycleYear}
           model={selectedModel}

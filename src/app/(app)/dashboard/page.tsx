@@ -21,7 +21,7 @@ import {
   Plus,
   TrendingUp,
 } from "lucide-react";
-import { SUPERVISOR_RANKS, getStaticCloseoutDate, getActiveCycleYear } from "@/lib/constants";
+import { SUPERVISOR_RANKS, getStaticCloseoutDate, getActiveCycleYear, isOfficer } from "@/lib/constants";
 import { PendingLinksCard } from "@/components/dashboard/pending-links-card";
 import { PendingPriorDataCard } from "@/components/dashboard/pending-prior-data-card";
 import { TeamAccomplishmentsFeed } from "@/components/dashboard/team-accomplishments-feed";
@@ -42,6 +42,9 @@ export default function DashboardPage() {
   // Check if user is a supervisor rank
   const isSupervisorRank =
     profile?.rank && SUPERVISOR_RANKS.includes(profile.rank as Rank);
+  
+  // Check if user is an officer (officers don't have EPBs for themselves)
+  const userIsOfficer = isOfficer(profile?.rank);
 
   useEffect(() => {
     async function loadAccomplishments() {
@@ -76,28 +79,42 @@ export default function DashboardPage() {
       {/* Welcome Section */}
       <div className="flex flex-col gap-2">
         <h1 className="text-2xl font-bold tracking-tight">
-          Welcome back, {profile?.rank} {profile?.full_name?.split(" ")[0] || "Airman"}
+          Welcome back, {profile?.rank} {profile?.full_name?.split(" ")[0] || (userIsOfficer ? "Sir/Ma'am" : "Airman")}
         </h1>
         <p className="text-muted-foreground">
-          {cycleYear} EPB Cycle{scodInfo ? ` • SCOD: ${scodInfo.label}` : ""}
+          {userIsOfficer 
+            ? `${cycleYear} Cycle${scodInfo ? ` • OPR SCOD: ${scodInfo.label}` : " • Team Management Mode"}`
+            : `${cycleYear} EPB Cycle${scodInfo ? ` • SCOD: ${scodInfo.label}` : ""}`
+          }
         </p>
       </div>
 
       {/* Quick Actions */}
       <div className="flex flex-wrap gap-3">
-        <Button asChild>
-          <Link href="/entries?new=true">
-            <Plus className="size-4 mr-2" />
-            New Entry
-          </Link>
-        </Button>
-        <Button variant="outline" asChild>
-          <Link href="/generate">
-            <Sparkles className="size-4 mr-2" />
-            Generate EPB
-          </Link>
-        </Button>
-        {(subordinates.length > 0 || profile?.role === "admin") && (
+        {!userIsOfficer && (
+          <Button asChild>
+            <Link href="/entries?new=true">
+              <Plus className="size-4 mr-2" />
+              New Entry
+            </Link>
+          </Button>
+        )}
+        {!userIsOfficer ? (
+          <Button variant="outline" asChild>
+            <Link href="/generate">
+              <Sparkles className="size-4 mr-2" />
+              Generate EPB
+            </Link>
+          </Button>
+        ) : (
+          <Button asChild>
+            <Link href="/team">
+              <Users className="size-4 mr-2" />
+              Manage Team
+            </Link>
+          </Button>
+        )}
+        {!userIsOfficer && (subordinates.length > 0 || profile?.role === "admin") && (
           <Button variant="outline" asChild>
             <Link href="/team">
               <Users className="size-4 mr-2" />
@@ -106,6 +123,32 @@ export default function DashboardPage() {
           </Button>
         )}
       </div>
+
+      {/* Officer Info Card */}
+      {userIsOfficer && (
+        <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/20">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Users className="size-5 text-blue-600 dark:text-blue-400" />
+              Officer Team Management
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              As an officer, your primary features focus on supporting your enlisted team members:
+            </p>
+            <ul className="text-sm text-muted-foreground list-disc list-inside space-y-1">
+              <li>Generate and manage EPBs for enlisted subordinates</li>
+              <li>Review and comment on team member entries</li>
+              <li>Track your team&apos;s performance progress</li>
+              <li>Create award packages for your Airmen</li>
+            </ul>
+            <p className="text-xs text-muted-foreground italic">
+              OPB (Officer Performance Brief) features are coming in a future update.
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Pending Account Links */}
       <PendingLinksCard />

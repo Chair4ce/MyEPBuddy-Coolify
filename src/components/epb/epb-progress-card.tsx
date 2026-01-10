@@ -23,6 +23,7 @@ import {
   ENTRY_MGAS,
   MPA_ABBREVIATIONS,
   RANK_TO_TIER,
+  isOfficer,
 } from "@/lib/constants";
 import type { Rank, Accomplishment } from "@/types/database";
 import {
@@ -131,6 +132,25 @@ export function EPBProgressCard({
           <div className="text-center text-sm text-muted-foreground">
             <p>EPB tracking begins at SrA.</p>
             <p className="mt-1">Keep logging entries—they&apos;ll count toward your first EPB!</p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Officers have OPBs - show simplified messaging for now
+  if (isOfficer(rank)) {
+    return (
+      <Card className={className}>
+        <CardContent className="pt-6">
+          <div className="text-center text-sm text-muted-foreground">
+            <p className="font-medium">OPB Progress Tracking</p>
+            <p className="mt-1">OPB-specific tracking coming soon. Keep logging your accomplishments!</p>
+            {closeout && (
+              <p className="mt-2 text-xs">
+                SCOD: {closeout.label} • {daysUntil !== null ? `${daysUntil} days remaining` : ""}
+              </p>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -354,8 +374,8 @@ export function EPBProgressBadge({ rank, entries, className }: EPBProgressBadgeP
   const daysUntil = getDaysUntilCloseout(rank);
   const tier = rank ? RANK_TO_TIER[rank] : null;
 
-  // Civilians, AB, and Amn don't have EPBs
-  if (!tier || rank === "AB" || rank === "Amn" || rank === "Civilian") return null;
+  // Civilians, AB, Amn, and Officers don't show EPB badge (Officers have OPBs)
+  if (!tier || rank === "AB" || rank === "Amn" || rank === "Civilian" || isOfficer(rank)) return null;
 
   // Calculate coverage
   const coveredMPAs = new Set(entries.map((e) => e.mpa)).size;

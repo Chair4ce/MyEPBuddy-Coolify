@@ -25,7 +25,7 @@ import {
 import { toast } from "@/components/ui/sonner";
 import { Loader2, ExternalLink, Copy, Check } from "lucide-react";
 import { AppLogo } from "@/components/layout/app-logo";
-import { RANKS } from "@/lib/constants";
+import { ENLISTED_RANKS, OFFICER_RANKS, CIVILIAN_RANK } from "@/lib/constants";
 import type { Rank } from "@/types/database";
 
 // Detect if running in a restricted browser context (in-app browsers, PWAs)
@@ -108,21 +108,43 @@ export default function SignupPage() {
       }
 
       // Update profile with additional info
+      // The profile is created by a database trigger, so we may need to wait briefly
       if (data.user) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error: profileError } = await (supabase as any)
-          .from("profiles")
-          .update({
-            full_name: fullName,
-            rank,
-            afsc,
-            unit,
-            role,
-          })
-          .eq("id", data.user.id);
+        // Helper function to update profile with retry
+        const updateProfileWithRetry = async (retries = 3, delay = 200): Promise<boolean> => {
+          for (let attempt = 0; attempt < retries; attempt++) {
+            // Wait before retrying (skip wait on first attempt)
+            if (attempt > 0) {
+              await new Promise(resolve => setTimeout(resolve, delay));
+            }
 
-        if (profileError) {
-          console.error("Profile update error:", profileError);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const { error: profileError } = await (supabase as any)
+              .from("profiles")
+              .update({
+                full_name: fullName,
+                rank,
+                afsc,
+                unit,
+                role,
+              })
+              .eq("id", data.user.id);
+
+            if (!profileError) {
+              return true; // Success
+            }
+
+            console.error(`Profile update attempt ${attempt + 1} failed:`, profileError);
+          }
+          return false; // All retries failed
+        };
+
+        const profileUpdated = await updateProfileWithRetry();
+        
+        if (!profileUpdated) {
+          // Profile update failed, but account was created
+          // User can update their profile in settings
+          toast.warning("Account created but profile incomplete. Please update your profile in Settings after logging in.");
         }
       }
 
@@ -289,9 +311,28 @@ export default function SignupPage() {
                     <SelectValue placeholder="Select rank" />
                   </SelectTrigger>
                   <SelectContent>
-                    {RANKS.map((r) => (
+                    <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+                      Enlisted
+                    </div>
+                    {ENLISTED_RANKS.map((r) => (
                       <SelectItem key={r.value} value={r.value}>
-                        {r.value}
+                        {r.label}
+                      </SelectItem>
+                    ))}
+                    <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground border-t mt-1 pt-1">
+                      Officer
+                    </div>
+                    {OFFICER_RANKS.map((r) => (
+                      <SelectItem key={r.value} value={r.value}>
+                        {r.label}
+                      </SelectItem>
+                    ))}
+                    <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground border-t mt-1 pt-1">
+                      Civilian
+                    </div>
+                    {CIVILIAN_RANK.map((r) => (
+                      <SelectItem key={r.value} value={r.value}>
+                        {r.label}
                       </SelectItem>
                     ))}
                   </SelectContent>

@@ -28,7 +28,7 @@ import {
   createAccomplishment,
   updateAccomplishment,
 } from "@/app/actions/accomplishments";
-import { DEFAULT_ACTION_VERBS, ENTRY_MGAS, getActiveCycleYear } from "@/lib/constants";
+import { DEFAULT_ACTION_VERBS, ENTRY_MGAS, getActiveCycleYear, isEnlisted } from "@/lib/constants";
 import type { Rank } from "@/types/database";
 import { Loader2, Sparkles, Target, BarChart3 } from "lucide-react";
 import { celebrateEntry } from "@/lib/confetti";
@@ -256,8 +256,8 @@ export function EntryFormDialog({
             updateStore(editEntry.id, result.data);
           }
           toast.success("Entry updated");
-          // Only trigger background assessment if not pre-assessed
-          if (!hasPreAssessment) {
+          // Only trigger background assessment if not pre-assessed and user is enlisted
+          if (!hasPreAssessment && isEnlisted(profile?.rank as Rank)) {
             triggerAssessment(editEntry.id);
           }
         }
@@ -307,8 +307,8 @@ export function EntryFormDialog({
             duration: 3000,
           });
           
-          // Only trigger background assessment if not pre-assessed
-          if (!hasPreAssessment) {
+          // Only trigger background assessment if not pre-assessed and user is enlisted
+          if (!hasPreAssessment && isEnlisted(profile?.rank as Rank)) {
             triggerAssessment(result.data.id);
           }
         }
@@ -449,7 +449,8 @@ export function EntryFormDialog({
             </p>
           </div>
 
-          {/* Rate My Accomplishment Section */}
+          {/* Rate My Accomplishment Section - Only for Enlisted (ACA rubric not available for Officers yet) */}
+          {isEnlisted(profile?.rank as Rank) && (
           <div className="pt-2 border-t">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
@@ -583,6 +584,7 @@ export function EntryFormDialog({
               </p>
             )}
           </div>
+          )}
 
           <DialogFooter className="pt-2 sm:pt-4 gap-4">
             <Button

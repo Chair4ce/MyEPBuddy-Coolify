@@ -635,8 +635,8 @@ export function TeamAccomplishmentsFeed({ cycleYear }: TeamAccomplishmentsFeedPr
           <UserCheck className="size-12 mx-auto text-muted-foreground mb-4" />
           <h3 className="font-semibold text-lg mb-2">Your Personal Feed</h3>
           <p className="text-sm text-muted-foreground max-w-md mx-auto">
-            As an E-1 through E-4, you&apos;ll see your own accomplishments here. Once you reach
-            SSgt or above, you&apos;ll be able to view accomplishments from your subordinates.
+            As a junior enlisted member (E-1 through E-4), you&apos;ll see your own accomplishments here.
+            NCOs (SSgt+) and Officers can view accomplishments from their subordinates.
           </p>
         </CardContent>
       </Card>
