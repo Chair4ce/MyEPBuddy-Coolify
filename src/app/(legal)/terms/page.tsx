@@ -1,17 +1,31 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Terms of Service",
+  title: "Terms of Service | My EPBuddy",
   description:
     "Terms of Service for My EPBuddy - Understand the terms and conditions for using our EPB statement generator.",
+  alternates: {
+    canonical: "https://myepbuddy.com/terms",
+  },
+  openGraph: {
+    title: "Terms of Service | My EPBuddy",
+    description: "Terms of Service for My EPBuddy - Understand the terms and conditions for using our EPB statement generator.",
+    url: "https://myepbuddy.com/terms",
+    siteName: "My EPBuddy",
+    type: "website",
+  },
 };
+
+// Static date for legal compliance
+const LAST_UPDATED = "January 9, 2026";
 
 export default function TermsOfServicePage() {
   return (
     <article className="prose prose-neutral dark:prose-invert max-w-none">
       <h1>Terms of Service</h1>
       <p className="text-muted-foreground">
-        Last updated: {new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+        Last updated: {LAST_UPDATED}
       </p>
 
       <section className="mt-8">
@@ -166,9 +180,34 @@ export default function TermsOfServicePage() {
       <section className="mt-8">
         <h2>12. Contact</h2>
         <p>
-          If you have questions about these Terms of Service, please contact us through the 
-          Support page within the application.
+          If you have questions about these Terms of Service, you can:
         </p>
+        <ul>
+          <li>
+            Email us at:{" "}
+            <a href="mailto:support@myepbuddy.com" className="text-primary hover:underline">
+              support@myepbuddy.com
+            </a>
+          </li>
+          <li>
+            Visit our{" "}
+            <Link href="/support" className="text-primary hover:underline">
+              Support page
+            </Link>{" "}
+            within the application
+          </li>
+          <li>
+            Open an issue on our{" "}
+            <a 
+              href="https://github.com/Chair4ce/MyEPBuddy/issues" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-primary hover:underline"
+            >
+              GitHub repository
+            </a>
+          </li>
+        </ul>
       </section>
     </article>
   );

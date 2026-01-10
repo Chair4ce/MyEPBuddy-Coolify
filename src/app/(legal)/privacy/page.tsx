@@ -1,17 +1,31 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy",
+  title: "Privacy Policy | My EPBuddy",
   description:
     "Privacy Policy for My EPBuddy - Learn how we handle your data securely and transparently.",
+  alternates: {
+    canonical: "https://myepbuddy.com/privacy",
+  },
+  openGraph: {
+    title: "Privacy Policy | My EPBuddy",
+    description: "Privacy Policy for My EPBuddy - Learn how we handle your data securely and transparently.",
+    url: "https://myepbuddy.com/privacy",
+    siteName: "My EPBuddy",
+    type: "website",
+  },
 };
+
+// Static date for legal compliance
+const LAST_UPDATED = "January 9, 2026";
 
 export default function PrivacyPolicyPage() {
   return (
     <article className="prose prose-neutral dark:prose-invert max-w-none">
       <h1>Privacy Policy</h1>
       <p className="text-muted-foreground">
-        Last updated: {new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+        Last updated: {LAST_UPDATED}
       </p>
 
       <section className="mt-8">
@@ -154,9 +168,34 @@ export default function PrivacyPolicyPage() {
       <section className="mt-8">
         <h2>Contact Us</h2>
         <p>
-          If you have questions about this Privacy Policy or our data practices, please 
-          contact us through the Support page within the application.
+          If you have questions about this Privacy Policy or our data practices, you can:
         </p>
+        <ul>
+          <li>
+            Email us at:{" "}
+            <a href="mailto:support@myepbuddy.com" className="text-primary hover:underline">
+              support@myepbuddy.com
+            </a>
+          </li>
+          <li>
+            Visit our{" "}
+            <Link href="/support" className="text-primary hover:underline">
+              Support page
+            </Link>{" "}
+            within the application
+          </li>
+          <li>
+            Open an issue on our{" "}
+            <a 
+              href="https://github.com/Chair4ce/MyEPBuddy/issues" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-primary hover:underline"
+            >
+              GitHub repository
+            </a>
+          </li>
+        </ul>
       </section>
     </article>
   );
