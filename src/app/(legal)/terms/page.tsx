@@ -185,8 +185,8 @@ export default function TermsOfServicePage() {
         <ul>
           <li>
             Email us at:{" "}
-            <a href="mailto:support@myepbuddy.com" className="text-primary hover:underline">
-              support@myepbuddy.com
+            <a href="mailto:JacyLH@oaiken.com" className="text-primary hover:underline">
+              JacyLH@oaiken.com
             </a>
           </li>
           <li>
