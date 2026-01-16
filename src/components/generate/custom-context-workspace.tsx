@@ -43,6 +43,8 @@ import {
   ChevronUp,
   CheckCircle2,
 } from "lucide-react";
+import { useClarifyingQuestionsStore } from "@/stores/clarifying-questions-store";
+import { ClarifyingQuestionsModal, ClarifyingQuestionsIndicator } from "./clarifying-questions-modal";
 
 // Types
 export type ImpactFocus = "none" | "time" | "cost" | "resources" | "custom";
@@ -379,6 +381,7 @@ function MPAWorkspaceCard({
   onSave,
   onSynonymLookup,
   onRemove,
+  rateeId,
 }: {
   mpaKey: string;
   mpaLabel: string;
@@ -391,6 +394,7 @@ function MPAWorkspaceCard({
   onSave: () => void;
   onSynonymLookup: (word: string, fullStatement: string) => Promise<string[]>;
   onRemove: () => void;
+  rateeId: string;
 }) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [revisingStatement, setRevisingStatement] = useState<1 | 2 | null>(null);
@@ -479,6 +483,8 @@ function MPAWorkspaceCard({
           <div className="flex items-center gap-1 shrink-0">
             {hasGenerated && (
               <>
+                {/* Clarifying questions indicator */}
+                <ClarifyingQuestionsIndicator mpaKey={mpaKey} rateeId={rateeId} />
                 <Button variant="ghost" size="icon" onClick={copy} className="size-7">
                   {copiedId === "combined" ? <Check className="size-3" /> : <Copy className="size-3" />}
                 </Button>
@@ -708,6 +714,10 @@ export function CustomContextWorkspace({
   const [session, setSession] = useState<WorkspaceSession | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const [generatingMPA, setGeneratingMPA] = useState<string | null>(null);
+  const [isRegeneratingWithContext, setIsRegeneratingWithContext] = useState(false);
+  
+  // Get the active clarifying question set for regeneration
+  const activeQuestionSet = useClarifyingQuestionsStore((state) => state.getActiveQuestionSet());
 
   // Load session from localStorage
   useEffect(() => {
@@ -810,6 +820,24 @@ export function CustomContextWorkspace({
       const mpaResult = result.statements?.[0];
       const statements = mpaResult?.statements || [];
       const relevancyScore = mpaResult?.relevancyScore;
+      const clarifyingQuestions = mpaResult?.clarifyingQuestions || [];
+
+      // Store clarifying questions if any were returned
+      if (clarifyingQuestions.length > 0) {
+        const { addQuestionSet } = useClarifyingQuestionsStore.getState();
+        addQuestionSet({
+          mpaKey,
+          rateeId,
+          originalContext: data.statement1.context,
+          questions: clarifyingQuestions.map((q: { question: string; category?: string; hint?: string }) => ({
+            id: `q_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            question: q.question,
+            category: q.category || "general",
+            hint: q.hint,
+            answer: "",
+          })),
+        });
+      }
 
       // Extract and track verbs used in generated statements
       const newVerbs: string[] = [];
@@ -836,11 +864,95 @@ export function CustomContextWorkspace({
         isExpanded: true, // Keep expanded after generation to show results
       });
 
-      toast.success(`Generated statement for ${ENTRY_MGAS.find((m) => m.key === mpaKey)?.label}`);
+      const hasQuestions = clarifyingQuestions.length > 0;
+      toast.success(
+        `Generated statement for ${ENTRY_MGAS.find((m) => m.key === mpaKey)?.label}` +
+        (hasQuestions ? " — clarifying questions available" : "")
+      );
     } catch (error) {
       console.error(error);
       toast.error("Failed to generate statement");
     } finally {
+      setGeneratingMPA(null);
+    }
+  };
+
+  // Regenerate statement with clarifying context from user answers
+  const regenerateWithClarifyingContext = async (clarifyingContext: string) => {
+    if (!activeQuestionSet) return;
+    
+    const mpaKey = activeQuestionSet.mpaKey;
+    const data = getMPAData(mpaKey);
+    
+    setIsRegeneratingWithContext(true);
+    setGeneratingMPA(mpaKey);
+
+    try {
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          rateeId,
+          rateeRank,
+          rateeAfsc,
+          cycleYear,
+          model,
+          writingStyle: "personal",
+          selectedMPAs: [mpaKey],
+          customContext: data.statement1.context,
+          customContextOptions: {
+            statementCount: data.statementCount,
+            impactFocus: data.statement1.impactFocus !== "none" ? data.statement1.impactFocus : undefined,
+            customDirection: data.statement1.customImpact,
+            ...(data.statementCount === 2 && data.statement2 && {
+              customContext2: data.statement2.context,
+              impactFocus2: data.statement2.impactFocus !== "none" ? data.statement2.impactFocus : undefined,
+            }),
+          },
+          accomplishments: [],
+          usedVerbs: session?.usedVerbs || [],
+          clarifyingContext, // Include the clarifying answers
+          requestClarifyingQuestions: false, // Don't request more questions on regeneration
+        }),
+      });
+
+      if (!response.ok) throw new Error("Regeneration failed");
+
+      const result = await response.json();
+      const mpaResult = result.statements?.[0];
+      const statements = mpaResult?.statements || [];
+      const relevancyScore = mpaResult?.relevancyScore;
+
+      // Extract and track verbs
+      const newVerbs: string[] = [];
+      statements.forEach((stmt: string) => {
+        const verb = extractOpeningVerb(stmt);
+        if (verb) newVerbs.push(verb);
+      });
+
+      if (session && newVerbs.length > 0) {
+        setSession({
+          ...session,
+          usedVerbs: [...new Set([...(session.usedVerbs || []), ...newVerbs])],
+        });
+      }
+
+      updateMPAData(mpaKey, {
+        ...data,
+        generated: {
+          text1: statements[0] || "",
+          text2: data.statementCount === 2 ? statements[1] : undefined,
+        },
+        relevancyScore,
+        isExpanded: true,
+      });
+
+      toast.success(`Enhanced statement with your clarifying details`);
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to regenerate statement");
+    } finally {
+      setIsRegeneratingWithContext(false);
       setGeneratingMPA(null);
     }
   };
@@ -960,6 +1072,12 @@ export function CustomContextWorkspace({
 
   return (
     <div className="space-y-4">
+      {/* Clarifying Questions Modal */}
+      <ClarifyingQuestionsModal
+        onRegenerate={regenerateWithClarifyingContext}
+        isRegenerating={isRegeneratingWithContext}
+      />
+      
       {/* Clear session button when there's generated content */}
       {hasAnyGeneratedContent && (
         <div className="flex justify-end">
@@ -993,6 +1111,7 @@ export function CustomContextWorkspace({
             onSave={() => saveStatement(mpaKey)}
             onSynonymLookup={(word, fullStatement) => synonymLookup(word, fullStatement)}
             onRemove={() => clearMPAData(mpaKey)}
+            rateeId={rateeId}
           />
         );
       })}

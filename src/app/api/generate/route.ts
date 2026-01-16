@@ -56,6 +56,17 @@ interface GenerateRequest {
   // Character filling options
   fillToMax?: boolean; // When true, aggressively fill to max character limit
   enforceCharacterLimits?: boolean; // When true, run post-generation verification and correction
+  // Clarifying context from previous generation (when user answers clarifying questions)
+  clarifyingContext?: string;
+  // Whether to request clarifying questions from the LLM
+  requestClarifyingQuestions?: boolean;
+}
+
+// Type for clarifying questions returned by LLM
+interface ClarifyingQuestionResponse {
+  question: string;
+  category: "impact" | "scope" | "leadership" | "recognition" | "metrics" | "general";
+  hint?: string;
 }
 
 // Overused/cliché verbs that should be avoided
@@ -82,6 +93,38 @@ const VERB_POOL = {
   analysis: ["analyzed", "assessed", "evaluated", "identified", "diagnosed", "investigated", "audited"],
   acquisition: ["negotiated", "acquired", "procured", "saved", "recovered", "reclaimed", "captured"],
 };
+
+// Clarifying question guidance for the LLM (non-blocking, optional)
+const CLARIFYING_QUESTION_GUIDANCE = `
+=== OPTIONAL: CLARIFYING QUESTIONS ===
+If the provided information is missing key details that would SIGNIFICANTLY enhance statement quality, you may include 1-3 clarifying questions. These are OPTIONAL - only ask if truly needed.
+
+**IMPACT Questions (category: "impact")**
+- Did this save time, money, or resources? How much?
+- What's the "so what?" - why did this matter and to whom?
+- What would have happened if this wasn't done?
+
+**SCOPE Questions (category: "scope")**
+- Did this affect just the unit, or higher levels (Group, Wing, Base, MAJCOM, HAF)?
+- How many people/units/missions were impacted?
+- Was this outside their normal assigned duties?
+
+**LEADERSHIP Questions (category: "leadership")**
+- Did they lead a team? How many people?
+- Was the team larger than their duty description indicates?
+- Did they mentor or develop others?
+
+**RECOGNITION Questions (category: "recognition")**
+- Were they hand-selected? By whom and why?
+- Was this a competitive selection?
+- Did they receive awards for this?
+
+**METRICS Questions (category: "metrics")**
+- Can results be quantified (%, $, time, people)?
+- What's the comparison point ("50% faster" or "first ever")?
+
+Include questions in a "clarifyingQuestions" field ONLY when answers would significantly improve the statement.
+`;
 
 interface ExampleStatement {
   mpa: string;
@@ -496,7 +539,8 @@ export async function POST(request: Request) {
       rateeId, rateeRank, rateeAfsc, cycleYear, model, writingStyle, 
       communityMpaFilter, communityAfscFilter, accomplishments, selectedMPAs, 
       customContext, customContextOptions, generatePerAccomplishment, dutyDescription, 
-      epbStatements, fillToMax = true, enforceCharacterLimits: shouldEnforceCharLimits = true 
+      epbStatements, fillToMax = true, enforceCharacterLimits: shouldEnforceCharLimits = true,
+      clarifyingContext, requestClarifyingQuestions = true
     } = body;
 
     // Either accomplishments, customContext, or epbStatements must be provided
@@ -1104,25 +1148,61 @@ Format as JSON array only:
 ["Statement 1", "Statement 2", "Statement 3"]`;
       }
 
+      // Inject clarifying context from previous generation (if user provided answers)
+      let finalPrompt = userPrompt;
+      if (clarifyingContext && clarifyingContext.trim().length > 0) {
+        finalPrompt = `${userPrompt}
+
+${clarifyingContext}
+
+Use the clarifying information above to enhance your statements with more specific impacts, scope, and metrics.`;
+      }
+      
+      // Add clarifying questions guidance (optional, non-blocking)
+      if (requestClarifyingQuestions && !clarifyingContext) {
+        // Only request questions on first generation, not on regeneration with answers
+        finalPrompt = `${finalPrompt}
+
+${CLARIFYING_QUESTION_GUIDANCE}
+
+If you have clarifying questions, include them in a "clarifyingQuestions" array in your JSON response.
+Each question should have: "question", "category" (impact/scope/leadership/recognition/metrics/general), and optional "hint".
+Example format:
+{
+  "statements": ["Statement 1", "Statement 2"],
+  "clarifyingQuestions": [
+    {"question": "Did this save time or money?", "category": "impact", "hint": "Quantify if possible"}
+  ]
+}
+If no questions are needed, omit the clarifyingQuestions field entirely.`;
+      }
+
       try {
         const { text } = await generateText({
           model: modelProvider,
           system: systemPrompt,
-          prompt: userPrompt,
+          prompt: finalPrompt,
           temperature: 0.75, // Slightly higher for creative expansion
-          maxTokens: 1500, // Increased for longer, denser statements
+          maxTokens: 1800, // Increased to allow room for clarifying questions
         });
 
         let statements: string[] = [];
         let relevancyScore: number | undefined;
+        let clarifyingQuestions: ClarifyingQuestionResponse[] = [];
         
         try {
-          // Try to parse as JSON object with statements and relevancy_score
+          // Try to parse as JSON object with statements, relevancy_score, and clarifyingQuestions
           const jsonObjMatch = text.match(/\{[\s\S]*"statements"[\s\S]*\}/);
           if (jsonObjMatch) {
             const parsed = JSON.parse(jsonObjMatch[0]);
             statements = parsed.statements || [];
             relevancyScore = typeof parsed.relevancy_score === "number" ? parsed.relevancy_score : undefined;
+            // Extract clarifying questions if present
+            if (Array.isArray(parsed.clarifyingQuestions)) {
+              clarifyingQuestions = parsed.clarifyingQuestions.filter(
+                (q: unknown) => typeof q === "object" && q !== null && "question" in q
+              );
+            }
           } else {
             // Fallback: try to parse as array
             const jsonArrayMatch = text.match(/\[[\s\S]*\]/);
@@ -1230,13 +1310,14 @@ Format as JSON array only:
             }
           }
 
-          // Include QC feedback in results if available
+          // Include QC feedback and clarifying questions in results if available
           results.push({ 
             mpa: mpa.key, 
             statements: verifiedStatements, 
             historyIds, 
             relevancyScore,
             ...(qcFeedback && { qcFeedback }),
+            ...(clarifyingQuestions.length > 0 && { clarifyingQuestions }),
           });
         }
       } catch (error) {
