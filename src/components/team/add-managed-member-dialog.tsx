@@ -26,7 +26,7 @@ import {
 import { toast } from "@/components/ui/sonner";
 import { Loader2, UserPlus, User, Link2, AlertCircle } from "lucide-react";
 import type { Rank, ManagedMember, Profile } from "@/types/database";
-import { ENLISTED_RANKS, OFFICER_RANKS, CIVILIAN_RANK, isOfficer, isEnlisted } from "@/lib/constants";
+import { ENLISTED_RANKS, OFFICER_RANKS, CIVILIAN_RANK, SUPERVISOR_RANKS, isOfficer, isEnlisted } from "@/lib/constants";
 
 // Get available subordinate ranks based on supervisor's rank
 // Officers can supervise anyone, Enlisted can only supervise enlisted
@@ -97,6 +97,10 @@ export function AddManagedMemberDialog({
       });
       
       for (const child of children) {
+        // Only include members who can supervise (SSgt and above, officers, civilians)
+        if (child.rank && !SUPERVISOR_RANKS.includes(child.rank)) {
+          continue;
+        }
         options.push({
           id: `managed:${child.id}`,
           full_name: child.full_name,
@@ -141,22 +145,36 @@ export function AddManagedMemberDialog({
 
       if (chainData && chainData.length > 0) {
         const subordinateIds = chainData.map((c) => c.subordinate_id);
-        const { data: profilesData } = await supabase
-          .from("profiles")
-          .select("id, full_name, rank")
-          .in("id", subordinateIds);
-
-        if (profilesData) {
-          for (const p of profilesData as Profile[]) {
-            const chainEntry = chainData.find((c) => c.subordinate_id === p.id);
-            profiles.push({
-              id: `profile:${p.id}`,
-              full_name: p.full_name,
-              rank: p.rank,
-              depth: chainEntry?.depth || 1,
-              type: "profile",
-            });
+        
+        // Batch fetch profiles to avoid URI Too Long errors (414)
+        const BATCH_SIZE = 50;
+        const allProfilesData: Profile[] = [];
+        
+        for (let i = 0; i < subordinateIds.length; i += BATCH_SIZE) {
+          const batch = subordinateIds.slice(i, i + BATCH_SIZE);
+          const { data: batchProfiles } = await supabase
+            .from("profiles")
+            .select("id, full_name, rank")
+            .in("id", batch);
+          
+          if (batchProfiles) {
+            allProfilesData.push(...(batchProfiles as Profile[]));
           }
+        }
+
+        for (const p of allProfilesData) {
+          // Only include members who can supervise (SSgt and above, officers, civilians)
+          if (p.rank && !SUPERVISOR_RANKS.includes(p.rank)) {
+            continue;
+          }
+          const chainEntry = chainData.find((c) => c.subordinate_id === p.id);
+          profiles.push({
+            id: `profile:${p.id}`,
+            full_name: p.full_name,
+            rank: p.rank,
+            depth: chainEntry?.depth || 1,
+            type: "profile",
+          });
         }
       }
 

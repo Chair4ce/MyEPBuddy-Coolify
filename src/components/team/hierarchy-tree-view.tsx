@@ -10,8 +10,10 @@ const LAYOUT_CONFIG = {
   cardWidth: 68,          // Actual card width
   baseRowHeight: 55,      // Vertical space between tiers (was 80)
   juniorStackHeight: 45,  // Height per stacked junior enlisted (was 60)
-  topPadding: 20,         // Top padding
-  leftPadding: 40,        // Left padding
+  topPadding: 60,         // Top padding - extra space for dragging
+  leftPadding: 80,        // Left padding - extra space for dragging
+  rightPadding: 80,       // Right padding - extra space for dragging
+  bottomPadding: 60,      // Bottom padding - extra space for dragging
   cardHeight: 36,         // Approximate card height for line calculations
 };
 
@@ -336,7 +338,7 @@ export function HierarchyTreeView({
       return { positioned: new Map(), tierRows: [], totalWidth: 0, totalHeight: 0 };
     }
     
-    const { baseRowHeight, juniorStackHeight, topPadding, nodeWidth } = LAYOUT_CONFIG;
+    const { baseRowHeight, juniorStackHeight, topPadding, leftPadding, rightPadding, bottomPadding, nodeWidth } = LAYOUT_CONFIG;
     
     // Flatten tree
     const members = new Map<string, HierarchyMember>();
@@ -439,8 +441,8 @@ export function HierarchyTreeView({
     return {
       positioned: pos,
       tierRows: rows,
-      totalWidth: Math.max(maxX + 20, 400),
-      totalHeight: currentY + 20,
+      totalWidth: Math.max(maxX + rightPadding, 400),
+      totalHeight: currentY + bottomPadding,
     };
   }, [tree, currentUserId]);
   
@@ -519,12 +521,13 @@ export function HierarchyTreeView({
     setIsDragging(false);
   }, []);
   
-  // Get color style for rank
+  // Get color style for rank - uses inset box-shadow to overlay color on top of solid bg-card
   const getRankStyle = useCallback((rank: Rank | null): React.CSSProperties => {
     const color = rankColors[rank || ""];
     if (!color) return {};
     return {
-      backgroundColor: `${color}30`,
+      // Use inset box-shadow for color overlay so bg-card stays solid underneath
+      boxShadow: `inset 0 0 0 100px ${color}30`,
       borderColor: color,
     };
   }, [rankColors]);
@@ -559,8 +562,6 @@ export function HierarchyTreeView({
         "[&::-webkit-scrollbar-corner]:bg-transparent [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar]:h-2",
         "[&::-webkit-scrollbar-thumb]:bg-muted-foreground/20 [&::-webkit-scrollbar-thumb]:rounded-full",
         "[&::-webkit-scrollbar-track]:bg-transparent",
-        // Center content when tree is smaller than container
-        "flex justify-center",
         isDragging ? "cursor-grabbing" : "cursor-grab"
       )}
       style={{ 
@@ -572,21 +573,24 @@ export function HierarchyTreeView({
       onMouseLeave={handleMouseLeave}
     >
       {/* Inner div with explicit dimensions creates the scrollable area */}
+      {/* Use margin auto for centering when content is smaller than container */}
       <div
-        className="relative shrink-0"
+        className="relative"
         style={{
           width: totalWidth,
           height: totalHeight,
           minWidth: totalWidth,
           minHeight: totalHeight,
+          marginLeft: "auto",
+          marginRight: "auto",
           transform: shouldScale ? `scale(${scale})` : undefined,
           transformOrigin: "top left",
         }}
       >
-        {/* SVG for connecting lines */}
+        {/* SVG for connecting lines - z-index 0 to stay behind cards */}
         <svg
           ref={svgRef}
-          className="absolute inset-0 pointer-events-none"
+          className="absolute inset-0 pointer-events-none z-0"
           style={{ width: totalWidth, height: totalHeight }}
           aria-hidden="true"
         >
@@ -640,11 +644,11 @@ export function HierarchyTreeView({
           })}
         </svg>
         
-        {/* Render tier rows */}
+        {/* Render tier rows - z-index 10 to stay above connecting lines */}
         {tierRows.map((row) => (
           <div
             key={row.tier}
-            className="absolute left-0 right-0"
+            className="absolute left-0 right-0 z-10"
             style={{ top: row.y - cardHeight / 2, height: row.height }}
           >
             {/* Members in this row */}
@@ -661,7 +665,7 @@ export function HierarchyTreeView({
                 <button
                   key={member.id}
                   className={cn(
-                    "absolute flex flex-col items-center justify-center",
+                    "absolute flex flex-col items-center justify-center z-10",
                     "px-1.5 py-1 rounded-md border-2 bg-card shadow-sm",
                     "transition-all hover:shadow-md hover:scale-105",
                     "focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-1",
