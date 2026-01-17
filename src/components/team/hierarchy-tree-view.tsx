@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useEffect, useState, useCallback, type MouseEvent as ReactMouseEvent } from "react";
 import { cn } from "@/lib/utils";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import type { Rank } from "@/types/database";
 
 // Layout configuration - compact spacing for large trees
@@ -127,12 +128,15 @@ function getRankIndex(rank: Rank | null): number {
 }
 
 // Flatten tree into a map of members with parent/child relationships
+// Respects collapsed state - doesn't include children of collapsed nodes
 function flattenTree(
   node: TreeNode,
   parentId: string | null,
   currentUserId: string,
-  result: Map<string, HierarchyMember>
+  result: Map<string, HierarchyMember>,
+  collapsedNodes: Set<string>
 ): void {
+  const isCollapsed = collapsedNodes.has(node.data.id);
   const member: HierarchyMember = {
     id: node.data.id,
     name: node.data.full_name || "Unknown",
@@ -141,12 +145,16 @@ function flattenTree(
     isManagedMember: node.data.isManagedMember,
     isPlaceholder: node.data.isPlaceholder,
     isCurrentUser: node.data.id === currentUserId,
-    children: node.children.map((c) => c.data.id),
+    // If collapsed, report empty children array for layout purposes
+    children: isCollapsed ? [] : node.children.map((c) => c.data.id),
   };
   result.set(node.data.id, member);
 
-  for (const child of node.children) {
-    flattenTree(child, node.data.id, currentUserId, result);
+  // Only recurse into children if not collapsed
+  if (!isCollapsed) {
+    for (const child of node.children) {
+      flattenTree(child, node.data.id, currentUserId, result, collapsedNodes);
+    }
   }
 }
 
@@ -325,24 +333,61 @@ export function HierarchyTreeView({
   onMemberClick,
 }: HierarchyTreeViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
-  const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
+  
+  // Dynamic height based on viewport
+  const [containerHeight, setContainerHeight] = useState(500);
+  
+  // Collapsed nodes state - stores IDs of members whose children are hidden
+  const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(new Set());
+  
+  // Toggle collapse state for a member
+  const toggleCollapse = useCallback((memberId: string) => {
+    setCollapsedNodes(prev => {
+      const next = new Set(prev);
+      if (next.has(memberId)) {
+        next.delete(memberId);
+      } else {
+        next.add(memberId);
+      }
+      return next;
+    });
+  }, []);
+  
+  // Zoom state (1 = 100%, 0.5 = 50%, 2 = 200%)
+  const [zoom, setZoom] = useState(1);
+  const MIN_ZOOM = 0.25;
+  const MAX_ZOOM = 2;
+  
+  // Spacebar held for drag mode (disables card clicks)
+  const [isSpaceHeld, setIsSpaceHeld] = useState(false);
   
   // Drag-to-pan state
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0, scrollLeft: 0, scrollTop: 0 });
   
   // Flatten tree and calculate positions
-  const { positioned, tierRows, totalWidth, totalHeight } = useMemo(() => {
+  const { positioned, tierRows, totalWidth, totalHeight, childrenCountMap } = useMemo(() => {
     if (!tree) {
-      return { positioned: new Map(), tierRows: [], totalWidth: 0, totalHeight: 0 };
+      return { positioned: new Map(), tierRows: [], totalWidth: 0, totalHeight: 0, childrenCountMap: new Map() };
     }
     
     const { baseRowHeight, juniorStackHeight, topPadding, leftPadding, rightPadding, bottomPadding, nodeWidth } = LAYOUT_CONFIG;
     
-    // Flatten tree
+    // First, build a map of original children count (before collapse filtering)
+    const childrenCount = new Map<string, number>();
+    function countChildren(node: TreeNode): void {
+      childrenCount.set(node.data.id, node.children.length);
+      for (const child of node.children) {
+        countChildren(child);
+      }
+    }
+    countChildren(tree);
+    
+    // Flatten tree (respects collapsed state)
     const members = new Map<string, HierarchyMember>();
-    flattenTree(tree, null, currentUserId, members);
+    flattenTree(tree, null, currentUserId, members, collapsedNodes);
     
     // Calculate stack indices for junior enlisted under each SSgt
     // Find all junior enlisted and group by their nearest SSgt+ ancestor
@@ -443,30 +488,30 @@ export function HierarchyTreeView({
       tierRows: rows,
       totalWidth: Math.max(maxX + rightPadding, 400),
       totalHeight: currentY + bottomPadding,
+      childrenCountMap: childrenCount,
     };
-  }, [tree, currentUserId]);
+  }, [tree, currentUserId, collapsedNodes]);
   
-  // Update dimensions on resize
+  // Track if initial scroll has been done for current tree
+  const hasInitialScrolled = useRef(false);
+  const lastTreeRootId = useRef<string | null>(null);
+  
+  // Reset initial scroll flag when tree root changes (different user/tree)
   useEffect(() => {
-    if (!containerRef.current) return;
-    
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        setDimensions({
-          width: entry.contentRect.width,
-          height: entry.contentRect.height,
-        });
-      }
-    });
-    
-    observer.observe(containerRef.current);
-    return () => observer.disconnect();
-  }, []);
+    if (tree && tree.data.id !== lastTreeRootId.current) {
+      hasInitialScrolled.current = false;
+      lastTreeRootId.current = tree.data.id;
+    }
+  }, [tree]);
   
-  // Scroll to show the root (current user) when tree first loads
-  // Only scrolls when tree is wider than container (flexbox centers small trees automatically)
+  // Scroll to show the root (current user) only on initial tree load
+  // Does NOT scroll on collapse/expand to preserve user's view position
   useEffect(() => {
     if (!containerRef.current || !tree || positioned.size === 0) return;
+    
+    // Only scroll on initial load, not on collapse/expand
+    if (hasInitialScrolled.current) return;
+    hasInitialScrolled.current = true;
     
     const containerWidth = containerRef.current.clientWidth;
     
@@ -493,6 +538,7 @@ export function HierarchyTreeView({
     // Only start drag on left mouse button and if not clicking a button
     if (e.button !== 0 || (e.target as HTMLElement).closest('button')) return;
     
+    // Allow drag if spacebar is held OR just normal click-drag
     setIsDragging(true);
     setDragStart({
       x: e.clientX,
@@ -521,6 +567,117 @@ export function HierarchyTreeView({
     setIsDragging(false);
   }, []);
   
+  // Handle wheel event for zooming (Ctrl/Cmd + scroll)
+  const handleWheel = useCallback((e: WheelEvent) => {
+    // Only zoom if Ctrl (Windows/Linux) or Meta (Mac) is held
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      
+      const delta = e.deltaY > 0 ? -0.1 : 0.1;
+      setZoom(prev => {
+        const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, prev + delta));
+        return Math.round(newZoom * 100) / 100; // Round to 2 decimal places
+      });
+    }
+  }, []);
+  
+  // Track if mouse is over container for spacebar handling
+  const isMouseOverContainer = useRef(false);
+  
+  // Handle keyboard events for spacebar drag mode
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only handle spacebar
+      if (e.code !== "Space") return;
+      
+      // Always prevent default for spacebar when mouse is over container
+      if (isMouseOverContainer.current) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        if (!e.repeat) {
+          setIsSpaceHeld(true);
+        }
+        return false;
+      }
+    };
+    
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.code === "Space") {
+        setIsSpaceHeld(false);
+        setIsDragging(false);
+      }
+    };
+    
+    // Prevent spacebar scroll on the container itself
+    const handleContainerKeyDown = (e: KeyboardEvent) => {
+      if (e.code === "Space") {
+        e.preventDefault();
+      }
+    };
+    
+    const container = containerRef.current;
+    
+    // Use capture phase at document level to catch event before any scroll
+    document.addEventListener("keydown", handleKeyDown, { capture: true });
+    document.addEventListener("keyup", handleKeyUp, { capture: true });
+    
+    // Also prevent on the container directly
+    if (container) {
+      container.addEventListener("keydown", handleContainerKeyDown);
+    }
+    
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown, { capture: true });
+      document.removeEventListener("keyup", handleKeyUp, { capture: true });
+      if (container) {
+        container.removeEventListener("keydown", handleContainerKeyDown);
+      }
+    };
+  }, []);
+  
+  // Attach wheel event listener (needs to be non-passive for preventDefault)
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    
+    container.addEventListener("wheel", handleWheel, { passive: false });
+    
+    return () => {
+      container.removeEventListener("wheel", handleWheel);
+    };
+  }, [handleWheel]);
+  
+  // Calculate dynamic height based on viewport
+  useEffect(() => {
+    const calculateHeight = () => {
+      if (!wrapperRef.current) return;
+      
+      const rect = wrapperRef.current.getBoundingClientRect();
+      const viewportHeight = window.innerHeight;
+      // Leave 24px margin at the bottom so the card doesn't touch the edge
+      const availableHeight = viewportHeight - rect.top - 24;
+      // Minimum height of 300px, maximum of available space
+      const newHeight = Math.max(300, Math.min(availableHeight, totalHeight * zoom + 40));
+      setContainerHeight(newHeight);
+    };
+    
+    // Calculate on mount and resize
+    calculateHeight();
+    window.addEventListener("resize", calculateHeight);
+    
+    // Also recalculate when tree size changes
+    const resizeObserver = new ResizeObserver(calculateHeight);
+    if (wrapperRef.current) {
+      resizeObserver.observe(wrapperRef.current);
+    }
+    
+    return () => {
+      window.removeEventListener("resize", calculateHeight);
+      resizeObserver.disconnect();
+    };
+  }, [totalHeight, zoom]);
+  
   // Get color style for rank - uses inset box-shadow to overlay color on top of solid bg-card
   const getRankStyle = useCallback((rank: Rank | null): React.CSSProperties => {
     const color = rankColors[rank || ""];
@@ -544,47 +701,83 @@ export function HierarchyTreeView({
     );
   }
   
-  // For large trees, don't scale - just allow horizontal scrolling
-  // Only scale if the tree fits reasonably (scale would be > 0.5)
-  const rawScale = dimensions.width > 0 ? (dimensions.width - 40) / totalWidth : 1;
-  const shouldScale = rawScale >= 0.5 && rawScale < 1;
-  const scale = shouldScale ? rawScale : 1;
-  const effectiveHeight = shouldScale ? totalHeight * scale : totalHeight;
-  
   const { cardWidth, juniorStackHeight, cardHeight } = LAYOUT_CONFIG;
   
+  // Determine cursor based on state
+  const getCursorClass = () => {
+    if (isDragging) return "cursor-grabbing";
+    if (isSpaceHeld) return "cursor-grab";
+    return "cursor-default";
+  };
+  
   return (
-    <div
-      ref={containerRef}
-      className={cn(
-        "relative w-full overflow-auto border border-border/50 rounded-md bg-muted/20 select-none",
-        // Custom scrollbar styling to hide the corner square
-        "[&::-webkit-scrollbar-corner]:bg-transparent [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar]:h-2",
-        "[&::-webkit-scrollbar-thumb]:bg-muted-foreground/20 [&::-webkit-scrollbar-thumb]:rounded-full",
-        "[&::-webkit-scrollbar-track]:bg-transparent",
-        isDragging ? "cursor-grabbing" : "cursor-grab"
-      )}
-      style={{ 
-        height: Math.min(totalHeight + 40, 500),
-      }}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseLeave}
-    >
+    <div ref={wrapperRef} className="relative">
+      {/* Zoom indicator */}
+      <div className="absolute top-2 right-2 z-20 flex items-center gap-2 bg-background/80 backdrop-blur-sm rounded-md px-2 py-1 text-xs text-muted-foreground border border-border/50">
+        <span>{Math.round(zoom * 100)}%</span>
+        <div className="flex gap-1">
+          <button
+            onClick={() => setZoom(prev => Math.max(MIN_ZOOM, prev - 0.1))}
+            className="hover:text-foreground transition-colors px-1"
+            aria-label="Zoom out"
+          >
+            −
+          </button>
+          <button
+            onClick={() => setZoom(1)}
+            className="hover:text-foreground transition-colors px-1"
+            aria-label="Reset zoom"
+          >
+            ⟲
+          </button>
+          <button
+            onClick={() => setZoom(prev => Math.min(MAX_ZOOM, prev + 0.1))}
+            className="hover:text-foreground transition-colors px-1"
+            aria-label="Zoom in"
+          >
+            +
+          </button>
+        </div>
+      </div>
+      
+      <div
+        ref={containerRef}
+        className={cn(
+          "relative w-full overflow-auto border border-border/50 rounded-md bg-muted/20 select-none",
+          // Custom scrollbar styling to hide the corner square
+          "[&::-webkit-scrollbar-corner]:bg-transparent [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar]:h-2",
+          "[&::-webkit-scrollbar-thumb]:bg-muted-foreground/20 [&::-webkit-scrollbar-thumb]:rounded-full",
+          "[&::-webkit-scrollbar-track]:bg-transparent",
+          getCursorClass()
+        )}
+        style={{ 
+          height: containerHeight,
+        }}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseEnter={() => { isMouseOverContainer.current = true; }}
+        onMouseLeave={() => { 
+          isMouseOverContainer.current = false; 
+          handleMouseLeave(); 
+        }}
+        tabIndex={0} // Allow focus for keyboard events
+      >
       {/* Inner div with explicit dimensions creates the scrollable area */}
       {/* Use margin auto for centering when content is smaller than container */}
       <div
         className="relative"
         style={{
-          width: totalWidth,
-          height: totalHeight,
-          minWidth: totalWidth,
-          minHeight: totalHeight,
+          width: totalWidth * zoom,
+          height: totalHeight * zoom,
+          minWidth: totalWidth * zoom,
+          minHeight: totalHeight * zoom,
           marginLeft: "auto",
           marginRight: "auto",
-          transform: shouldScale ? `scale(${scale})` : undefined,
+          transform: `scale(${zoom})`,
           transformOrigin: "top left",
+          // Smooth transition for size changes and zoom
+          transition: "width 300ms ease-out, height 300ms ease-out, min-width 300ms ease-out, min-height 300ms ease-out, transform 150ms ease-out",
         }}
       >
         {/* SVG for connecting lines - z-index 0 to stay behind cards */}
@@ -639,6 +832,10 @@ export function HierarchyTreeView({
                 stroke="currentColor"
                 strokeWidth={1.5}
                 className="text-muted-foreground opacity-40"
+                style={{
+                  // Smooth transition for line changes
+                  transition: "d 300ms ease-out, opacity 200ms ease-out",
+                }}
               />
             );
           })}
@@ -649,7 +846,12 @@ export function HierarchyTreeView({
           <div
             key={row.tier}
             className="absolute left-0 right-0 z-10"
-            style={{ top: row.y - cardHeight / 2, height: row.height }}
+            style={{ 
+              top: row.y - cardHeight / 2, 
+              height: row.height,
+              // Smooth transition for tier position changes
+              transition: "top 300ms ease-out, height 300ms ease-out",
+            }}
           >
             {/* Members in this row */}
             {row.members.map((member) => {
@@ -661,43 +863,89 @@ export function HierarchyTreeView({
                 ? member.stackIndex * juniorStackHeight 
                 : 0;
               
+              // Check if this member has children (can be collapsed)
+              const originalChildCount = childrenCountMap.get(member.id) || 0;
+              const hasChildren = originalChildCount > 0;
+              const isCollapsed = collapsedNodes.has(member.id);
+              
               return (
-                <button
+                <div
                   key={member.id}
-                  className={cn(
-                    "absolute flex flex-col items-center justify-center z-10",
-                    "px-1.5 py-1 rounded-md border-2 bg-card shadow-sm",
-                    "transition-all hover:shadow-md hover:scale-105",
-                    "focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-1",
-                    "text-center",
-                    !hasCustomColor(member.rank) && "border-border",
-                    member.isCurrentUser && "ring-2 ring-primary ring-offset-1",
-                    member.isPlaceholder && "opacity-80"
-                  )}
+                  className="absolute z-10"
                   style={{
                     left: pos.x - cardWidth / 2,
                     top: stackOffset,
-                    width: cardWidth,
-                    height: cardHeight,
-                    ...getRankStyle(member.rank),
+                    // Smooth transition for position changes
+                    transition: "left 300ms ease-out, top 300ms ease-out",
+                    // Disable pointer events when spacebar is held for drag mode
+                    pointerEvents: isSpaceHeld ? "none" : "auto",
                   }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onMemberClick?.(member.id, member.isManagedMember);
-                  }}
-                  aria-label={`${member.rank || ""} ${member.name}`}
                 >
-                  <span className="text-[9px] font-semibold text-muted-foreground truncate w-full leading-tight">
-                    {member.rank || "—"}
-                  </span>
-                  <span className="text-[10px] font-medium truncate w-full leading-tight">
-                    {getLastName(member.name)}
-                  </span>
-                </button>
+                  <button
+                    className={cn(
+                      "flex flex-col items-center justify-center",
+                      "px-1.5 py-1 rounded-md border-2 bg-card shadow-sm",
+                      "transition-all duration-200 hover:shadow-md hover:scale-105",
+                      "focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-1",
+                      "text-center",
+                      !hasCustomColor(member.rank) && "border-border",
+                      member.isCurrentUser && "ring-2 ring-primary ring-offset-1",
+                      member.isPlaceholder && "opacity-80"
+                    )}
+                    style={{
+                      width: cardWidth,
+                      height: cardHeight,
+                      ...getRankStyle(member.rank),
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      // Don't trigger click if spacebar is held (drag mode)
+                      if (isSpaceHeld) return;
+                      onMemberClick?.(member.id, member.isManagedMember);
+                    }}
+                    aria-label={`${member.rank || ""} ${member.name}`}
+                  >
+                    <span className="text-[9px] font-semibold text-muted-foreground truncate w-full leading-tight">
+                      {member.rank || "—"}
+                    </span>
+                    <span className="text-[10px] font-medium truncate w-full leading-tight">
+                      {getLastName(member.name)}
+                    </span>
+                  </button>
+                  
+                  {/* Collapse/expand toggle for members with children */}
+                  {hasChildren && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        // Don't trigger click if spacebar is held (drag mode)
+                        if (isSpaceHeld) return;
+                        toggleCollapse(member.id);
+                      }}
+                      className={cn(
+                        "absolute left-1/2 -translate-x-1/2 -bottom-3",
+                        "w-5 h-5 rounded-full bg-card border border-border shadow-sm",
+                        "flex items-center justify-center",
+                        "hover:bg-muted hover:scale-110 transition-all duration-200",
+                        "focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-1",
+                        "z-20"
+                      )}
+                      aria-label={isCollapsed ? `Expand ${originalChildCount} subordinates` : `Collapse subordinates`}
+                      title={isCollapsed ? `Expand ${originalChildCount} subordinates` : `Collapse subordinates`}
+                    >
+                      {isCollapsed ? (
+                        <ChevronRight className="w-3 h-3 text-muted-foreground" />
+                      ) : (
+                        <ChevronDown className="w-3 h-3 text-muted-foreground" />
+                      )}
+                    </button>
+                  )}
+                </div>
               );
             })}
           </div>
         ))}
+      </div>
       </div>
     </div>
   );
