@@ -40,8 +40,9 @@ export async function GET(request: Request, { params }: RouteParams) {
     }
 
     // Fetch accomplishments linked to this project (with visibility filtering via RLS)
-    const { data: accomplishmentLinks } = await supabase
-      .from("accomplishment_projects")
+    // Type assertion needed due to Supabase type generation issue with new tables
+    const { data: accomplishmentLinks } = await (supabase
+      .from("accomplishment_projects") as any)
       .select(`
         *,
         accomplishment:accomplishments(
@@ -50,7 +51,7 @@ export async function GET(request: Request, { params }: RouteParams) {
           team_member:team_members(id, full_name, rank)
         )
       `)
-      .eq("project_id", id);
+      .eq("project_id", id) as { data: Array<{ accomplishment: any }> | null };
 
     return NextResponse.json({
       project,
@@ -89,8 +90,9 @@ export async function PUT(request: Request, { params }: RouteParams) {
     if (key_stakeholders !== undefined) updates.key_stakeholders = key_stakeholders;
     if (metrics !== undefined) updates.metrics = metrics;
 
-    const { data: project, error } = await supabase
-      .from("projects")
+    // Type assertion needed due to Supabase type generation issue with new tables
+    const { data: project, error } = await (supabase
+      .from("projects") as any)
       .update(updates)
       .eq("id", id)
       .select(`

@@ -68,8 +68,9 @@ export async function POST(request: Request) {
     }
 
     // Create the project (trigger will auto-add creator as owner)
-    const { data: project, error } = await supabase
-      .from("projects")
+    // Type assertion needed due to Supabase type generation issue with new tables
+    const { data: project, error } = await (supabase
+      .from("projects") as any)
       .insert({
         name: name.trim(),
         description: description?.trim() || null,

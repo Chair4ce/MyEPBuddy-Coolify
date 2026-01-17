@@ -27,8 +27,9 @@ export async function PUT(request: Request, { params }: RouteParams) {
     }
 
     // Update member (RLS will enforce ownership)
-    const { data: member, error } = await supabase
-      .from("project_members")
+    // Type assertion needed due to Supabase type generation issue with new tables
+    const { data: member, error } = await (supabase
+      .from("project_members") as any)
       .update({ is_owner })
       .eq("id", memberId)
       .eq("project_id", projectId)

@@ -34,16 +34,116 @@ export type Database = {
   }
   public: {
     Tables: {
+      accomplishment_comments: {
+        Row: {
+          accomplishment_id: string
+          author_id: string
+          comment_text: string
+          created_at: string | null
+          id: string
+          is_resolved: boolean | null
+          resolved_at: string | null
+          resolved_by: string | null
+          updated_at: string | null
+          visible_to: string[] | null
+        }
+        Insert: {
+          accomplishment_id: string
+          author_id: string
+          comment_text: string
+          created_at?: string | null
+          id?: string
+          is_resolved?: boolean | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          updated_at?: string | null
+          visible_to?: string[] | null
+        }
+        Update: {
+          accomplishment_id?: string
+          author_id?: string
+          comment_text?: string
+          created_at?: string | null
+          id?: string
+          is_resolved?: boolean | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          updated_at?: string | null
+          visible_to?: string[] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "accomplishment_comments_accomplishment_id_fkey"
+            columns: ["accomplishment_id"]
+            isOneToOne: false
+            referencedRelation: "accomplishments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "accomplishment_comments_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "accomplishment_comments_resolved_by_fkey"
+            columns: ["resolved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      accomplishment_projects: {
+        Row: {
+          accomplishment_id: string
+          created_at: string
+          id: string
+          project_id: string
+        }
+        Insert: {
+          accomplishment_id: string
+          created_at?: string
+          id?: string
+          project_id: string
+        }
+        Update: {
+          accomplishment_id?: string
+          created_at?: string
+          id?: string
+          project_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "accomplishment_projects_accomplishment_id_fkey"
+            columns: ["accomplishment_id"]
+            isOneToOne: false
+            referencedRelation: "accomplishments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "accomplishment_projects_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       accomplishments: {
         Row: {
           action_verb: string
+          assessed_at: string | null
+          assessment_model: string | null
+          assessment_scores: Json | null
           created_at: string
           created_by: string
           cycle_year: number
           date: string
           details: string
           id: string
-          impact: string
+          impact: string | null
           metrics: string | null
           mpa: string
           tags: Json | null
@@ -53,13 +153,16 @@ export type Database = {
         }
         Insert: {
           action_verb: string
+          assessed_at?: string | null
+          assessment_model?: string | null
+          assessment_scores?: Json | null
           created_at?: string
           created_by: string
           cycle_year?: number
           date?: string
           details: string
           id?: string
-          impact: string
+          impact?: string | null
           metrics?: string | null
           mpa: string
           tags?: Json | null
@@ -69,13 +172,16 @@ export type Database = {
         }
         Update: {
           action_verb?: string
+          assessed_at?: string | null
+          assessment_model?: string | null
+          assessment_scores?: Json | null
           created_at?: string
           created_by?: string
           cycle_year?: number
           date?: string
           details?: string
           id?: string
-          impact?: string
+          impact?: string | null
           metrics?: string | null
           mpa?: string
           tags?: Json | null
@@ -807,6 +913,13 @@ export type Database = {
             foreignKeyName: "epb_duty_description_examples_shell_id_fkey"
             columns: ["shell_id"]
             isOneToOne: false
+            referencedRelation: "archived_epbs_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "epb_duty_description_examples_shell_id_fkey"
+            columns: ["shell_id"]
+            isOneToOne: false
             referencedRelation: "epb_shells"
             referencedColumns: ["id"]
           },
@@ -843,6 +956,13 @@ export type Database = {
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "epb_duty_description_snapshots_shell_id_fkey"
+            columns: ["shell_id"]
+            isOneToOne: false
+            referencedRelation: "archived_epbs_view"
             referencedColumns: ["id"]
           },
           {
@@ -904,6 +1024,13 @@ export type Database = {
             columns: ["section_id"]
             isOneToOne: false
             referencedRelation: "epb_shell_sections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "epb_saved_examples_shell_id_fkey"
+            columns: ["shell_id"]
+            isOneToOne: false
+            referencedRelation: "archived_epbs_view"
             referencedColumns: ["id"]
           },
           {
@@ -1089,6 +1216,13 @@ export type Database = {
             foreignKeyName: "epb_shell_field_locks_shell_id_fkey"
             columns: ["shell_id"]
             isOneToOne: false
+            referencedRelation: "archived_epbs_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "epb_shell_field_locks_shell_id_fkey"
+            columns: ["shell_id"]
+            isOneToOne: false
             referencedRelation: "epb_shells"
             referencedColumns: ["id"]
           },
@@ -1144,6 +1278,13 @@ export type Database = {
             foreignKeyName: "epb_shell_sections_shell_id_fkey"
             columns: ["shell_id"]
             isOneToOne: false
+            referencedRelation: "archived_epbs_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "epb_shell_sections_shell_id_fkey"
+            columns: ["shell_id"]
+            isOneToOne: false
             referencedRelation: "epb_shells"
             referencedColumns: ["id"]
           },
@@ -1187,6 +1328,13 @@ export type Database = {
             columns: ["shared_with_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "epb_shell_shares_shell_id_fkey"
+            columns: ["shell_id"]
+            isOneToOne: false
+            referencedRelation: "archived_epbs_view"
             referencedColumns: ["id"]
           },
           {
@@ -1242,34 +1390,46 @@ export type Database = {
       }
       epb_shells: {
         Row: {
+          archive_name: string | null
+          archived_at: string | null
           created_at: string
           created_by: string
           cycle_year: number
           duty_description: string | null
+          duty_description_complete: boolean
           id: string
           multi_user_enabled: boolean | null
+          status: string
           team_member_id: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
+          archive_name?: string | null
+          archived_at?: string | null
           created_at?: string
           created_by: string
           cycle_year: number
           duty_description?: string | null
+          duty_description_complete?: boolean
           id?: string
           multi_user_enabled?: boolean | null
+          status?: string
           team_member_id?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
+          archive_name?: string | null
+          archived_at?: string | null
           created_at?: string
           created_by?: string
           cycle_year?: number
           duty_description?: string | null
+          duty_description_complete?: boolean
           id?: string
           multi_user_enabled?: boolean | null
+          status?: string
           team_member_id?: string | null
           updated_at?: string
           user_id?: string
@@ -1351,6 +1511,244 @@ export type Database = {
             columns: ["team_member_id"]
             isOneToOne: false
             referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      opb_duty_description_snapshots: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description_text: string
+          id: string
+          note: string | null
+          shell_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description_text: string
+          id?: string
+          note?: string | null
+          shell_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description_text?: string
+          id?: string
+          note?: string | null
+          shell_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "opb_duty_description_snapshots_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "opb_duty_description_snapshots_shell_id_fkey"
+            columns: ["shell_id"]
+            isOneToOne: false
+            referencedRelation: "opb_shells"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      opb_shell_sections: {
+        Row: {
+          created_at: string
+          id: string
+          is_complete: boolean
+          last_edited_by: string | null
+          mpa: string
+          shell_id: string
+          statement_text: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_complete?: boolean
+          last_edited_by?: string | null
+          mpa: string
+          shell_id: string
+          statement_text?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_complete?: boolean
+          last_edited_by?: string | null
+          mpa?: string
+          shell_id?: string
+          statement_text?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "opb_shell_sections_last_edited_by_fkey"
+            columns: ["last_edited_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "opb_shell_sections_shell_id_fkey"
+            columns: ["shell_id"]
+            isOneToOne: false
+            referencedRelation: "opb_shells"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      opb_shell_shares: {
+        Row: {
+          created_at: string
+          id: string
+          owner_id: string
+          share_type: string
+          shared_with_id: string
+          shell_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          owner_id: string
+          share_type: string
+          shared_with_id: string
+          shell_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          owner_id?: string
+          share_type?: string
+          shared_with_id?: string
+          shell_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "opb_shell_shares_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "opb_shell_shares_shared_with_id_fkey"
+            columns: ["shared_with_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "opb_shell_shares_shell_id_fkey"
+            columns: ["shell_id"]
+            isOneToOne: false
+            referencedRelation: "opb_shells"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      opb_shell_snapshots: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          note: string | null
+          section_id: string
+          statement_text: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          note?: string | null
+          section_id: string
+          statement_text: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          note?: string | null
+          section_id?: string
+          statement_text?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "opb_shell_snapshots_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "opb_shell_snapshots_section_id_fkey"
+            columns: ["section_id"]
+            isOneToOne: false
+            referencedRelation: "opb_shell_sections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      opb_shells: {
+        Row: {
+          archive_name: string | null
+          archived_at: string | null
+          created_at: string
+          created_by: string
+          cycle_year: number
+          duty_description: string
+          duty_description_complete: boolean
+          id: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          archive_name?: string | null
+          archived_at?: string | null
+          created_at?: string
+          created_by: string
+          cycle_year: number
+          duty_description?: string
+          duty_description_complete?: boolean
+          id?: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          archive_name?: string | null
+          archived_at?: string | null
+          created_at?: string
+          created_by?: string
+          cycle_year?: number
+          duty_description?: string
+          duty_description_complete?: boolean
+          id?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "opb_shells_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "opb_shells_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -1510,6 +1908,118 @@ export type Database = {
           },
         ]
       }
+      project_members: {
+        Row: {
+          added_by: string
+          created_at: string
+          id: string
+          is_owner: boolean
+          profile_id: string | null
+          project_id: string
+          team_member_id: string | null
+        }
+        Insert: {
+          added_by: string
+          created_at?: string
+          id?: string
+          is_owner?: boolean
+          profile_id?: string | null
+          project_id: string
+          team_member_id?: string | null
+        }
+        Update: {
+          added_by?: string
+          created_at?: string
+          id?: string
+          is_owner?: boolean
+          profile_id?: string | null
+          project_id?: string
+          team_member_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_members_added_by_fkey"
+            columns: ["added_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_members_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_members_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_members_team_member_id_fkey"
+            columns: ["team_member_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      projects: {
+        Row: {
+          created_at: string
+          created_by: string
+          cycle_year: number
+          description: string | null
+          id: string
+          impact: string | null
+          key_stakeholders: Json | null
+          metrics: Json | null
+          name: string
+          result: string | null
+          scope: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          cycle_year?: number
+          description?: string | null
+          id?: string
+          impact?: string | null
+          key_stakeholders?: Json | null
+          metrics?: Json | null
+          name: string
+          result?: string | null
+          scope?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          cycle_year?: number
+          description?: string | null
+          id?: string
+          impact?: string | null
+          key_stakeholders?: Json | null
+          metrics?: Json | null
+          name?: string
+          result?: string | null
+          scope?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "projects_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       refined_statements: {
         Row: {
           afsc: string
@@ -1524,6 +2034,7 @@ export type Database = {
           is_winning_package: boolean | null
           mpa: string
           rank: Database["public"]["Enums"]["user_rank"]
+          source_epb_shell_id: string | null
           statement: string
           statement_type: string
           team_member_id: string | null
@@ -1545,6 +2056,7 @@ export type Database = {
           is_winning_package?: boolean | null
           mpa: string
           rank: Database["public"]["Enums"]["user_rank"]
+          source_epb_shell_id?: string | null
           statement: string
           statement_type?: string
           team_member_id?: string | null
@@ -1566,6 +2078,7 @@ export type Database = {
           is_winning_package?: boolean | null
           mpa?: string
           rank?: Database["public"]["Enums"]["user_rank"]
+          source_epb_shell_id?: string | null
           statement?: string
           statement_type?: string
           team_member_id?: string | null
@@ -1587,6 +2100,20 @@ export type Database = {
             columns: ["history_id"]
             isOneToOne: false
             referencedRelation: "statement_history"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "refined_statements_source_epb_shell_id_fkey"
+            columns: ["source_epb_shell_id"]
+            isOneToOne: false
+            referencedRelation: "archived_epbs_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "refined_statements_source_epb_shell_id_fkey"
+            columns: ["source_epb_shell_id"]
+            isOneToOne: false
+            referencedRelation: "epb_shells"
             referencedColumns: ["id"]
           },
           {
@@ -2132,6 +2659,8 @@ export type Database = {
           max_characters_per_statement: number
           max_example_statements: number
           mpa_descriptions: Json
+          opb_style_guidelines: string | null
+          opb_system_prompt: string | null
           rank_verb_progression: Json
           scod_date: string
           style_guidelines: string
@@ -2154,6 +2683,8 @@ export type Database = {
           max_characters_per_statement?: number
           max_example_statements?: number
           mpa_descriptions?: Json
+          opb_style_guidelines?: string | null
+          opb_system_prompt?: string | null
           rank_verb_progression?: Json
           scod_date?: string
           style_guidelines?: string
@@ -2176,6 +2707,8 @@ export type Database = {
           max_characters_per_statement?: number
           max_example_statements?: number
           mpa_descriptions?: Json
+          opb_style_guidelines?: string | null
+          opb_system_prompt?: string | null
           rank_verb_progression?: Json
           scod_date?: string
           style_guidelines?: string
@@ -2401,6 +2934,13 @@ export type Database = {
             foreignKeyName: "workspace_sessions_shell_id_fkey"
             columns: ["shell_id"]
             isOneToOne: false
+            referencedRelation: "archived_epbs_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workspace_sessions_shell_id_fkey"
+            columns: ["shell_id"]
+            isOneToOne: false
             referencedRelation: "epb_shells"
             referencedColumns: ["id"]
           },
@@ -2408,6 +2948,36 @@ export type Database = {
       }
     }
     Views: {
+      archived_epbs_view: {
+        Row: {
+          archive_name: string | null
+          archived_at: string | null
+          created_at: string | null
+          cycle_year: number | null
+          id: string | null
+          ratee_name: string | null
+          ratee_rank: Database["public"]["Enums"]["user_rank"] | null
+          statement_count: number | null
+          team_member_id: string | null
+          user_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "epb_shells_team_member_id_fkey"
+            columns: ["team_member_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "epb_shells_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       my_subordinate_history: {
         Row: {
           created_at: string | null
@@ -2457,6 +3027,7 @@ export type Database = {
           share_id: string | null
           share_type: string | null
           shared_with_id: string | null
+          source_epb_shell_id: string | null
           statement: string | null
           statement_type: string | null
           updated_at: string | null
@@ -2464,6 +3035,20 @@ export type Database = {
           win_level: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "refined_statements_source_epb_shell_id_fkey"
+            columns: ["source_epb_shell_id"]
+            isOneToOne: false
+            referencedRelation: "archived_epbs_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "refined_statements_source_epb_shell_id_fkey"
+            columns: ["source_epb_shell_id"]
+            isOneToOne: false
+            referencedRelation: "epb_shells"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "refined_statements_user_id_fkey"
             columns: ["owner_id"]
@@ -2502,9 +3087,30 @@ export type Database = {
         }[]
       }
       approve_award_request: { Args: { p_request_id: string }; Returns: string }
+      archive_epb_shell: {
+        Args: {
+          p_archive_name?: string
+          p_clear_after_archive?: boolean
+          p_shell_id: string
+        }
+        Returns: {
+          error_message: string
+          shell_id: string
+          statements_saved: number
+          success: boolean
+        }[]
+      }
       archive_prior_subordinate: {
         Args: { team_member_id: string }
         Returns: Json
+      }
+      bulk_share_epb_statements: {
+        Args: {
+          p_share_type: string
+          p_shared_with_id?: string
+          p_shell_id: string
+        }
+        Returns: number
       }
       calculate_award_period_dates: {
         Args: {
@@ -2517,6 +3123,15 @@ export type Database = {
           end_date: string
           start_date: string
         }[]
+      }
+      can_add_project_member: {
+        Args: {
+          p_project_id: string
+          p_target_profile_id: string
+          p_target_team_member_id: string
+          p_user_id: string
+        }
+        Returns: boolean
       }
       can_supervise: {
         Args: { rank_value: Database["public"]["Enums"]["user_rank"] }
@@ -2538,6 +3153,7 @@ export type Database = {
       }
       cleanup_stale_section_sessions: { Args: never; Returns: undefined }
       complete_pending_link: { Args: { link_id: string }; Returns: Json }
+      count_project_owners: { Args: { p_project_id: string }; Returns: number }
       create_pending_link_for_existing_user: {
         Args: { p_team_member_id: string; p_user_id: string }
         Returns: Json
@@ -2552,6 +3168,23 @@ export type Database = {
       }
       dismiss_pending_link: { Args: { link_id: string }; Returns: Json }
       generate_session_code: { Args: never; Returns: string }
+      get_accomplishment_chain_members: {
+        Args: { acc_id: string }
+        Returns: {
+          full_name: string
+          is_owner: boolean
+          rank: string
+          user_id: string
+        }[]
+      }
+      get_accomplishment_comment_counts: {
+        Args: { acc_ids: string[] }
+        Returns: {
+          accomplishment_id: string
+          total_count: number
+          unresolved_count: number
+        }[]
+      }
       get_all_managed_members: {
         Args: { supervisor_uuid: string }
         Returns: {
@@ -2649,6 +3282,40 @@ export type Database = {
           quarter: Database["public"]["Enums"]["award_quarter"]
         }[]
       }
+      get_opb_shell_with_sections: {
+        Args: { p_shell_id: string }
+        Returns: {
+          archive_name: string
+          archived_at: string
+          created_by: string
+          cycle_year: number
+          duty_description: string
+          duty_description_complete: boolean
+          is_complete: boolean
+          mpa: string
+          section_id: string
+          section_updated_at: string
+          shell_created_at: string
+          shell_id: string
+          shell_updated_at: string
+          statement_text: string
+          status: string
+          user_id: string
+        }[]
+      }
+      get_project_members_with_visibility: {
+        Args: { p_project_id: string; p_viewer_id: string }
+        Returns: {
+          afsc: string
+          can_view_accomplishments: boolean
+          full_name: string
+          is_owner: boolean
+          member_id: string
+          profile_id: string
+          rank: string
+          team_member_id: string
+        }[]
+      }
       get_section_active_session: {
         Args: { p_section_id: string; p_user_id: string }
         Returns: {
@@ -2664,12 +3331,12 @@ export type Database = {
       get_shell_field_locks: {
         Args: { p_shell_id: string }
         Returns: {
-          acquired_at: string
-          expires_at: string
-          field_key: string
-          user_id: string
-          user_name: string
-          user_rank: string
+          out_acquired_at: string
+          out_expires_at: string
+          out_field_key: string
+          out_user_id: string
+          out_user_name: string
+          out_user_rank: string
         }[]
       }
       get_shell_section_locks: {
@@ -2698,6 +3365,29 @@ export type Database = {
           supervisor_id: string
         }[]
       }
+      get_user_projects: {
+        Args: { p_user_id: string }
+        Returns: {
+          created_at: string
+          created_by: string
+          cycle_year: number
+          description: string | null
+          id: string
+          impact: string | null
+          key_stakeholders: Json | null
+          metrics: Json | null
+          name: string
+          result: string | null
+          scope: string | null
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "projects"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       get_visible_managed_members: {
         Args: { viewer_uuid: string }
         Returns: {
@@ -2719,6 +3409,26 @@ export type Database = {
           unit: string
           updated_at: string
         }[]
+      }
+      is_enlisted_rank: {
+        Args: { rank_value: Database["public"]["Enums"]["user_rank"] }
+        Returns: boolean
+      }
+      is_in_accomplishment_chain: {
+        Args: { acc_id: string; viewer_id: string }
+        Returns: boolean
+      }
+      is_officer_rank: {
+        Args: { rank_value: Database["public"]["Enums"]["user_rank"] }
+        Returns: boolean
+      }
+      is_project_member: {
+        Args: { p_project_id: string; p_user_id: string }
+        Returns: boolean
+      }
+      is_project_owner: {
+        Args: { p_project_id: string; p_user_id: string }
+        Returns: boolean
       }
       process_style_feedback: {
         Args: { p_batch_size?: number; p_user_id: string }
@@ -2742,6 +3452,7 @@ export type Database = {
         Returns: undefined
       }
       sync_managed_account_data: { Args: { link_id: string }; Returns: Json }
+      unarchive_epb_shell: { Args: { p_shell_id: string }; Returns: boolean }
       update_managed_member_dates: {
         Args: {
           p_end_date?: string
@@ -2788,6 +3499,16 @@ export type Database = {
         | "SMSgt"
         | "CMSgt"
         | "Civilian"
+        | "2d Lt"
+        | "1st Lt"
+        | "Capt"
+        | "Maj"
+        | "Lt Col"
+        | "Col"
+        | "Brig Gen"
+        | "Maj Gen"
+        | "Lt Gen"
+        | "Gen"
       user_role: "supervisor" | "subordinate" | "admin" | "member"
     }
     CompositeTypes: {
@@ -2944,6 +3665,16 @@ export const Constants = {
         "SMSgt",
         "CMSgt",
         "Civilian",
+        "2d Lt",
+        "1st Lt",
+        "Capt",
+        "Maj",
+        "Lt Col",
+        "Col",
+        "Brig Gen",
+        "Maj Gen",
+        "Lt Gen",
+        "Gen",
       ],
       user_role: ["supervisor", "subordinate", "admin", "member"],
     },

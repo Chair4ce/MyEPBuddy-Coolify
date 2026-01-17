@@ -17,11 +17,14 @@ export async function GET(request: Request, { params }: RouteParams) {
     }
 
     // Use the database function to get members with visibility info
-    const { data: members, error } = await supabase
-      .rpc("get_project_members_with_visibility", {
+    // Type assertion needed due to Supabase type generation issue with new tables
+    const { data: members, error } = await (supabase.rpc as any)(
+      "get_project_members_with_visibility",
+      {
         p_project_id: projectId,
         p_viewer_id: user.id,
-      });
+      }
+    );
 
     if (error) {
       console.error("Error fetching project members:", error);
@@ -67,8 +70,9 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     // Add member (RLS will enforce permission)
-    const { data: member, error } = await supabase
-      .from("project_members")
+    // Type assertion needed due to Supabase type generation issue with new tables
+    const { data: member, error } = await (supabase
+      .from("project_members") as any)
       .insert({
         project_id: projectId,
         profile_id: profile_id || null,

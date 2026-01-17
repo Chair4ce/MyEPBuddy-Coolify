@@ -199,12 +199,13 @@ export function EntryFormDialog({
   }, [editEntry, open]);
 
   // Load existing project link for an accomplishment
+  // Type assertions needed due to Supabase type generation issue with new tables
   async function loadExistingProjectLink(accomplishmentId: string) {
-    const { data } = await supabase
-      .from("accomplishment_projects")
+    const { data } = await (supabase
+      .from("accomplishment_projects") as any)
       .select("project_id")
       .eq("accomplishment_id", accomplishmentId)
-      .maybeSingle();
+      .maybeSingle() as { data: { project_id: string } | null };
     
     setSelectedProjectId(data?.project_id || null);
   }
@@ -212,11 +213,11 @@ export function EntryFormDialog({
   // Update project link for an accomplishment
   async function updateProjectLink(accomplishmentId: string) {
     // First, get the current link
-    const { data: existingLink } = await supabase
-      .from("accomplishment_projects")
+    const { data: existingLink } = await (supabase
+      .from("accomplishment_projects") as any)
       .select("id, project_id")
       .eq("accomplishment_id", accomplishmentId)
-      .maybeSingle();
+      .maybeSingle() as { data: { id: string; project_id: string } | null };
 
     const currentProjectId = existingLink?.project_id;
 
@@ -225,16 +226,16 @@ export function EntryFormDialog({
 
     // If there was a link, remove it
     if (existingLink) {
-      await supabase
-        .from("accomplishment_projects")
+      await (supabase
+        .from("accomplishment_projects") as any)
         .delete()
         .eq("id", existingLink.id);
     }
 
     // If a new project is selected, create the link
     if (selectedProjectId) {
-      await supabase
-        .from("accomplishment_projects")
+      await (supabase
+        .from("accomplishment_projects") as any)
         .insert({
           accomplishment_id: accomplishmentId,
           project_id: selectedProjectId,
@@ -366,8 +367,8 @@ export function EntryFormDialog({
           
           // Link to project if selected
           if (selectedProjectId) {
-            await supabase
-              .from("accomplishment_projects")
+            await (supabase
+              .from("accomplishment_projects") as any)
               .insert({
                 accomplishment_id: result.data.id,
                 project_id: selectedProjectId,

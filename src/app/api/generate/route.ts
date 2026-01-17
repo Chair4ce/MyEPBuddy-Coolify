@@ -181,14 +181,15 @@ async function fetchProjectContext(
 
   try {
     // Get project links for these accomplishments
-    const { data: projectLinks } = await supabase
-      .from("accomplishment_projects")
+    // Type assertion needed due to Supabase type generation issue with new tables
+    const { data: projectLinks } = await (supabase
+      .from("accomplishment_projects") as any)
       .select(`
         accomplishment_id,
         project_id,
         project:projects(*)
       `)
-      .in("accomplishment_id", accomplishmentIds);
+      .in("accomplishment_id", accomplishmentIds) as { data: Array<{ accomplishment_id: string; project_id: string; project: Project | null }> | null };
 
     if (!projectLinks || projectLinks.length === 0) return [];
 
@@ -196,7 +197,7 @@ async function fetchProjectContext(
     const projectMap = new Map<string, Project>();
     for (const link of projectLinks) {
       if (link.project && !projectMap.has(link.project_id)) {
-        projectMap.set(link.project_id, link.project as unknown as Project);
+        projectMap.set(link.project_id, link.project);
       }
     }
 
@@ -204,18 +205,19 @@ async function fetchProjectContext(
 
     for (const [projectId, project] of projectMap) {
       // Get subordinate accomplishments for this project (if user is in supervisor chain)
-      const { data: subordinateChain } = await supabase.rpc("get_subordinate_chain", {
+      // Type assertion for RPC call
+      const { data: subordinateChain } = await (supabase.rpc as any)("get_subordinate_chain", {
         supervisor_uuid: userId,
-      });
+      }) as { data: Array<{ subordinate_id: string; depth: number }> | null };
 
       let subordinateAccomplishments: ProjectContext["subordinateAccomplishments"] = [];
 
       if (subordinateChain && subordinateChain.length > 0) {
-        const subordinateIds = subordinateChain.map((s: { subordinate_id: string }) => s.subordinate_id);
+        const subordinateIds = subordinateChain.map((s) => s.subordinate_id);
 
         // Get accomplishments from subordinates that are linked to this project
-        const { data: subAccomplishments } = await supabase
-          .from("accomplishment_projects")
+        const { data: subAccomplishments } = await (supabase
+          .from("accomplishment_projects") as any)
           .select(`
             accomplishment:accomplishments(
               id,
@@ -226,11 +228,11 @@ async function fetchProjectContext(
               team_member:team_members(full_name, rank)
             )
           `)
-          .eq("project_id", projectId);
+          .eq("project_id", projectId) as { data: Array<{ accomplishment: any }> | null };
 
         if (subAccomplishments) {
           for (const sa of subAccomplishments) {
-            const acc = sa.accomplishment as any;
+            const acc = sa.accomplishment;
             if (!acc) continue;
 
             // Only include if from a subordinate (not self)
