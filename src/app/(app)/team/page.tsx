@@ -105,6 +105,7 @@ import { AddProjectDialog } from "@/components/team/add-project-dialog";
 import { EditProjectDialog } from "@/components/team/edit-project-dialog";
 import { ProjectDetailSheet } from "@/components/team/project-detail-sheet";
 import { ProjectMembersManager } from "@/components/team/project-members-manager";
+import { AddProjectAccomplishmentDialog } from "@/components/team/add-project-accomplishment-dialog";
 import { ProjectsInfoModal, useProjectsInfoModal } from "@/components/team/projects-info-modal";
 import { useProjectsStore } from "@/stores/projects-store";
 import { toast } from "@/components/ui/sonner";
@@ -348,6 +349,7 @@ export default function TeamPage() {
   const [editProject, setEditProject] = useState<Project | null>(null);
   const [viewProject, setViewProject] = useState<Project | null>(null);
   const [manageProjectMembers, setManageProjectMembers] = useState<Project | null>(null);
+  const [addEntryProject, setAddEntryProject] = useState<Project | null>(null);
 
   // Projects info modal (one-time display)
   const projectsInfoModal = useProjectsInfoModal();
@@ -3244,6 +3246,13 @@ export default function TeamPage() {
         open={projectsInfoModal.showModal}
         onOpenChange={projectsInfoModal.onOpenChange}
       />
+
+      {/* Add Project Entry Dialog */}
+      <AddProjectAccomplishmentDialog
+        open={!!addEntryProject}
+        onOpenChange={(open) => !open && setAddEntryProject(null)}
+        project={addEntryProject}
+      />
         </div>
       </div>
 
@@ -3257,6 +3266,7 @@ export default function TeamPage() {
         onAddProject={() => setShowAddProjectDialog(true)}
         onEditProject={(project) => setEditProject(project)}
         onViewProject={(project) => setViewProject(project)}
+        onAddEntry={(project) => setAddEntryProject(project)}
         selectedProjectId={selectedProjectId}
         onSelectProject={setSelectedProjectId}
         isAssignMode={isAssignMode}

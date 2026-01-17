@@ -38,6 +38,7 @@ import {
   UserPlus,
   Check,
   HelpCircle,
+  ClipboardPlus,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -59,6 +60,7 @@ interface ProjectsSidePanelProps {
   onAddProject: () => void;
   onEditProject: (project: Project) => void;
   onViewProject: (project: Project) => void;
+  onAddEntry: (project: Project) => void;
   selectedProjectId: string | null;
   onSelectProject: (projectId: string | null) => void;
   isAssignMode: boolean;
@@ -73,6 +75,7 @@ export function ProjectsSidePanel({
   onAddProject,
   onEditProject,
   onViewProject,
+  onAddEntry,
   selectedProjectId,
   onSelectProject,
   isAssignMode,
@@ -312,6 +315,15 @@ export function ProjectsSidePanel({
                         >
                           <ChevronRight className="size-3.5 mr-2" />
                           View Details
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onAddEntry(project);
+                          }}
+                        >
+                          <ClipboardPlus className="size-3.5 mr-2" />
+                          Add Entry
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           onClick={(e) => {

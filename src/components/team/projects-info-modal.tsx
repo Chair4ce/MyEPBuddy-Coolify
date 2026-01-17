@@ -10,19 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import {
-  FolderKanban,
-  Users,
-  Target,
-  TrendingUp,
-  Sparkles,
-  LinkIcon,
-  Crown,
-  UserPlus,
-  FileText,
-  CheckCircle2,
-} from "lucide-react";
+import { FolderKanban } from "lucide-react";
 
 const STORAGE_KEY = "projects-info-seen";
 
@@ -34,182 +22,105 @@ interface ProjectsInfoModalProps {
 export function ProjectsInfoModal({ open, onOpenChange }: ProjectsInfoModalProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <div className="flex items-center gap-3 mb-2">
-            <div className="p-2 rounded-lg bg-primary/10">
+      <DialogContent className="w-full max-w-4xl max-h-[85vh] overflow-y-auto p-6 sm:p-8">
+        <DialogHeader className="space-y-3">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-lg bg-primary/10">
               <FolderKanban className="size-6 text-primary" />
             </div>
             <div>
-              <DialogTitle className="text-xl">Introducing Projects</DialogTitle>
-              <DialogDescription>
-                Streamline your EPB statements with shared context
+              <DialogTitle className="text-xl sm:text-2xl">Introducing Projects</DialogTitle>
+              <DialogDescription className="text-sm">
+                Share context across your team for better EPB statements
               </DialogDescription>
             </div>
           </div>
         </DialogHeader>
 
-        <div className="space-y-6 py-4">
+        <div className="mt-6 space-y-6 text-sm leading-relaxed">
           {/* What are Projects */}
           <section>
-            <h3 className="font-semibold text-sm flex items-center gap-2 mb-2">
-              <FolderKanban className="size-4 text-primary" />
-              What are Projects?
-            </h3>
-            <p className="text-sm text-muted-foreground leading-relaxed">
-              Projects allow you to group related accomplishments under a shared context. 
-              When you and your team work on a major initiative, you can create a project 
-              to capture the overall <strong>results</strong>, <strong>impact</strong>, and 
-              <strong> key stakeholders</strong> once — then everyone on the project can 
-              leverage this information in their EPB statements.
+            <h3 className="font-semibold text-base mb-2">What are Projects?</h3>
+            <p className="text-muted-foreground">
+              Projects let you define the <strong>results</strong>, <strong>impact</strong>, and 
+              <strong> key stakeholders</strong> for a major initiative once — then everyone assigned 
+              can use this information when generating their EPB statements. No more repeating the 
+              same context for each team member.
             </p>
           </section>
 
-          {/* Key Features */}
+          {/* How it works - simplified */}
           <section>
-            <h3 className="font-semibold text-sm flex items-center gap-2 mb-3">
-              <Sparkles className="size-4 text-amber-500" />
-              Key Features
-            </h3>
-            <div className="grid gap-3">
-              <FeatureCard
-                icon={<Target className="size-4 text-green-600" />}
-                title="Shared Results & Impact"
-                description="Define the project's results and impact once. When members generate EPB statements from linked accomplishments, this context is automatically included to create stronger, more detailed statements."
-              />
-              <FeatureCard
-                icon={<Users className="size-4 text-blue-600" />}
-                title="Team Collaboration"
-                description="Add anyone from your chain of command to a project. All assigned members can see project details and link their accomplishments to benefit from the shared context."
-              />
-              <FeatureCard
-                icon={<Crown className="size-4 text-amber-500" />}
-                title="Flexible Ownership"
-                description="Project creators become owners who can edit metadata and manage members. Ownership can be shared with others for collaborative management."
-              />
-              <FeatureCard
-                icon={<LinkIcon className="size-4 text-purple-600" />}
-                title="Link Accomplishments"
-                description="In the Entries page, you can associate any accomplishment with a project you're assigned to. This links your individual contribution to the broader project outcomes."
-              />
-            </div>
+            <h3 className="font-semibold text-base mb-3">How it Works</h3>
+            <ol className="space-y-2 text-muted-foreground list-decimal list-inside">
+              <li>
+                <strong className="text-foreground">Create a project</strong> — give it a name, description, 
+                and add the results/impact when known
+              </li>
+              <li>
+                <strong className="text-foreground">Assign team members</strong> — add anyone from your 
+                chain of command who contributed
+              </li>
+              <li>
+                <strong className="text-foreground">Link accomplishments</strong> — in the Entries page, 
+                members associate their entries with the project
+              </li>
+              <li>
+                <strong className="text-foreground">Generate enhanced statements</strong> — the AI 
+                automatically incorporates project context into EPB statements
+              </li>
+            </ol>
           </section>
 
-          {/* How it Works */}
+          {/* Key benefits - compact grid */}
           <section>
-            <h3 className="font-semibold text-sm flex items-center gap-2 mb-3">
-              <FileText className="size-4 text-primary" />
-              How it Enhances Your EPB Statements
-            </h3>
-            <div className="bg-muted/50 rounded-lg p-4 space-y-3">
-              <div className="flex gap-3">
-                <Badge variant="outline" className="shrink-0 h-6">1</Badge>
-                <p className="text-sm">
-                  <strong>Create a project</strong> for a major initiative (e.g., "Unit Inspection Prep", 
-                  "New Training Program", "System Migration")
+            <h3 className="font-semibold text-base mb-3">Key Benefits</h3>
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div>
+                <p className="font-medium">Shared Context</p>
+                <p className="text-muted-foreground text-xs mt-0.5">
+                  Define results and impact once, used by everyone on the project
                 </p>
               </div>
-              <div className="flex gap-3">
-                <Badge variant="outline" className="shrink-0 h-6">2</Badge>
-                <p className="text-sm">
-                  <strong>Add project metadata</strong> like results ("achieved 98% compliance"), 
-                  impact ("reduced processing time by 40%"), and key stakeholders
+              <div>
+                <p className="font-medium">Better Statements</p>
+                <p className="text-muted-foreground text-xs mt-0.5">
+                  AI connects individual contributions to broader outcomes
                 </p>
               </div>
-              <div className="flex gap-3">
-                <Badge variant="outline" className="shrink-0 h-6">3</Badge>
-                <p className="text-sm">
-                  <strong>Assign team members</strong> who contributed to the project from your 
-                  supervision chain
+              <div>
+                <p className="font-medium">Team Visibility</p>
+                <p className="text-muted-foreground text-xs mt-0.5">
+                  All members can see project details and who&apos;s assigned
                 </p>
               </div>
-              <div className="flex gap-3">
-                <Badge variant="outline" className="shrink-0 h-6">4</Badge>
-                <p className="text-sm">
-                  <strong>Link accomplishments</strong> — each member links their entries to the 
-                  project in the Entries page
-                </p>
-              </div>
-              <div className="flex gap-3">
-                <Badge variant="outline" className="shrink-0 h-6">5</Badge>
-                <p className="text-sm">
-                  <strong>Generate enhanced statements</strong> — when generating EPB statements, 
-                  the AI incorporates project context to craft statements that connect individual 
-                  contributions to the larger outcomes
+              <div>
+                <p className="font-medium">Leadership Framing</p>
+                <p className="text-muted-foreground text-xs mt-0.5">
+                  Supervisors get statements that reflect leading the team&apos;s work
                 </p>
               </div>
             </div>
           </section>
 
-          {/* Supervisor Benefit */}
-          <section className="bg-amber-500/10 rounded-lg p-4 border border-amber-500/20">
-            <h3 className="font-semibold text-sm flex items-center gap-2 mb-2">
-              <Crown className="size-4 text-amber-600" />
-              For Supervisors
-            </h3>
-            <p className="text-sm text-muted-foreground leading-relaxed">
-              When you generate EPB statements and have subordinates on the same project, 
-              the AI understands your leadership role and frames your statements to reflect 
-              that you <em>led</em>, <em>directed</em>, or <em>facilitated</em> the team's 
-              accomplishments — automatically connecting your actions to the combined project 
-              outcomes.
-            </p>
-          </section>
-
-          {/* Quick Tips */}
-          <section>
-            <h3 className="font-semibold text-sm flex items-center gap-2 mb-2">
-              <CheckCircle2 className="size-4 text-green-600" />
-              Quick Tips
-            </h3>
-            <ul className="text-sm text-muted-foreground space-y-1.5">
-              <li className="flex items-start gap-2">
-                <span className="text-primary">•</span>
-                Click on a project to highlight assigned members in the supervision tree
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-primary">•</span>
-                Use "Assign Members" mode to quickly add people by clicking on them in the tree
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-primary">•</span>
-                Add detailed results and impact for better AI-generated statements
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-primary">•</span>
-                Include key stakeholders to add credibility and context to statements
-              </li>
+          {/* Quick tips - inline */}
+          <section className="bg-muted/50 rounded-lg p-4">
+            <h3 className="font-semibold text-base mb-2">Quick Tips</h3>
+            <ul className="text-muted-foreground text-xs space-y-1.5">
+              <li>• Click a project to highlight its members in the supervision tree</li>
+              <li>• Use &quot;Assign Members&quot; to quickly add people by clicking them in the tree</li>
+              <li>• Add detailed results and impact for the best AI-generated statements</li>
             </ul>
           </section>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="mt-6">
           <Button onClick={() => onOpenChange(false)} className="w-full sm:w-auto">
-            Got it, let&apos;s go!
+            Got it
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
-}
-
-function FeatureCard({
-  icon,
-  title,
-  description,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  description: string;
-}) {
-  return (
-    <div className="flex gap-3 p-3 rounded-lg border bg-card">
-      <div className="shrink-0 mt-0.5">{icon}</div>
-      <div>
-        <h4 className="font-medium text-sm">{title}</h4>
-        <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
-      </div>
-    </div>
   );
 }
 
@@ -219,7 +130,6 @@ export function useProjectsInfoModal() {
   const [hasSeenInfo, setHasSeenInfo] = useState(true); // Default to true to prevent flash
 
   useEffect(() => {
-    // Check localStorage on mount
     const seen = localStorage.getItem(STORAGE_KEY);
     setHasSeenInfo(seen === "true");
   }, []);
@@ -228,12 +138,10 @@ export function useProjectsInfoModal() {
   
   const closeModal = () => {
     setShowModal(false);
-    // Mark as seen in localStorage
     localStorage.setItem(STORAGE_KEY, "true");
     setHasSeenInfo(true);
   };
 
-  // Show on first open of projects panel
   const triggerFirstTimeModal = () => {
     if (!hasSeenInfo) {
       setShowModal(true);
@@ -243,7 +151,7 @@ export function useProjectsInfoModal() {
   return {
     showModal,
     openModal,
-    closeModal: () => closeModal(),
+    closeModal,
     onOpenChange: (open: boolean) => {
       if (!open) closeModal();
       else setShowModal(true);
