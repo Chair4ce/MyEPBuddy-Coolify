@@ -543,23 +543,24 @@ export async function performQualityControl(
 // ============================================================================
 
 function buildQCSystemPrompt(): string {
-  return `You are a Quality Control specialist for military performance statements. Your job is to:
+  return `You are a Quality Control specialist for military performance statements. Your PRIMARY job is to:
 
-1. EVALUATE: Score how well statements follow the original instructions
-2. ANALYZE: Check if multiple versions are distinct enough from each other
-3. IMPROVE: If statements don't meet requirements, provide corrected versions
-4. ENFORCE: Ensure character counts are within specified limits
+1. **COMPRESS OVER-LENGTH STATEMENTS** - This is your #1 priority!
+2. EVALUATE: Score how well statements follow the original instructions
+3. ANALYZE: Check if multiple versions are distinct enough from each other
+4. IMPROVE: If statements don't meet requirements, provide corrected versions
 
-You must be OBJECTIVE and PRECISE. Count characters exactly. Identify specific issues.
+You must be OBJECTIVE and PRECISE. Count characters exactly.
 
 **CRITICAL RULES:**
-- Each statement must be ONE complete, flowing sentence
-- NEVER add a second sentence or fragment to "fill" character count
-- NEVER end a statement with ".." or start a new thought after a period
-- If you need more characters, EXPAND existing content (add adjectives, metrics, scope) - don't append new sentences
-- If a statement is slightly short, it's better to be short than to add garbage filler
+- OVER-LENGTH STATEMENTS MUST BE COMPRESSED - use abbreviations (hrs, mos, wks, sq, &), remove weak words
+- Each statement must be ONE complete sentence
+- NEVER add a second sentence or fragment
+- NEVER expand a statement that is already at or over the max limit
+- If a statement is over the max: REMOVE words, use abbreviations, condense
+- Compression techniques: "hours" → "hrs", "months" → "mos", "and" → "&", "squadron" → "sq", remove "very", "highly", "overall"
 
-**BANNED WORDS (never use):** Spearheaded, Orchestrated, Synergized, Leveraged, Facilitated, Utilized, Impacted
+**BANNED WORDS:** Spearheaded, Orchestrated, Synergized, Leveraged, Facilitated, Utilized, Impacted
 
 CRITICAL: Output ONLY valid JSON. No explanations outside the JSON structure.`;
 }
@@ -632,12 +633,11 @@ ${statementsList}
    - 50 = some variation but similar structure
    - 0 = nearly identical copies
 
-3. **CHARACTER ENFORCEMENT** (if needed):
-   ${fillToMax 
-     ? `- Any statement NOT in the ${targetMinChars}-${targetMaxChars} range MUST be rewritten
-   - Expand short statements: use longer synonyms, add scope, expand abbreviations
-   - Compress long statements: use abbreviations, remove weak adjectives, condense phrases`
-     : `- Only flag statements outside the ${targetMinChars}-${targetMaxChars} range`}
+3. **CHARACTER ENFORCEMENT** (CRITICAL - statements OVER limit must be compressed):
+   - MAXIMUM allowed: ${targetMaxChars} characters per statement
+   - If a statement is OVER ${targetMaxChars}: COMPRESS IT using abbreviations (hrs, mos, wks, &), remove weak adjectives, condense phrases
+   - If a statement is under ${targetMinChars} and fillToMax is enabled: expand it slightly
+   - PRIORITY: Compressing over-length statements is MORE important than filling short ones
 
 4. **IMPROVED VERSIONS** (if needed):
    - If a statement fails compliance OR character count, provide an improved version

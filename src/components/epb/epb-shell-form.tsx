@@ -67,6 +67,7 @@ import { useSectionLocks } from "@/hooks/use-section-locks";
 import { useShellFieldLocks } from "@/hooks/use-shell-field-locks";
 import { useIdleDetection } from "@/hooks/use-idle-detection";
 import type { EPBShell, EPBShellSection, EPBShellSnapshot, EPBSavedExample, Accomplishment, Profile, ManagedMember, UserLLMSettings, Rank, DutyDescriptionSnapshot, DutyDescriptionExample } from "@/types/database";
+import { useClarifyingQuestionsStore } from "@/stores/clarifying-questions-store";
 
 // Shared EPB info - represents an EPB shell that has been shared with the current user
 interface SharedEPBInfo {
@@ -1598,7 +1599,25 @@ export function EPBShellForm({
         if (!response.ok) throw new Error("Generation failed");
 
         const result = await response.json();
-        const statements = result.statements?.[0]?.statements || [];
+        const mpaResult = result.statements?.[0];
+        const statements = mpaResult?.statements || [];
+        
+        // Store clarifying questions if returned
+        if (mpaResult?.clarifyingQuestions?.length > 0 && selectedRatee?.id) {
+          const { addQuestionSet } = useClarifyingQuestionsStore.getState();
+          addQuestionSet({
+            mpaKey: mpa,
+            rateeId: selectedRatee.id,
+            originalContext: context,
+            questions: mpaResult.clarifyingQuestions.map((q: { question: string; category?: string; hint?: string }) => ({
+              id: `q_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+              question: q.question,
+              category: q.category || "general",
+              hint: q.hint,
+              answer: "",
+            })),
+          });
+        }
         
         if (statements.length === 0) return null;
 
@@ -2167,6 +2186,7 @@ export function EPBShellForm({
             <div key={`${loadVersion}-${mpa.key}`} data-mpa-key={mpa.key}>
               <MPASectionCard
                 section={section}
+                rateeId={selectedRatee?.id}
                 isCollapsed={collapsedSections[mpa.key] ?? false}
                 onToggleCollapse={() => toggleSectionCollapsed(mpa.key)}
                 onSave={(text) => handleSaveSection(mpa.key, text)}

@@ -94,10 +94,10 @@ const VERB_POOL = {
   acquisition: ["negotiated", "acquired", "procured", "saved", "recovered", "reclaimed", "captured"],
 };
 
-// Clarifying question guidance for the LLM (non-blocking, optional)
+// Clarifying question guidance for the LLM (encouraged but non-blocking)
 const CLARIFYING_QUESTION_GUIDANCE = `
-=== OPTIONAL: CLARIFYING QUESTIONS ===
-If the provided information is missing key details that would SIGNIFICANTLY enhance statement quality, you may include 1-3 clarifying questions. These are OPTIONAL - only ask if truly needed.
+=== CLARIFYING QUESTIONS (PLEASE INCLUDE 1-3) ===
+ALWAYS look for opportunities to ask clarifying questions that would enhance statement quality. Most accomplishment inputs are missing key details. Ask 1-3 questions about what's NOT mentioned.
 
 **IMPACT Questions (category: "impact")**
 - Did this save time, money, or resources? How much?
@@ -123,7 +123,11 @@ If the provided information is missing key details that would SIGNIFICANTLY enha
 - Can results be quantified (%, $, time, people)?
 - What's the comparison point ("50% faster" or "first ever")?
 
-Include questions in a "clarifyingQuestions" field ONLY when answers would significantly improve the statement.
+ALWAYS include 1-3 questions in a "clarifyingQuestions" field. Even if the input seems complete, there's usually room to ask about:
+- Specific metrics/numbers not mentioned
+- Team size or leadership scope  
+- Recognition or selection details
+- Time/money saved
 `;
 
 interface ExampleStatement {
@@ -713,6 +717,10 @@ export async function POST(request: Request) {
       // Calculate character limits (HLR has smaller limit)
       const effectiveMaxChars = isHLR ? maxHlrChars : maxChars;
       
+      // Track per-statement target for QC (set in multi-accomplishment branch)
+      let perStatementCharTarget = effectiveMaxChars;
+      let isMultiStatementGeneration = false;
+      
       if (hasCustomContext) {
         // Custom context mode - use the raw text as source material
         // Extract verbs from existing EPB sections to avoid reuse (exclude current MPA)
@@ -760,8 +768,19 @@ The primary impact MUST emphasize RESOURCE EFFICIENCY. Frame around:
         const combinedLimit = stmtCount === 2 ? effectiveMaxChars - 2 : effectiveMaxChars; // Leave room for separator
         const charLimitPerStatement = stmtCount === 2 ? Math.floor(combinedLimit / 2) : effectiveMaxChars;
         const charLimitText = stmtCount === 2 
-          ? `CRITICAL: Both statements SHARE a ${combinedLimit} character limit. Each statement should be ~${charLimitPerStatement} characters (max ${charLimitPerStatement + 15} each). They will be joined with a space, so together they MUST be under ${combinedLimit} characters total.`
+          ? `**WORD COUNT (COUNT YOUR WORDS!):**
+- Each statement: EXACTLY 26-28 WORDS
+- Both combined: 52-56 WORDS total
+- After writing, COUNT - if over 28 words, DELETE until 27
+- Example (27 words): "Led 5-mbr team to overhaul network, installed 47 servers across 3 sites, slashed downtime 90%, saved $2.3M, bolstering readiness."
+- Abbreviations: hrs, mos, wks, sq, &`
           : `TARGET: Statement should be ${Math.floor(effectiveMaxChars * 0.8)}-${effectiveMaxChars} characters.`;
+        
+        // Set per-statement target for QC when generating 2 statements
+        if (stmtCount === 2) {
+          perStatementCharTarget = charLimitPerStatement;
+          isMultiStatementGeneration = true;
+        }
         
         // Get MPA context for relevancy guidance
         const mpaContext = formatMPAContext(mpa.key, mpaDescriptions);
@@ -1248,6 +1267,11 @@ Output ONLY the statement text, no quotes or JSON.`;
         // For multi-accomplishment MPAs, we want SEPARATE statements that get combined later
         // Each statement should be ~half the max chars since they'll be joined
         const perStatementTarget = Math.floor((effectiveMaxChars - 2) / mpaAccomplishments.length);
+        const isMultiAccomplishment = mpaAccomplishments.length > 1;
+        
+        // Set the per-statement target for QC
+        perStatementCharTarget = perStatementTarget;
+        isMultiStatementGeneration = isMultiAccomplishment;
 
         // Extract verbs from existing EPB sections to avoid reuse (exclude current MPA)
         const usedVerbs = await extractUsedVerbsFromEPB(supabase, rateeId, cycleYear, mpa.key);
@@ -1261,9 +1285,18 @@ RATEE: ${rateeRank} | AFSC: ${rateeAfsc || "N/A"}
 
 **TASK**: Write ONE statement per accomplishment below. They will be combined on the frontend.
 
-**CHARACTER LIMITS (CRITICAL):**
-- Each statement: ~${perStatementTarget} characters (MAX ${perStatementTarget + 10})
-- All statements combined: ${effectiveMaxChars - 2} characters total
+**HOW TO COUNT (FOLLOW THIS METHOD):**
+1. Count your WORDS (spaces separate words)
+2. Each statement: EXACTLY 26-28 WORDS (not more, not less)
+3. Both statements combined: 52-56 WORDS total
+4. After writing, COUNT. If over 28 words → DELETE. If under 26 → ADD impact.
+
+**EXAMPLE (27 words = PERFECT):**
+"Led 5-mbr team to overhaul network infrastructure, installed 47 servers across 3 sites, slashed downtime 90%, saved $2.3M annually, bolstering readiness."
+
+Count that example: Led(1) 5-mbr(2) team(3) to(4) overhaul(5) network(6) infrastructure(7) installed(8) 47(9) servers(10) across(11) 3(12) sites(13) slashed(14) downtime(15) 90%(16) saved(17) $2.3M(18) annually(19) bolstering(20) readiness(21)... = 27 words
+
+**ABBREVIATIONS:** hrs, mos, wks, sq, &
 ${userAbbreviations.length > 0 ? `\n**YOUR ABBREVIATIONS (from settings):** ${abbrevForPrompt}` : ""}
 ${keyAcronyms ? `\n**YOUR ACRONYMS (from settings):** ${keyAcronyms}` : ""}
 
@@ -1285,14 +1318,12 @@ ${mpaExamples.slice(0, 2).map((e, i) => `${i + 1}. ${e.statement}`).join("\n")}
 ` : ""}
 
 **REQUIREMENTS:**
-1. Write ONE complete sentence per accomplishment
-2. Each sentence ~${perStatementTarget} chars (use abbreviations to fit!)
-3. COMPLETE sentences - no truncation, no cutting off mid-word
-4. BANNED VERBS: Spearheaded, Orchestrated, Synergized, Leveraged, Facilitated, Utilized, Impacted
-5. BANNED FORMATTING: "w/ " (use "with"), "--" (use commas), ";" (use commas/periods)
-6. **VERB VARIETY (CRITICAL):** Each statement MUST start with a DIFFERENT action verb. NO repeating verbs across statements!
-   - Good verbs: Led, Drove, Championed, Transformed, Pioneered, Modernized, Accelerated, Streamlined, Optimized, Secured, Trained, Mentored, Delivered, Produced, Coordinated
-   - If statement 1 starts with "Established", statement 2 MUST use a completely different verb${verbAvoidanceInstruction}
+1. ⚠️ EACH statement: EXACTLY 26-28 WORDS (count after writing!)
+2. COMBINED: 52-56 words total
+3. ONE sentence per accomplishment
+4. Abbreviations: hrs, mos, wks, sq, &
+5. BANNED: Spearheaded, Orchestrated, Synergized, Leveraged, "w/", "--", ";"
+6. Different starting verb for each statement${verbAvoidanceInstruction}
 
 **ALLOWED ABBREVIATIONS (only these are permitted):**
 - TIME: "hours" → "hrs", "months" → "mos", "weeks" → "wks", "days" → "days"
@@ -1343,7 +1374,7 @@ Include 1-3 clarifying questions if the input lacks:
 - Leadership details (team size, people developed)
 - Recognition context (why selected, competition level)
 
-If the input is already detailed enough, you may omit clarifyingQuestions but still use the object format with just "statements".`;
+ALWAYS include 1-3 clarifying questions, even if input seems detailed. Ask about what's NOT in the input (metrics, team size, selection process, savings).`;
       }
 
       try {
@@ -1352,7 +1383,7 @@ If the input is already detailed enough, you may omit clarifyingQuestions but st
           system: systemPrompt,
           prompt: finalPrompt,
           temperature: 0.75, // Slightly higher for creative expansion
-          maxTokens: 1800, // Increased to allow room for clarifying questions
+          maxTokens: 2500, // Increased to allow room for clarifying questions JSON
         });
 
         let statements: string[] = [];
@@ -1371,10 +1402,21 @@ If the input is already detailed enough, you may omit clarifyingQuestions but st
             relevancyScore = typeof parsed.relevancy_score === "number" ? parsed.relevancy_score : undefined;
             // Extract clarifying questions if present
             if (Array.isArray(parsed.clarifyingQuestions)) {
+              // Filter for valid questions with actual question text
               clarifyingQuestions = parsed.clarifyingQuestions.filter(
-                (q: unknown) => typeof q === "object" && q !== null && "question" in q
+                (q: unknown) => typeof q === "object" && q !== null && "question" in q && 
+                  typeof (q as { question: string }).question === "string" && 
+                  (q as { question: string }).question.length > 10 // Must have actual question text
               );
-              console.log(`[Generate] Found ${clarifyingQuestions.length} clarifying questions for ${mpa.key}`);
+              if (clarifyingQuestions.length > 0) {
+                console.log(`[Generate] Found ${clarifyingQuestions.length} clarifying questions for ${mpa.key}:`);
+                clarifyingQuestions.forEach((q, i) => {
+                  const typedQ = q as { question: string; category?: string };
+                  console.log(`  [${i + 1}] (${typedQ.category || "general"}): "${typedQ.question.substring(0, 80)}..."`);
+                });
+              } else {
+                console.log(`[Generate] clarifyingQuestions array was empty or malformed for ${mpa.key}`);
+              }
             } else if (shouldRequestQuestions) {
               console.log(`[Generate] No clarifyingQuestions array in response for ${mpa.key}`);
             }
@@ -1432,66 +1474,55 @@ If the input is already detailed enough, you may omit clarifyingQuestions but st
           let verifiedStatements = statements;
           let qcFeedback: string | undefined;
           
-          // TEMPORARILY DISABLE QC to debug if QC is causing the issue
-          const ENABLE_QC = false; // Set to true to re-enable QC
+          // Quality Control - re-enabled after fixing sanitization issues
+          const ENABLE_QC = true;
           
           if (ENABLE_QC && shouldEnforceCharLimits && fillToMax) {
-            const targetMin = effectiveMaxChars - 10;
-            
-            // Check if QC is worth running
-            const qcCheck = shouldRunQualityControl(statements, fillToMax, effectiveMaxChars, targetMin);
-            
-            if (qcCheck.shouldRun) {
-              try {
-                const qcConfig: QualityControlConfig = {
-                  statements,
-                  userPrompt: userPrompt, // The prompt used to generate these statements
-                  targetMaxChars: effectiveMaxChars,
-                  targetMinChars: targetMin,
-                  fillToMax,
-                  context: `${mpa.label} statement for ${rateeRank}`,
-                  model: modelProvider as LanguageModel,
-                };
-                
-                const qcResult = await performQualityControl(qcConfig);
-                
-                verifiedStatements = qcResult.statements;
-                qcFeedback = qcResult.evaluation.overallFeedback;
-                
-                // Log AFTER QC
-                console.log(`[Generate] === STATEMENTS AFTER QC for ${mpa.key} ===`);
-                verifiedStatements.forEach((s, i) => {
-                  console.log(`  [${i + 1}] (${s.length} chars): "${s.substring(0, 100)}..."`);
-                });
-                
-                // Log QC results
-                console.log(
-                  `[Generate] QC for ${mpa.key}: ` +
-                  `adjusted=${qcResult.wasAdjusted}, ` +
-                  `diversity=${qcResult.evaluation.diversityScore}, ` +
-                  `compliance=${qcResult.evaluation.instructionCompliance}, ` +
-                  `charLimits=${qcResult.evaluation.allMeetCharacterLimits}, ` +
-                  `reason=${qcResult.stopReason}`
-                );
-                
-                // Log individual statement adjustments if any
-                if (qcResult.wasAdjusted) {
-                  qcResult.evaluation.statementEvaluations.forEach((evalItem, i) => {
-                    if (evalItem.originalLength !== evalItem.characterCount) {
-                      console.log(
-                        `  Statement ${i + 1}: ${evalItem.originalLength} → ${evalItem.characterCount} chars, ` +
-                        `compliance=${evalItem.instructionCompliance}%`
-                      );
-                    }
-                  });
-                }
-              } catch (qcError) {
-                console.error(`[Generate] QC failed for ${mpa.key}:`, qcError);
-                // Fall back to original statements
-                verifiedStatements = statements;
+            // For multi-statement, just log and skip QC (LLM compression doesn't work well)
+            if (isMultiStatementGeneration && statements.length >= 2) {
+              const combinedLength = statements.join(" ").length;
+              const combinedTarget = effectiveMaxChars;
+              
+              console.log(`[Generate] Multi-statement: combined ${combinedLength}/${combinedTarget} chars`);
+              
+              if (combinedLength > combinedTarget) {
+                console.warn(`[Generate] ⚠️ Combined length ${combinedLength} exceeds ${combinedTarget} - statements may need manual trimming`);
               }
+              
+              // Skip QC for multi-statement - it tends to make things worse
+              // The prompt instructs shorter generation, and user can adjust in UI
             } else {
-              console.log(`[Generate] Skipping QC for ${mpa.key}: ${qcCheck.reason}`);
+              // Single statement - use original logic
+              const qcTargetMax = effectiveMaxChars;
+              const targetMin = qcTargetMax - 10;
+              
+              const qcCheck = shouldRunQualityControl(statements, fillToMax, qcTargetMax, targetMin);
+              
+              if (qcCheck.shouldRun) {
+                try {
+                  console.log(`[Generate] Single-statement QC using target: ${qcTargetMax} chars`);
+                  const qcConfig: QualityControlConfig = {
+                    statements,
+                    userPrompt: userPrompt,
+                    targetMaxChars: qcTargetMax,
+                    targetMinChars: targetMin,
+                    fillToMax,
+                    context: `${mpa.label} statement for ${rateeRank}`,
+                    model: modelProvider as LanguageModel,
+                  };
+                
+                  const qcResult = await performQualityControl(qcConfig);
+                  verifiedStatements = qcResult.statements;
+                  qcFeedback = qcResult.evaluation.overallFeedback;
+                  
+                  console.log(`[Generate] Single-statement QC for ${mpa.key}: adjusted=${qcResult.wasAdjusted}`);
+                } catch (qcError) {
+                  console.error(`[Generate] QC failed for ${mpa.key}:`, qcError);
+                  verifiedStatements = statements;
+                }
+              } else {
+                console.log(`[Generate] Skipping QC for ${mpa.key}: ${qcCheck.reason}`);
+              }
             }
           }
           

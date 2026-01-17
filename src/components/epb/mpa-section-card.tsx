@@ -53,9 +53,13 @@ import { SplitViewEditor } from "./split-view-editor";
 // Per-section collaboration removed - using page-level collaboration instead
 import type { EPBShellSection, EPBShellSnapshot, EPBSavedExample, Accomplishment } from "@/types/database";
 import { useStyleFeedback, getMpaCategory } from "@/hooks/use-style-feedback";
+import { ClarifyingQuestionsIndicator, ClarifyingQuestionsModal } from "@/components/generate/clarifying-questions-modal";
+import { useClarifyingQuestionsStore } from "@/stores/clarifying-questions-store";
 
 interface MPASectionCardProps {
   section: EPBShellSection;
+  /** Ratee ID for clarifying questions feature */
+  rateeId?: string;
   isCollapsed: boolean;
   onToggleCollapse: () => void;
   onSave: (text: string) => Promise<void>;
@@ -261,6 +265,7 @@ const DEFAULT_SECTION_STATE = {
 
 export function MPASectionCard({
   section,
+  rateeId,
   isCollapsed,
   onToggleCollapse,
   onSave,
@@ -1856,9 +1861,18 @@ export function MPASectionCard({
                 {generatedStatements.length > 0 && (
                   <div className="space-y-3 pt-3 border-t animate-in fade-in-0 duration-300">
                     <div className="flex items-center justify-between">
-                      <h5 className="text-xs font-medium text-muted-foreground">
-                        Generated Statements ({generatedStatements.length})
-                      </h5>
+                      <div className="flex items-center gap-2">
+                        <h5 className="text-xs font-medium text-muted-foreground">
+                          Generated Statements ({generatedStatements.length})
+                        </h5>
+                        {rateeId && (
+                          <ClarifyingQuestionsIndicator
+                            mpaKey={section.mpa}
+                            rateeId={rateeId}
+                            hasGenerated={generatedStatements.length > 0}
+                          />
+                        )}
+                      </div>
                       {isLockedByOther && lockedByInfo && (
                         <span className="text-[10px] text-muted-foreground flex items-center gap-1">
                           <Users className="size-3" />
@@ -1942,6 +1956,37 @@ export function MPASectionCard({
           </CardContent>
       )}
 
+      {/* Clarifying Questions Modal - for regeneration with enhanced context */}
+      {rateeId && (
+        <ClarifyingQuestionsModal
+          onRegenerate={async (clarifyingContext) => {
+            // Regenerate with clarifying context added to custom context
+            updateSectionState(section.mpa, { isGenerating: true });
+            setGeneratedStatements([]);
+            try {
+              const results = await onGenerateStatement({
+                useAccomplishments: state.sourceType === "actions",
+                accomplishmentIds: state.usesTwoStatements
+                  ? [...state.statement1ActionIds, ...state.statement2ActionIds]
+                  : state.statement1ActionIds,
+                customContext: state.sourceType === "custom"
+                  ? `${state.statement1Context}\n\n${clarifyingContext}`
+                  : clarifyingContext,
+                usesTwoStatements: state.usesTwoStatements,
+                statement1Context: `${state.statement1Context}\n\n${clarifyingContext}`,
+                statement2Context: state.statement2Context,
+                versionCount: 3,
+              });
+              setGeneratedStatements(results);
+            } catch (err) {
+              console.error("Regenerate with context error:", err);
+            } finally {
+              updateSectionState(section.mpa, { isGenerating: false });
+            }
+          }}
+          isRegenerating={state.isGenerating}
+        />
+      )}
     </Card>
   );
 }
