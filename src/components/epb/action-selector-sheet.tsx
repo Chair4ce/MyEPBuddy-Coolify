@@ -45,6 +45,7 @@ import {
   Tag,
   ChevronDown,
   Check,
+  CheckSquare,
   X,
   ArrowUpDown,
   TrendingUp,
@@ -273,19 +274,22 @@ export function ActionSelectorSheet({
 
         <div className="flex-1 min-h-0 space-y-4 py-4">
           {/* Filters */}
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center gap-2">
-              <div className="relative flex-1">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search actions..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-8 h-9"
-                />
-              </div>
+          <div className="space-y-3">
+            {/* Search Bar - Full Width */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+              <Input
+                placeholder="Search actions..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 h-10"
+              />
+            </div>
+
+            {/* Filter Controls - Responsive Grid */}
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:gap-2">
               <Select value={mpaFilter} onValueChange={setMpaFilter}>
-                <SelectTrigger className="w-[140px] h-9">
+                <SelectTrigger className="h-9 w-full sm:w-[160px]">
                   <Filter className="size-3.5 mr-1.5 text-muted-foreground" />
                   <SelectValue placeholder="Filter MPA" />
                 </SelectTrigger>
@@ -298,7 +302,7 @@ export function ActionSelectorSheet({
                   ))}
                 </SelectContent>
               </Select>
-              
+
               {/* Tag Filter */}
               <Popover open={tagPopoverOpen} onOpenChange={setTagPopoverOpen}>
                 <PopoverTrigger asChild>
@@ -306,18 +310,24 @@ export function ActionSelectorSheet({
                     variant="outline"
                     size="sm"
                     className={cn(
-                      "h-9 gap-1.5 border-dashed shrink-0",
+                      "h-9 gap-1.5 border-dashed w-full sm:w-auto sm:shrink-0",
                       selectedTags.length > 0 && "border-solid"
                     )}
                     aria-label="Filter by tags"
                   >
                     <Tag className="size-3.5 text-muted-foreground" />
                     {selectedTags.length > 0 ? (
-                      <span>{selectedTags.length}</span>
+                      <span className="hidden sm:inline">Tags </span>
                     ) : (
-                      <span>Tags</span>
+                      <span className="hidden sm:inline">Tags</span>
                     )}
-                    <ChevronDown className="size-3 text-muted-foreground" />
+                    <span className="sm:hidden">Tags</span>
+                    {selectedTags.length > 0 && (
+                      <Badge variant="secondary" className="ml-1 text-xs">
+                        {selectedTags.length}
+                      </Badge>
+                    )}
+                    <ChevronDown className="size-3 text-muted-foreground ml-auto sm:ml-1" />
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-[200px] p-0" align="end">
@@ -399,29 +409,35 @@ export function ActionSelectorSheet({
           </div>
 
           {/* Quick actions and sort */}
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="flex items-center gap-2">
-              <button
+              <Button
                 type="button"
-                className="h-7 px-2.5 rounded-md text-xs hover:bg-accent hover:text-accent-foreground inline-flex items-center justify-center"
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs"
                 onClick={selectAllVisible}
               >
+                <CheckSquare className="size-3 mr-1.5" />
                 Select All ({filteredAccomplishments.length})
-              </button>
+              </Button>
               {localSelection.length > 0 && (
-                <button
+                <Button
                   type="button"
-                  className="h-7 px-2.5 rounded-md text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground inline-flex items-center justify-center"
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 text-xs"
                   onClick={clearSelection}
                 >
+                  <X className="size-3 mr-1.5" />
                   Clear
-                </button>
+                </Button>
               )}
             </div>
             <div className="flex items-center gap-2">
               <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortOption)}>
-                <SelectTrigger className="h-7 w-[120px] text-xs">
-                  <ArrowUpDown className="size-3 mr-1" />
+                <SelectTrigger className="h-8 w-full sm:w-[140px] text-xs">
+                  <ArrowUpDown className="size-3 mr-1.5" />
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -435,7 +451,7 @@ export function ActionSelectorSheet({
                   <SelectItem value="date">Date</SelectItem>
                 </SelectContent>
               </Select>
-              <Badge variant="secondary" className="text-xs">
+              <Badge variant="secondary" className="text-xs shrink-0">
                 {localSelection.length} selected
               </Badge>
             </div>

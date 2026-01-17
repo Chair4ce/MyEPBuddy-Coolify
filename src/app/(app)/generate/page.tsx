@@ -145,6 +145,9 @@ export default function GeneratePage() {
     const option = rateeOptions.find((o) => o.value === value);
     if (option) {
       setSelectedRatee(option.ratee as Parameters<typeof setSelectedRatee>[0]);
+      // Also update the EPB shell store so form components have access to it
+      useEPBShellStore.getState().setSelectedRatee(option.ratee as Parameters<typeof setSelectedRatee>[0]);
+
       // Persist to localStorage
       if (profile) {
         const key = `epb-selected-ratee-${profile.id}-${cycleYear}`;
@@ -203,8 +206,10 @@ export default function GeneratePage() {
       try {
         const { ratee } = JSON.parse(stored);
         if (ratee) {
-          // Set the ratee - validation will happen separately if needed
+          // Set both the local state and the EPB shell store state
           setSelectedRatee(ratee);
+          // Also update the EPB shell store so the form components have access to it
+          useEPBShellStore.getState().setSelectedRatee(ratee);
         }
       } catch (error) {
         console.warn("Failed to parse stored ratee data:", error);
@@ -274,7 +279,7 @@ export default function GeneratePage() {
     checkUserKeys();
   }, [profile, selectedModel]);
 
-  // Load accomplishments when ratee changes
+  // Load accomplishments for the dialog (EPB shell form loads its own for generation)
   useEffect(() => {
     async function loadAccomplishments() {
       if (!selectedRatee || !profile) return;
@@ -282,7 +287,6 @@ export default function GeneratePage() {
       let query = supabase
         .from("accomplishments")
         .select("*")
-        .eq("cycle_year", cycleYear)
         .order("date", { ascending: false });
 
       if (selectedRatee.isManagedMember) {
@@ -296,7 +300,7 @@ export default function GeneratePage() {
     }
 
     loadAccomplishments();
-  }, [selectedRatee, cycleYear, profile, supabase]);
+  }, [selectedRatee, profile, supabase]);
 
   async function updateWritingStyle(style: WritingStyle) {
     if (!profile) return;
@@ -355,21 +359,30 @@ export default function GeneratePage() {
   useEffect(() => {
     if (!profile || !rateeOptions.length || selectedRatee) return;
 
+    let defaultRatee: any = null;
+
     if (userIsOfficer && officerWorkspaceMode === "epb") {
       // Officers default to first enlisted team member
       const firstOption = rateeOptions[0];
       if (firstOption) {
-        setSelectedRatee(firstOption.ratee as Parameters<typeof setSelectedRatee>[0]);
+        defaultRatee = firstOption.ratee;
+        setSelectedRatee(defaultRatee);
       }
     } else if (!userIsOfficer) {
       // Non-officers default to self
-      setSelectedRatee({
+      defaultRatee = {
         id: profile.id,
         fullName: profile.full_name || null,
         rank: profile.rank || null,
         afsc: profile.afsc || null,
         isManagedMember: false,
-      });
+      };
+      setSelectedRatee(defaultRatee);
+    }
+
+    // Update EPB shell store with the default ratee
+    if (defaultRatee) {
+      useEPBShellStore.getState().setSelectedRatee(defaultRatee);
     }
   }, [profile, userIsOfficer, officerWorkspaceMode, selectedRatee, rateeOptions, setSelectedRatee]);
 

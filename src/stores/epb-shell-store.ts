@@ -151,7 +151,7 @@ const getDefaultSectionState = (): MPASectionState => ({
   actionsExpanded: true,
   
   // Two-statement mode
-  usesTwoStatements: false,
+  usesTwoStatements: true, // Default to two statements
   statement1Context: "",
   statement2Context: "",
   

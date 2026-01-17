@@ -253,7 +253,7 @@ const DEFAULT_SECTION_STATE = {
   statement1ActionIds: [] as string[],
   statement2ActionIds: [] as string[],
   actionsExpanded: true,
-  usesTwoStatements: false,
+  usesTwoStatements: true, // Default to two statements
   statement1Context: "",
   statement2Context: "",
   selectedAccomplishmentIds: [] as string[],

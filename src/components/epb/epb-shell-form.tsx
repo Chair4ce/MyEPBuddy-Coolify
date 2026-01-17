@@ -126,6 +126,7 @@ export function EPBShellForm({
   } = useEPBShellStore();
 
   const [accomplishments, setAccomplishments] = useState<Accomplishment[]>([]);
+
   const [userSettings, setUserSettings] = useState<Partial<UserLLMSettings> | null>(null);
   const [isTogglingMode, setIsTogglingMode] = useState(false);
   const [sharedEPBs, setSharedEPBs] = useState<SharedEPBInfo[]>([]);
@@ -1152,7 +1153,6 @@ export function EPBShellForm({
       let query = supabase
         .from("accomplishments")
         .select("*")
-        .eq("cycle_year", cycleYear)
         .order("date", { ascending: false });
 
       if (selectedRatee.isManagedMember) {
@@ -1166,7 +1166,7 @@ export function EPBShellForm({
     }
 
     loadAccomplishments();
-  }, [selectedRatee, cycleYear, profile, supabase]);
+  }, [selectedRatee, profile, supabase]);
 
   // Create a new shell (or handle conflicts with archived shells)
   const handleCreateShell = async (forceNextCycle = false) => {

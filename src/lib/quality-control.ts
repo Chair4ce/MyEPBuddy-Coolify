@@ -22,16 +22,10 @@ import { validateCharacterCount, type CharacterValidationResult } from "./charac
  * Patterns that indicate a malformed/garbage statement
  */
 const MALFORMED_PATTERNS = [
-  /\.\.\s*/,  // ".." - double period (truncation indicator)
-  /\.\s+[A-Z][a-z]+\s+\d+\s+[A-Za-z]+\s*$/,  // Incomplete trailing sentence at end
-  /[a-z]{3,}\s*$/,  // Ends with incomplete word (no punctuation)
-  /\d+\s*$/,  // Ends with just a number (truncated mid-phrase like "execute 96")
-  /,\s*$/,  // Ends with comma
-  /;\s*$/,  // Ends with semicolon (also banned)
-  /\s{2,}/,  // Multiple consecutive spaces
+  /\.\.\s*/,  // ".." - double period (clear truncation indicator)
   /\.{2,}/,  // Multiple consecutive periods
-  /to\s+(execute|perform|complete|deliver)\s+\d+\s*$/i,  // "to execute 96" - truncated action
-  /\b(with|for|of|to|and|&)\s*$/i,  // Ends with preposition/conjunction
+  /\s{3,}/,  // Three or more consecutive spaces (clear formatting issue)
+  /\b(with|for|of|to|and)\s*$/i,  // Ends with preposition (clear truncation)
 ];
 
 /**
@@ -46,6 +40,8 @@ const BANNED_WORDS = [
   "utilized",
   "impacted",
   "w/ ",  // Banned abbreviation - not standard for EPBs
+  "--",   // Banned punctuation - use commas instead
+  ";",    // Banned punctuation - use commas instead
 ];
 
 /**
@@ -93,74 +89,47 @@ export function detectMalformedStatement(statement: string): {
  * Clean up a statement by removing malformed content
  */
 export function sanitizeStatement(statement: string): string {
-  let cleaned = statement;
+  let cleaned = statement.trim();
+  
+  // If empty, return early
+  if (cleaned.length === 0) return cleaned;
   
   // AGGRESSIVE: If we see ".." anywhere, split there and only keep first part
   if (cleaned.includes("..")) {
     const parts = cleaned.split("..");
     cleaned = parts[0].trim();
-    if (!cleaned.endsWith(".")) {
-      cleaned += ".";
-    }
     console.log(`[Sanitize] Removed content after ".." - keeping first sentence only`);
   }
   
   // Fix any remaining double periods
   cleaned = cleaned.replace(/\.{2,}/g, ".");
   
-  // Check for truncated endings and fix them
-  const truncatedEndings = [
-    /\s+to\s+(execute|perform|complete|deliver)\s+\d+\s*\.?$/i,  // "to execute 96"
-    /\s+\d+\s*\.?$/,  // ends with just a number like "execute 96"
-    /\s+(with|for|of|to|and|&)\s*\.?$/i,  // ends with preposition
-    /\s+[a-z]{1,3}\s*\.?$/i,  // ends with tiny word fragment
+  // Check for CLEARLY truncated endings (mid-word, mid-sentence garbage)
+  const clearlyTruncatedEndings = [
+    /\s+to\s+(execute|perform|complete|deliver)\s*$/i,  // "to execute" with no object
+    /\s+(with|for|of|to|and|&)\s*$/i,  // ends with preposition (no object)
+    /\s+[a-z]{1,2}\s*$/i,  // ends with 1-2 letter fragment
   ];
   
-  for (const pattern of truncatedEndings) {
+  for (const pattern of clearlyTruncatedEndings) {
     if (pattern.test(cleaned)) {
-      // Find last complete sentence before truncation
-      const lastGoodPeriod = cleaned.lastIndexOf(".", cleaned.length - 15);
-      if (lastGoodPeriod > cleaned.length * 0.4) {
-        cleaned = cleaned.substring(0, lastGoodPeriod + 1);
-        console.log(`[Sanitize] Removed truncated ending`);
+      // Find last complete clause before truncation
+      const lastGoodComma = cleaned.lastIndexOf(",");
+      const lastGoodPeriod = cleaned.lastIndexOf(".");
+      const cutPoint = Math.max(lastGoodComma, lastGoodPeriod);
+      if (cutPoint > cleaned.length * 0.5) {
+        cleaned = cleaned.substring(0, cutPoint).trim();
+        console.log(`[Sanitize] Removed clearly truncated ending`);
       }
       break;
     }
   }
   
-  // Split into sentences and validate each
-  const sentences = cleaned.split(/(?<=\.)\s+/);
-  const completeSentences: string[] = [];
-  
-  for (const sentence of sentences) {
-    const trimmed = sentence.trim();
-    if (trimmed.length === 0) continue;
-    
-    const endsWithPeriod = /\.$/.test(trimmed);
-    const endsWithNumber = /\d\s*$/.test(trimmed) && !endsWithPeriod;
-    const endsWithTruncation = /[a-z]{2,}$/.test(trimmed) && !endsWithPeriod;
-    const endsWithComma = /,$/.test(trimmed);
-    
-    if (endsWithPeriod && trimmed.length > 20) {
-      // Good complete sentence
-      completeSentences.push(trimmed);
-    } else if (endsWithTruncation || endsWithComma || endsWithNumber) {
-      // Truncated - try to salvage
-      const lastPeriod = trimmed.lastIndexOf(".");
-      if (lastPeriod > trimmed.length * 0.5) {
-        completeSentences.push(trimmed.substring(0, lastPeriod + 1));
-      }
-      break; // Stop processing - rest is garbage
-    } else if (!endsWithPeriod && trimmed.length > 20) {
-      // Might be okay, add period
-      completeSentences.push(trimmed + ".");
-    }
-  }
-  
-  cleaned = completeSentences.join(" ");
-  
   // Fix multiple spaces
   cleaned = cleaned.replace(/\s{2,}/g, " ");
+  
+  // Remove trailing commas
+  cleaned = cleaned.replace(/,\s*$/, "");
   
   // Ensure ends with period
   cleaned = cleaned.trim();
@@ -185,11 +154,22 @@ const BANNED_WORD_REPLACEMENTS: Record<string, string> = {
 };
 
 /**
+ * Replacement map for banned punctuation/formatting patterns
+ */
+const BANNED_PUNCTUATION_REPLACEMENTS: Array<[RegExp, string]> = [
+  [/w\/ /gi, "with "],           // "w/ " → "with "
+  [/--/g, ", "],                  // "--" → ", "
+  [/;\s*/g, ", "],                // ";" → ", "
+  [/\s*,\s*,\s*/g, ", "],         // Fix double commas from replacements
+];
+
+/**
  * Replace banned words with acceptable alternatives
  */
 export function replaceBannedWords(statement: string): string {
   let result = statement;
   
+  // Replace banned words
   for (const [banned, replacement] of Object.entries(BANNED_WORD_REPLACEMENTS)) {
     // Case-insensitive replacement, preserving case of first letter
     const regex = new RegExp(`\\b${banned}\\b`, "gi");
@@ -202,7 +182,17 @@ export function replaceBannedWords(statement: string): string {
     });
   }
   
-  return result;
+  // Replace banned punctuation patterns
+  for (const [pattern, replacement] of BANNED_PUNCTUATION_REPLACEMENTS) {
+    result = result.replace(pattern, replacement);
+  }
+  
+  // Clean up any resulting issues
+  result = result.replace(/\s{2,}/g, " ");  // Multiple spaces
+  result = result.replace(/,\s*\./g, ".");  // Comma before period
+  result = result.replace(/\.,/g, ".");     // Period followed by comma
+  
+  return result.trim();
 }
 
 /**
@@ -318,12 +308,12 @@ export function sanitizeStatements(
   let issueCount = 0;
   
   const sanitized = statements.map((stmt, i) => {
-    let result = stmt;
+    let result = stmt.trim();
     
-    // First, replace banned words
+    // First, replace banned words and formatting
     const afterBannedReplace = replaceBannedWords(result);
     if (afterBannedReplace !== result) {
-      console.log(`[QC] Statement ${i + 1}: Replaced banned words`);
+      console.log(`[QC] Statement ${i + 1}: Replaced banned words/formatting`);
       result = afterBannedReplace;
       issueCount++;
     }
@@ -335,16 +325,19 @@ export function sanitizeStatements(
       result = shortening.result;
     }
     
-    // Then check for structural malformation
-    const check = detectMalformedStatement(result);
-    if (check.isMalformed) {
-      // Filter out the "banned word" issues since we already handled those
-      const structuralIssues = check.issues.filter(i => !i.includes("banned word"));
-      if (structuralIssues.length > 0) {
-        console.warn(`[QC] Statement ${i + 1} has structural issues:`, structuralIssues);
-        result = sanitizeStatement(result);
-        issueCount++;
-      }
+    // Check for SEVERE structural issues (only ".." or clear truncation)
+    const hasSevereIssues = /\.{2,}/.test(result) || /\b(with|for|of|to|and)\s*$/i.test(result);
+    if (hasSevereIssues) {
+      console.warn(`[QC] Statement ${i + 1} has severe structural issues, sanitizing`);
+      result = sanitizeStatement(result);
+      issueCount++;
+    }
+    
+    // Always ensure proper ending (this is a minor fix, not an "issue")
+    result = result.trim();
+    result = result.replace(/,\s*$/, ""); // Remove trailing comma
+    if (result.length > 0 && !/[.!]$/.test(result)) {
+      result += ".";
     }
     
     return result;

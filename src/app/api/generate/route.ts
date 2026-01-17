@@ -278,6 +278,11 @@ BAD: "...averting 220-node outage, streamlining network access for 58K users" (w
 GOOD: "...sustaining uninterrupted network access for 58K users across the enterprise" (strong finish)
 
 VERB VARIETY (CRITICAL - MUST FOLLOW):
+When generating multiple statement versions:
+- Version 1, Version 2, and Version 3 MUST each start with a DIFFERENT verb
+- For two-sentence statements, each sentence MUST use a different verb
+- NEVER repeat the same starting verb across versions
+
 BANNED VERBS - NEVER USE THESE (overused clichés that make all EPBs sound the same):
 - "Spearheaded" - THE most overused verb in Air Force history
 - "Orchestrated" - overused
@@ -542,6 +547,13 @@ ${dutyDescription}
 
 IMPORTANT: Reference the duty description when generating statements to ensure accuracy and relevance to the member's actual job responsibilities. Statements should align with the scope and scale of their duties.`;
   }
+
+  // Add banned formatting rules
+  prompt += `\n\n=== BANNED FORMATTING (NEVER USE) ===
+- "w/ " - Not standard for EPBs, always write "with"
+- "--" - Double dashes are not allowed, use commas to separate clauses
+- ";" - Semicolons are not allowed, use commas or periods instead
+IMPORTANT: Use proper sentence structure with commas and periods only. No special punctuation.`;
 
   return prompt;
 }
@@ -856,7 +868,17 @@ BANNED VERBS - NEVER USE:
 "Spearheaded", "Orchestrated", "Synergized", "Leveraged", "Facilitated", "Utilized", "Impacted"
 Use alternatives: Led, Directed, Managed, Drove, Championed, Transformed, Pioneered, Accelerated
 
-VERB VARIETY: Each statement MUST start with a DIFFERENT action verb.${usedVerbsCustom.length > 0 ? `\n\n**AVOID THESE VERBS (already used in other MPAs):** ${usedVerbsCustom.join(", ")}\nUse different action verbs to maintain variety across the EPB.` : ""}
+BANNED FORMATTING - NEVER USE:
+- "w/ " - write "with" instead
+- "--" - use commas instead
+- ";" - use commas or periods instead
+
+VERB VARIETY (CRITICAL - MUST FOLLOW):
+- Each statement version MUST start with a DIFFERENT action verb
+- If generating 3 versions, use 3 DIFFERENT starting verbs (e.g., Led, Drove, Championed)
+- For two-sentence statements, EACH SENTENCE must also use a different verb
+- NO verb repetition within or across statements!
+- Good variety pool: Led, Drove, Championed, Transformed, Pioneered, Modernized, Accelerated, Streamlined, Optimized, Secured, Fortified, Trained, Mentored, Delivered, Produced, Coordinated, Resolved, Eliminated${usedVerbsCustom.length > 0 ? `\n\n**AVOID THESE VERBS (already used in other MPAs):** ${usedVerbsCustom.join(", ")}\nUse different action verbs to maintain variety across the EPB.` : ""}
 
 RELEVANCY: Rate how well this accomplishment fits "${mpa.label}" on a scale of 0-100.
 
@@ -940,7 +962,11 @@ CRITICAL - DO NOT FABRICATE:
 - If input is vague, output should reflect that vagueness - enhance structure only
 
 BANNED VERBS: "Spearheaded", "Orchestrated", "Synergized", "Leveraged", "Facilitated", "Utilized"
-Use alternatives: Led, Directed, Drove, Championed, Transformed, Pioneered, Accelerated${usedVerbsCustom.length > 0 ? `\n\n**AVOID THESE VERBS (already used in other MPAs):** ${usedVerbsCustom.join(", ")}\nUse different action verbs to maintain variety across the EPB.` : ""}
+Use alternatives: Led, Drove, Championed, Transformed, Pioneered, Accelerated, Streamlined, Optimized, Secured, Fortified
+
+BANNED FORMATTING: "w/ " (use "with"), "--" (use commas), ";" (use commas/periods)
+
+VERB VARIETY (CRITICAL): Each statement MUST start with a DIFFERENT action verb. NO repeating verbs!${usedVerbsCustom.length > 0 ? `\n\n**AVOID THESE VERBS (already used in other MPAs):** ${usedVerbsCustom.join(", ")}\nUse different action verbs to maintain variety across the EPB.` : ""}
 
 RELEVANCY: Rate how well this accomplishment fits "${mpa.label}" on a scale of 0-100.
 
@@ -1136,7 +1162,11 @@ CRITICAL REQUIREMENTS:
 5. This is a COMPLETE statement on its own - not a fragment
 
 BANNED VERBS: "Spearheaded", "Orchestrated", "Synergized", "Leveraged", "Facilitated"
-Use alternatives: Led, Directed, Drove, Championed, Transformed, Pioneered${verbAvoidanceInstruction}
+Use alternatives: Led, Drove, Championed, Transformed, Pioneered, Accelerated, Streamlined, Optimized, Secured
+
+BANNED FORMATTING: "w/ " (use "with"), "--" (use commas), ";" (use commas/periods)
+
+VERB VARIETY: Use a unique, strong action verb. Avoid common/overused verbs like "Directed", "Managed", "Established".${verbAvoidanceInstruction}
 
 Output ONLY the statement text, no quotes or JSON.`;
 
@@ -1258,7 +1288,11 @@ ${mpaExamples.slice(0, 2).map((e, i) => `${i + 1}. ${e.statement}`).join("\n")}
 1. Write ONE complete sentence per accomplishment
 2. Each sentence ~${perStatementTarget} chars (use abbreviations to fit!)
 3. COMPLETE sentences - no truncation, no cutting off mid-word
-4. BANNED VERBS: Spearheaded, Orchestrated, Synergized, Leveraged, Facilitated, Utilized, Impacted${verbAvoidanceInstruction}
+4. BANNED VERBS: Spearheaded, Orchestrated, Synergized, Leveraged, Facilitated, Utilized, Impacted
+5. BANNED FORMATTING: "w/ " (use "with"), "--" (use commas), ";" (use commas/periods)
+6. **VERB VARIETY (CRITICAL):** Each statement MUST start with a DIFFERENT action verb. NO repeating verbs across statements!
+   - Good verbs: Led, Drove, Championed, Transformed, Pioneered, Modernized, Accelerated, Streamlined, Optimized, Secured, Trained, Mentored, Delivered, Produced, Coordinated
+   - If statement 1 starts with "Established", statement 2 MUST use a completely different verb${verbAvoidanceInstruction}
 
 **ALLOWED ABBREVIATIONS (only these are permitted):**
 - TIME: "hours" → "hrs", "months" → "mos", "weeks" → "wks", "days" → "days"
@@ -1266,8 +1300,10 @@ ${mpaExamples.slice(0, 2).map((e, i) => `${i + 1}. ${e.statement}`).join("\n")}
 - CONJUNCTION: "and" → "&" (saves 2 characters each time!)
 - METRICS: K, M, B for thousands/millions/billions (e.g., "$50K", "1.2M users")
 
-**BANNED ABBREVIATIONS (NEVER USE):**
+**BANNED FORMATTING (NEVER USE):**
 - "w/ " - Not standard for EPBs, use "with" instead
+- "--" - Do not use double dashes, use commas instead
+- ";" - Do not use semicolons, use commas or periods instead
 
 **OUTPUT FORMAT:**
 {"statements": ["Statement for accomplishment 1 (~${perStatementTarget} chars)", "Statement for accomplishment 2 (~${perStatementTarget} chars)"], "relevancy_score": 85}`;
