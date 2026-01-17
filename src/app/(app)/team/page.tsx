@@ -1824,14 +1824,6 @@ export default function TeamPage() {
               </p>
             </div>
             <div className="flex flex-col sm:flex-row gap-2">
-              <Button 
-                variant={isProjectsPanelOpen ? "default" : "outline"}
-                className="w-full sm:w-auto shrink-0"
-                onClick={handleOpenProjectsPanel}
-              >
-                <FolderKanban className="size-4 mr-2" />
-                Projects
-              </Button>
           {canSupervise(profile?.rank) && (
             <Button 
               variant="outline" 
@@ -1975,6 +1967,14 @@ export default function TeamPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+              <Button 
+                variant={isProjectsPanelOpen ? "default" : "outline"}
+                className="w-full sm:w-auto shrink-0"
+                onClick={handleOpenProjectsPanel}
+              >
+                <FolderKanban className="size-4 mr-2" />
+                Projects
+              </Button>
         </div>
         
         {/* Add Managed Member Dialog */}

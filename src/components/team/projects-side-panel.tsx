@@ -152,15 +152,18 @@ export function ProjectsSidePanel({
     return projects.find((p) => p.id === selectedProjectId);
   }, [projects, selectedProjectId]);
 
-  if (!isOpen) return null;
-
   return (
     <div
       className={cn(
-        "w-full md:w-[380px] lg:w-[420px] shrink-0 border-l bg-background flex flex-col h-full overflow-hidden transition-all duration-300",
+        "shrink-0 border-l bg-background flex flex-col h-full overflow-hidden transition-all duration-300 ease-out",
+        isOpen 
+          ? "w-full md:w-[380px] lg:w-[420px] opacity-100" 
+          : "w-0 opacity-0 border-l-0",
         className
       )}
     >
+      {/* Inner wrapper to maintain content width during animation */}
+      <div className="min-w-[380px] lg:min-w-[420px] flex flex-col h-full">
       {/* Header */}
       <div className="px-4 py-3 border-b bg-muted/30 shrink-0">
         <div className="flex items-center justify-between mb-2">
@@ -200,7 +203,7 @@ export function ProjectsSidePanel({
         {/* Filters */}
         <div className="flex items-center gap-2">
           <Select value={selectedYear} onValueChange={setSelectedYear}>
-            <SelectTrigger className="w-[110px] h-7 text-xs">
+            <SelectTrigger className="w-[120px] h-7 text-xs">
               <SelectValue placeholder="Year" />
             </SelectTrigger>
             <SelectContent>
@@ -432,6 +435,7 @@ export function ProjectsSidePanel({
           )}
         </div>
       </ScrollArea>
+      </div>
     </div>
   );
 }
