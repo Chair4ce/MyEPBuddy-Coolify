@@ -129,33 +129,85 @@ function getRankIndex(rank: Rank | null): number {
 
 // Flatten tree into a map of members with parent/child relationships
 // Respects collapsed state - doesn't include children of collapsed nodes
+// Also respects rank filter in collapse mode
 function flattenTree(
   node: TreeNode,
   parentId: string | null,
   currentUserId: string,
   result: Map<string, HierarchyMember>,
-  collapsedNodes: Set<string>
+  collapsedNodes: Set<string>,
+  visibleRanks: Set<Rank>,
+  filterMode: "fade" | "collapse"
 ): void {
   const isCollapsed = collapsedNodes.has(node.data.id);
-  const member: HierarchyMember = {
-    id: node.data.id,
-    name: node.data.full_name || "Unknown",
-    rank: node.data.rank,
-    parentId,
-    isManagedMember: node.data.isManagedMember,
-    isPlaceholder: node.data.isPlaceholder,
-    isCurrentUser: node.data.id === currentUserId,
-    // If collapsed, report empty children array for layout purposes
-    children: isCollapsed ? [] : node.children.map((c) => c.data.id),
-  };
-  result.set(node.data.id, member);
+  
+  // In collapse mode, check if this node's rank is visible
+  const isRankVisible = visibleRanks.size === 0 || 
+    (node.data.rank && visibleRanks.has(node.data.rank));
+  
+  // In fade mode, always include all nodes
+  // In collapse mode, only include nodes with visible ranks
+  const shouldInclude = filterMode === "fade" || isRankVisible;
+  
+  // The parent ID for children - either this node's ID or pass through the parent
+  const childParentId = shouldInclude ? node.data.id : parentId;
+  
+  if (shouldInclude) {
+    // Collect visible children IDs (for collapse mode, only include children with visible ranks)
+    const childIds: string[] = [];
+    if (!isCollapsed) {
+      for (const child of node.children) {
+        const childRankVisible = visibleRanks.size === 0 || 
+          (child.data.rank && visibleRanks.has(child.data.rank));
+        
+        if (filterMode === "fade" || childRankVisible) {
+          childIds.push(child.data.id);
+        } else {
+          // In collapse mode, look for visible descendants to connect
+          const visibleDescendants = findVisibleDescendantIds(child, visibleRanks);
+          childIds.push(...visibleDescendants);
+        }
+      }
+    }
+    
+    const member: HierarchyMember = {
+      id: node.data.id,
+      name: node.data.full_name || "Unknown",
+      rank: node.data.rank,
+      parentId,
+      isManagedMember: node.data.isManagedMember,
+      isPlaceholder: node.data.isPlaceholder,
+      isCurrentUser: node.data.id === currentUserId,
+      children: childIds,
+    };
+    result.set(node.data.id, member);
+  }
 
   // Only recurse into children if not collapsed
   if (!isCollapsed) {
     for (const child of node.children) {
-      flattenTree(child, node.data.id, currentUserId, result, collapsedNodes);
+      flattenTree(child, childParentId, currentUserId, result, collapsedNodes, visibleRanks, filterMode);
     }
   }
+}
+
+// Helper to find IDs of visible descendants (for connecting across filtered-out nodes)
+function findVisibleDescendantIds(node: TreeNode, visibleRanks: Set<Rank>): string[] {
+  const result: string[] = [];
+  
+  const isVisible = visibleRanks.size === 0 || 
+    (node.data.rank && visibleRanks.has(node.data.rank));
+  
+  if (isVisible) {
+    result.push(node.data.id);
+  } else {
+    // Not visible, check children
+    for (const child of node.children) {
+      result.push(...findVisibleDescendantIds(child, visibleRanks));
+    }
+  }
+  
+  return result;
 }
 
 // Group members by display tier (junior enlisted combined)
@@ -337,7 +389,7 @@ export function HierarchyTreeView({
   const svgRef = useRef<SVGSVGElement>(null);
   
   // Dynamic height based on viewport
-  const [containerHeight, setContainerHeight] = useState(500);
+  const [containerHeight, setContainerHeight] = useState<number | undefined>(undefined);
   
   // Collapsed nodes state - stores IDs of members whose children are hidden
   const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(new Set());
@@ -354,6 +406,51 @@ export function HierarchyTreeView({
       return next;
     });
   }, []);
+  
+  // Rank tiers for quick filter buttons
+  // NCO ranks (show collapse buttons in tree)
+  const NCO_FILTER_RANKS: Rank[] = ["SSgt", "TSgt", "MSgt", "SMSgt", "CMSgt"];
+  // Junior enlisted ranks (no collapse buttons in tree, but can filter to show)
+  const JUNIOR_FILTER_RANKS: Rank[] = ["AB", "Amn", "A1C", "SrA"];
+  
+  // Visible ranks filter - when empty, all ranks are shown
+  // When populated, only ranks in the set are visible
+  const [visibleRanks, setVisibleRanks] = useState<Set<Rank>>(new Set());
+  
+  // Filter mode: "fade" keeps cards in place but faded, "collapse" removes them from tree
+  const [filterMode, setFilterMode] = useState<"fade" | "collapse">("fade");
+  
+  // Toggle a rank's visibility
+  const toggleRankVisibility = useCallback((rank: Rank) => {
+    setVisibleRanks(prev => {
+      const next = new Set(prev);
+      if (next.has(rank)) {
+        next.delete(rank);
+      } else {
+        next.add(rank);
+      }
+      return next;
+    });
+  }, []);
+  
+  // Show all ranks
+  const showAllRanks = useCallback(() => {
+    setVisibleRanks(new Set());
+    setCollapsedNodes(new Set());
+  }, []);
+  
+  // Check if a rank should be visible
+  const isRankVisible = useCallback((rank: Rank | null): boolean => {
+    if (visibleRanks.size === 0) return true; // Empty means show all
+    if (!rank) return false;
+    return visibleRanks.has(rank);
+  }, [visibleRanks]);
+  
+  // Check if a rank should be included in tree layout (for collapse mode)
+  const isRankIncluded = useCallback((rank: Rank | null): boolean => {
+    if (filterMode === "fade") return true; // Fade mode always includes all
+    return isRankVisible(rank);
+  }, [filterMode, isRankVisible]);
   
   // Zoom state (1 = 100%, 0.5 = 50%, 2 = 200%)
   const [zoom, setZoom] = useState(1);
@@ -385,9 +482,9 @@ export function HierarchyTreeView({
     }
     countChildren(tree);
     
-    // Flatten tree (respects collapsed state)
+    // Flatten tree (respects collapsed state and rank filter in collapse mode)
     const members = new Map<string, HierarchyMember>();
-    flattenTree(tree, null, currentUserId, members, collapsedNodes);
+    flattenTree(tree, null, currentUserId, members, collapsedNodes, visibleRanks, filterMode);
     
     // Calculate stack indices for junior enlisted under each SSgt
     // Find all junior enlisted and group by their nearest SSgt+ ancestor
@@ -432,7 +529,37 @@ export function HierarchyTreeView({
     }
     
     // Calculate positions
-    const pos = calculatePositions(members, tree.data.id);
+    // In collapse mode, the original root might be filtered out, so find actual roots
+    // (members whose parentId is null or whose parent is not in the members map)
+    const rootIds: string[] = [];
+    for (const member of members.values()) {
+      if (member.parentId === null || !members.has(member.parentId)) {
+        rootIds.push(member.id);
+      }
+    }
+    
+    // If original root exists in members, use it; otherwise use found roots
+    const pos = new Map<string, PositionedMember>();
+    if (members.has(tree.data.id)) {
+      const positions = calculatePositions(members, tree.data.id);
+      for (const [id, p] of positions) {
+        pos.set(id, p);
+      }
+    } else if (rootIds.length > 0) {
+      // Position each root tree separately, side by side
+      let currentX = LAYOUT_CONFIG.leftPadding;
+      for (const rootId of rootIds) {
+        const positions = calculatePositions(members, rootId);
+        // Offset positions by currentX
+        let maxX = 0;
+        for (const [id, p] of positions) {
+          const offsetP = { ...p, x: p.x + currentX - LAYOUT_CONFIG.leftPadding };
+          pos.set(id, offsetP);
+          maxX = Math.max(maxX, offsetP.x);
+        }
+        currentX = maxX + LAYOUT_CONFIG.nodeWidth;
+      }
+    }
     
     // Override x positions for junior enlisted to align with their SSgt ancestor
     for (const [memberId, ancestorId] of juniorToAncestorMap) {
@@ -490,7 +617,7 @@ export function HierarchyTreeView({
       totalHeight: currentY + bottomPadding,
       childrenCountMap: childrenCount,
     };
-  }, [tree, currentUserId, collapsedNodes]);
+  }, [tree, currentUserId, collapsedNodes, visibleRanks, filterMode]);
   
   // Track if initial scroll has been done for current tree
   const hasInitialScrolled = useRef(false);
@@ -648,35 +775,35 @@ export function HierarchyTreeView({
     };
   }, [handleWheel]);
   
-  // Calculate dynamic height based on viewport
+  // Calculate container height to fit within viewport without causing page scroll
   useEffect(() => {
     const calculateHeight = () => {
-      if (!wrapperRef.current) return;
+      if (!containerRef.current) return;
       
-      const rect = wrapperRef.current.getBoundingClientRect();
+      // Get the scroll container's position
+      const rect = containerRef.current.getBoundingClientRect();
       const viewportHeight = window.innerHeight;
-      // Leave 24px margin at the bottom so the card doesn't touch the edge
-      const availableHeight = viewportHeight - rect.top - 24;
-      // Minimum height of 300px, maximum of available space
-      const newHeight = Math.max(300, Math.min(availableHeight, totalHeight * zoom + 40));
+      // Leave some margin at the bottom (for card padding and page margin)
+      const bottomMargin = 32;
+      const availableHeight = viewportHeight - rect.top - bottomMargin;
+      // Minimum height of 300px
+      const newHeight = Math.max(300, availableHeight);
       setContainerHeight(newHeight);
     };
     
-    // Calculate on mount and resize
-    calculateHeight();
+    // Use requestAnimationFrame for initial calculation to ensure layout is complete
+    const rafId = requestAnimationFrame(() => {
+      calculateHeight();
+    });
+    
+    // Recalculate on resize
     window.addEventListener("resize", calculateHeight);
     
-    // Also recalculate when tree size changes
-    const resizeObserver = new ResizeObserver(calculateHeight);
-    if (wrapperRef.current) {
-      resizeObserver.observe(wrapperRef.current);
-    }
-    
     return () => {
+      cancelAnimationFrame(rafId);
       window.removeEventListener("resize", calculateHeight);
-      resizeObserver.disconnect();
     };
-  }, [totalHeight, zoom]);
+  }, []);
   
   // Get color style for rank - uses inset box-shadow to overlay color on top of solid bg-card
   const getRankStyle = useCallback((rank: Rank | null): React.CSSProperties => {
@@ -711,32 +838,102 @@ export function HierarchyTreeView({
   };
   
   return (
-    <div ref={wrapperRef} className="relative">
-      {/* Zoom indicator */}
-      <div className="absolute top-2 right-2 z-20 flex items-center gap-2 bg-background/80 backdrop-blur-sm rounded-md px-2 py-1 text-xs text-muted-foreground border border-border/50">
-        <span>{Math.round(zoom * 100)}%</span>
-        <div className="flex gap-1">
+    <div ref={wrapperRef} className="relative flex flex-col gap-2">
+      {/* Quick filter buttons and zoom controls */}
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        {/* Rank filter buttons - toggle visibility of each rank */}
+        <div className="flex items-center gap-1 flex-wrap">
+          {/* Filter mode toggle */}
           <button
-            onClick={() => setZoom(prev => Math.max(MIN_ZOOM, prev - 0.1))}
-            className="hover:text-foreground transition-colors px-1"
-            aria-label="Zoom out"
+            onClick={() => setFilterMode(prev => prev === "fade" ? "collapse" : "fade")}
+            className={cn(
+              "px-2 py-1 text-xs rounded-md border transition-colors mr-2",
+              "bg-muted/50 border-border hover:bg-muted"
+            )}
+            aria-label={`Switch to ${filterMode === "fade" ? "collapse" : "fade"} mode`}
+            title={filterMode === "fade" 
+              ? "Fade mode: Hidden ranks stay in place but faded. Click to switch to Collapse mode." 
+              : "Collapse mode: Hidden ranks removed from tree. Click to switch to Fade mode."}
           >
-            −
+            {filterMode === "fade" ? "Fade" : "Collapse"}
           </button>
+          <span className="text-xs text-muted-foreground mr-1">Show:</span>
           <button
-            onClick={() => setZoom(1)}
-            className="hover:text-foreground transition-colors px-1"
-            aria-label="Reset zoom"
+            onClick={showAllRanks}
+            className={cn(
+              "px-2 py-1 text-xs rounded-md border transition-colors",
+              visibleRanks.size === 0
+                ? "bg-primary text-primary-foreground border-primary"
+                : "bg-background border-border hover:bg-muted"
+            )}
+            aria-label="Show all ranks"
           >
-            ⟲
+            All
           </button>
-          <button
-            onClick={() => setZoom(prev => Math.min(MAX_ZOOM, prev + 0.1))}
-            className="hover:text-foreground transition-colors px-1"
-            aria-label="Zoom in"
-          >
-            +
-          </button>
+          {/* NCO rank filters */}
+          {[...NCO_FILTER_RANKS].reverse().map((rank) => (
+            <button
+              key={rank}
+              onClick={() => toggleRankVisibility(rank)}
+              className={cn(
+                "px-2 py-1 text-xs rounded-md border transition-colors",
+                visibleRanks.has(rank)
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-background border-border hover:bg-muted"
+              )}
+              aria-label={`Toggle ${rank} visibility`}
+              title={`Toggle ${rank} visibility`}
+            >
+              {rank}
+            </button>
+          ))}
+          {/* Separator */}
+          <span className="text-muted-foreground/50 mx-1">|</span>
+          {/* Junior enlisted rank filters */}
+          {[...JUNIOR_FILTER_RANKS].reverse().map((rank) => (
+            <button
+              key={rank}
+              onClick={() => toggleRankVisibility(rank)}
+              className={cn(
+                "px-2 py-1 text-xs rounded-md border transition-colors",
+                visibleRanks.has(rank)
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-background border-border hover:bg-muted"
+              )}
+              aria-label={`Toggle ${rank} visibility`}
+              title={`Toggle ${rank} visibility`}
+            >
+              {rank}
+            </button>
+          ))}
+        </div>
+        
+        {/* Zoom controls */}
+        <div className="flex items-center gap-2 bg-background/80 backdrop-blur-sm rounded-md px-2 py-1 text-xs text-muted-foreground border border-border/50">
+          <span>{Math.round(zoom * 100)}%</span>
+          <div className="flex gap-1">
+            <button
+              onClick={() => setZoom(prev => Math.max(MIN_ZOOM, prev - 0.1))}
+              className="hover:text-foreground transition-colors px-1"
+              aria-label="Zoom out"
+            >
+              −
+            </button>
+            <button
+              onClick={() => setZoom(1)}
+              className="hover:text-foreground transition-colors px-1"
+              aria-label="Reset zoom"
+            >
+              ⟲
+            </button>
+            <button
+              onClick={() => setZoom(prev => Math.min(MAX_ZOOM, prev + 0.1))}
+              className="hover:text-foreground transition-colors px-1"
+              aria-label="Zoom in"
+            >
+              +
+            </button>
+          </div>
         </div>
       </div>
       
@@ -751,7 +948,9 @@ export function HierarchyTreeView({
           getCursorClass()
         )}
         style={{ 
-          height: containerHeight,
+          // Dynamic height calculated to fit viewport without causing page scroll
+          height: containerHeight ?? 380,
+          minHeight: 220,
         }}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
@@ -768,16 +967,22 @@ export function HierarchyTreeView({
       <div
         className="relative"
         style={{
+          // Wrapper sized to the zoomed dimensions for proper scrolling
           width: totalWidth * zoom,
           height: totalHeight * zoom,
-          minWidth: totalWidth * zoom,
-          minHeight: totalHeight * zoom,
           marginLeft: "auto",
           marginRight: "auto",
+        }}
+      >
+      {/* Inner content with transform for smooth zoom */}
+      <div
+        className="absolute top-0 left-0"
+        style={{
+          width: totalWidth,
+          height: totalHeight,
           transform: `scale(${zoom})`,
           transformOrigin: "top left",
-          // Smooth transition for size changes and zoom
-          transition: "width 300ms ease-out, height 300ms ease-out, min-width 300ms ease-out, min-height 300ms ease-out, transform 150ms ease-out",
+          transition: "transform 150ms ease-out",
         }}
       >
         {/* SVG for connecting lines - z-index 0 to stay behind cards */}
@@ -868,17 +1073,23 @@ export function HierarchyTreeView({
               const hasChildren = originalChildCount > 0;
               const isCollapsed = collapsedNodes.has(member.id);
               
+              // Check if this member's rank is visible
+              const isVisible = isRankVisible(member.rank);
+              
               return (
                 <div
                   key={member.id}
-                  className="absolute z-10"
+                  className={cn(
+                    "absolute z-10",
+                    !isVisible && "opacity-10 pointer-events-none"
+                  )}
                   style={{
                     left: pos.x - cardWidth / 2,
                     top: stackOffset,
-                    // Smooth transition for position changes
-                    transition: "left 300ms ease-out, top 300ms ease-out",
+                    // Smooth transition for position changes and opacity
+                    transition: "left 300ms ease-out, top 300ms ease-out, opacity 200ms ease-out",
                     // Disable pointer events when spacebar is held for drag mode
-                    pointerEvents: isSpaceHeld ? "none" : "auto",
+                    pointerEvents: isSpaceHeld || !isVisible ? "none" : "auto",
                   }}
                 >
                   <button
@@ -913,8 +1124,8 @@ export function HierarchyTreeView({
                     </span>
                   </button>
                   
-                  {/* Collapse/expand toggle for members with children */}
-                  {hasChildren && (
+                  {/* Collapse/expand toggle for members with children (not for junior enlisted) */}
+                  {hasChildren && !isJuniorEnlisted(member.rank) && (
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -945,6 +1156,7 @@ export function HierarchyTreeView({
             })}
           </div>
         ))}
+      </div>
       </div>
       </div>
     </div>

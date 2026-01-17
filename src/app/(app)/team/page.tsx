@@ -1807,14 +1807,14 @@ export default function TeamPage() {
   }
 
   return (
-    <div className="flex w-full h-full">
+    <div className="flex w-full h-full min-h-0 overflow-hidden">
       {/* Main Content Area */}
       <div className={cn(
-        "flex-1 min-w-0 transition-all duration-300",
+        "flex-1 min-w-0 min-h-0 flex flex-col transition-all duration-300",
         isProjectsPanelOpen ? "pr-0" : ""
       )}>
         <div className={cn(
-          "w-full space-y-4 sm:space-y-6 px-4 sm:px-6",
+          "w-full flex-1 min-h-0 flex flex-col space-y-4 sm:space-y-6 px-4 sm:px-6",
           isProjectsPanelOpen ? "max-w-7xl mx-auto" : "" // Allow full width when projects panel is closed
         )}>
           {/* Assign Mode Banner */}
