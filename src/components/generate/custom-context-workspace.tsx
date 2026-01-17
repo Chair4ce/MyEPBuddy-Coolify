@@ -401,7 +401,9 @@ function MPAWorkspaceCard({
 
   const text1 = data.edited?.text1 ?? data.generated?.text1 ?? "";
   const text2 = data.edited?.text2 ?? data.generated?.text2 ?? "";
-  const combined = data.statementCount === 2 ? `${text1}. ${text2}` : text1;
+  // Combine statements - don't add extra period if text1 already ends with one
+  const separator = text1.trim().endsWith(".") ? " " : ". ";
+  const combined = data.statementCount === 2 ? `${text1}${separator}${text2}` : text1;
   const totalChars = combined.length;
   const isOver = totalChars > maxChars;
 
@@ -484,7 +486,7 @@ function MPAWorkspaceCard({
             {hasGenerated && (
               <>
                 {/* Clarifying questions indicator */}
-                <ClarifyingQuestionsIndicator mpaKey={mpaKey} rateeId={rateeId} />
+                <ClarifyingQuestionsIndicator mpaKey={mpaKey} rateeId={rateeId} hasGenerated={hasGenerated} />
                 <Button variant="ghost" size="icon" onClick={copy} className="size-7">
                   {copiedId === "combined" ? <Check className="size-3" /> : <Copy className="size-3" />}
                 </Button>
@@ -1034,7 +1036,9 @@ export function CustomContextWorkspace({
     const data = getMPAData(mpaKey);
     const text1 = data.edited?.text1 ?? data.generated?.text1 ?? "";
     const text2 = data.edited?.text2 ?? data.generated?.text2 ?? "";
-    const combined = data.statementCount === 2 ? `${text1}. ${text2}` : text1;
+    // Combine statements - don't add extra period if text1 already ends with one
+    const separator = text1.trim().endsWith(".") ? " " : ". ";
+    const combined = data.statementCount === 2 ? `${text1}${separator}${text2}` : text1;
     await onSaveStatement(mpaKey, combined);
   };
 

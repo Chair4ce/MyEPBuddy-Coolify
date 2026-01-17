@@ -148,16 +148,19 @@ ${context ? `**CONTEXT**: ${context}` : ""}
 5. Expand "&" to " and " where appropriate
 6. Add organizational context: "for unit" → "for 500-member squadron"
 
-**MANDATORY PROCESS:**
-1. Rewrite the statement with added content
-2. Count every character (letters, numbers, spaces, punctuation)
-3. Verify you've reached AT LEAST ${targetMin} characters
-4. If still short, add more until you hit the target
+**CRITICAL RULES - MUST FOLLOW:**
+- The output must be ONE SINGLE COMPLETE SENTENCE
+- NEVER add a second sentence or start a new thought
+- NEVER use ".." or end with ".. Led" or similar garbage
+- EXPAND existing content by making it more descriptive
+- If you cannot reach the target naturally, it's better to be slightly short than add filler
 
 **FORBIDDEN:**
 - Do NOT use em-dashes (--) or semicolons (;)
 - Do NOT invent metrics not implied in the original
 - Do NOT change the core meaning
+- Do NOT add a new sentence after a period
+- NEVER use: Spearheaded, Orchestrated, Synergized, Leveraged, Facilitated
 
 Output ONLY the revised statement, no quotes, no explanation:`;
   } else {
@@ -344,13 +347,98 @@ export async function enforceCharacterLimits(
     stopReason = "max_retries";
   }
   
+  // Post-enforcement sanitization: clean up any malformed content
+  let finalStatement = currentStatement;
+  if (wasAdjusted) {
+    finalStatement = sanitizeStatementText(currentStatement);
+    if (finalStatement !== currentStatement) {
+      console.log(`[CharVerify] Sanitized malformed statement content`);
+      // Re-validate after sanitization
+      validation = validateCharacterCount(finalStatement, targetMax, targetMin, tolerancePercent);
+    }
+  }
+  
   return {
-    statement: currentStatement,
+    statement: finalStatement,
     attempts,
     wasAdjusted,
     finalValidation: validation,
     stopReason,
   };
+}
+
+/**
+ * Banned word replacements
+ */
+const BANNED_WORD_MAP: Record<string, string> = {
+  "spearheaded": "led",
+  "orchestrated": "coordinated",
+  "synergized": "integrated",
+  "leveraged": "used",
+  "facilitated": "enabled",
+  "utilized": "used",
+  "impacted": "improved",
+};
+
+/**
+ * Sanitize a statement to remove malformed content (garbage filler, incomplete sentences)
+ * Also replaces banned words with acceptable alternatives
+ */
+function sanitizeStatementText(statement: string): string {
+  let cleaned = statement;
+  
+  // Replace banned words first
+  for (const [banned, replacement] of Object.entries(BANNED_WORD_MAP)) {
+    const regex = new RegExp(`\\b${banned}\\b`, "gi");
+    cleaned = cleaned.replace(regex, (match) => {
+      if (match[0] === match[0].toUpperCase()) {
+        return replacement.charAt(0).toUpperCase() + replacement.slice(1);
+      }
+      return replacement;
+    });
+  }
+  
+  // Fix double periods first (the ".." pattern that indicates truncation)
+  cleaned = cleaned.replace(/\.{2,}\s*/g, ". ");
+  
+  // Split into sentences and keep only complete ones
+  const sentences = cleaned.split(/(?<=\.)\s+/);
+  const completeSentences: string[] = [];
+  
+  for (const sentence of sentences) {
+    const trimmed = sentence.trim();
+    if (trimmed.length === 0) continue;
+    
+    const endsWithPeriod = /\.$/.test(trimmed);
+    const endsWithTruncation = /[a-z]{2,}$/.test(trimmed) && !endsWithPeriod;
+    const endsWithComma = /,$/.test(trimmed);
+    
+    if (endsWithPeriod) {
+      completeSentences.push(trimmed);
+    } else if (endsWithTruncation || endsWithComma) {
+      // Truncated - find last complete thought
+      const lastPeriod = trimmed.lastIndexOf(".");
+      if (lastPeriod > trimmed.length * 0.5) {
+        completeSentences.push(trimmed.substring(0, lastPeriod + 1));
+      }
+      break; // Stop - rest is garbage
+    } else {
+      completeSentences.push(trimmed + ".");
+    }
+  }
+  
+  cleaned = completeSentences.join(" ");
+  
+  // Fix multiple spaces
+  cleaned = cleaned.replace(/\s{2,}/g, " ");
+  
+  // Ensure ends with period
+  cleaned = cleaned.trim();
+  if (cleaned.length > 0 && !/[.!]$/.test(cleaned)) {
+    cleaned += ".";
+  }
+  
+  return cleaned;
 }
 
 /**

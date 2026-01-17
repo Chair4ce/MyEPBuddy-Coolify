@@ -163,25 +163,24 @@ CRITICAL RULES - NEVER VIOLATE THESE:
 7. AVOID the word "the" - it wastes characters (e.g., "led the team" → "led 4-mbr team" - always quantify scope).
 8. CONSISTENCY: Use either "&" OR "and" throughout a statement - NEVER mix them. Prefer "&" when saving space.
 
-**⚠️ CHARACTER COUNT VERIFICATION PROCESS (MANDATORY) ⚠️**
-For EACH statement you generate, you MUST:
+**CHARACTER GUIDELINES:**
+- Target: 300-{{max_characters_per_statement}} characters per statement
+- Aim for substantial, content-rich statements
+- It's better to have a shorter complete statement than to add filler
 
-STEP 1: Draft the statement with full content
-STEP 2: Count every character (letters, numbers, spaces, punctuation)
-STEP 3: Check compliance: Is count between 340-{{max_characters_per_statement}}?
-STEP 4: If NOT compliant:
-  - If UNDER 340: Add scope ("team" → "12-person team"), add adjectives ("systems" → "mission-critical systems"), expand abbreviations ("ops" → "operations")
-  - If OVER {{max_characters_per_statement}}: Use abbreviations, remove weak words
-  - REPEAT until compliant
-STEP 5: Only output statements that are 340-{{max_characters_per_statement}} characters
+**CRITICAL - WHAT NOT TO DO:**
+- NEVER add a second sentence to fill character count
+- NEVER add ".." and start a new thought
+- NEVER add incomplete fragments at the end
+- Each statement must be ONE complete sentence that ends properly with a period
 
-**EXPANSION TECHNIQUES (to add characters):**
-- "led" → "directed and managed" (+11)
-- "ops" → "critical operations" (+12)
-- "team" → "high-performing team" (+12)
-- "improved" → "significantly improved" (+13)
-- Add scope: "for unit" → "for 450-member squadron" (+17)
-- Add depth: "saving $5K" → "saving $5K annually, enabling reinvestment in training" (+35)
+**HOW TO ADD SUBSTANCE (if needed):**
+- Add specific metrics: "improved" → "improved by 40%"
+- Add scope: "team" → "12-member team"
+- Add organizational context: "for unit" → "for 450-member squadron"
+- Add impact depth: "saving $5K" → "saving $5K annually"
+- Expand abbreviations: "ops" → "operations"
+- Add adjectives that add meaning: "systems" → "mission-critical systems"
 
 SENTENCE STRUCTURE (CRITICAL - THE #1 RULE):
 Board members scan quickly—they need clear, punchy statements digestible in 2-3 seconds. Avoid the "laundry list" problem:
@@ -672,9 +671,11 @@ The primary impact MUST emphasize RESOURCE EFFICIENCY. Frame around:
           : "";
         
         // Calculate character limits for 2 statement mode
-        const charLimitPerStatement = stmtCount === 2 ? Math.floor(effectiveMaxChars / 2) : effectiveMaxChars;
+        // Account for " " separator (1 char) when statements are combined on frontend
+        const combinedLimit = stmtCount === 2 ? effectiveMaxChars - 2 : effectiveMaxChars; // Leave room for separator
+        const charLimitPerStatement = stmtCount === 2 ? Math.floor(combinedLimit / 2) : effectiveMaxChars;
         const charLimitText = stmtCount === 2 
-          ? `CRITICAL: Both statements SHARE a ${effectiveMaxChars} character limit. Each statement should be ~${charLimitPerStatement} characters (max ${charLimitPerStatement + 20} each).`
+          ? `CRITICAL: Both statements SHARE a ${combinedLimit} character limit. Each statement should be ~${charLimitPerStatement} characters (max ${charLimitPerStatement + 15} each). They will be joined with a space, so together they MUST be under ${combinedLimit} characters total.`
           : `TARGET: Statement should be ${Math.floor(effectiveMaxChars * 0.8)}-${effectiveMaxChars} characters.`;
         
         // Get MPA context for relevancy guidance
@@ -723,13 +724,17 @@ For ${rateeRank}: "${rankPromo}"
 
 REQUIREMENTS:
 1. DO NOT copy input verbatim - REWRITE with Commander's voice
-2. Both statements COMBINED must fit within ${effectiveMaxChars} characters (~${charLimitPerStatement} each)
+2. **CHARACTER MATH**: Statement 1 + Statement 2 must be ≤ ${combinedLimit} characters total
+   - Statement 1: aim for ~${charLimitPerStatement} chars
+   - Statement 2: aim for ~${charLimitPerStatement} chars  
+   - They will be JOINED on the frontend, so together MUST fit in ${combinedLimit} chars
 3. Maximum 3-4 action clauses per statement - NO laundry lists
 4. END STRONG: Last phrase = promotion recommendation tied to their unique value
 5. Use definitive language: "My #1", "must promote", "ready for next level"
+6. USE ALLOWED ABBREVIATIONS: hrs, mos, wks, & (for "and"), K/M/B for metrics
 
 Format as JSON array:
-["Rewritten statement 1", "Rewritten statement 2"]`;
+["Rewritten statement 1 (~${charLimitPerStatement} chars)", "Rewritten statement 2 (~${charLimitPerStatement} chars)"]`;
           } else {
             // Regular MPA with 2 statements
             userPrompt = `REWRITE and TRANSFORM 2 pieces of raw input into HIGH-QUALITY EPB narrative statements for the "${mpa.label}" Major Performance Area.
@@ -754,7 +759,11 @@ ${mpaExamples.slice(0, 2).map((e, i) => `${i + 1}. ${e.statement}`).join("\n")}
 CRITICAL TRANSFORMATION REQUIREMENTS:
 1. READABILITY IS #1 PRIORITY: Each statement must be scannable in 2-3 seconds
 2. DO NOT copy input verbatim - REWRITE with improved structure
-3. Both statements COMBINED must fit within ${effectiveMaxChars} characters (~${charLimitPerStatement} each)
+3. **CHARACTER MATH - THIS IS MANDATORY**:
+   - Statement 1 + Statement 2 must be ≤ ${combinedLimit} characters TOTAL
+   - Statement 1: aim for ~${charLimitPerStatement} chars
+   - Statement 2: aim for ~${charLimitPerStatement} chars
+   - USE ALLOWED ABBREVIATIONS: hrs, mos, wks, & (for "and"), K/M/B for metrics
 4. SENTENCE STRUCTURE (CRITICAL):
    - Maximum 3-4 action clauses per statement - NO laundry lists of 5+ actions
    - Use PARALLEL verb structure (consistent tense throughout)
@@ -1101,12 +1110,40 @@ Output ONLY the statement text, no quotes or JSON.`;
         }
         continue; // Skip the normal generation flow below
       } else {
-        // Regular MPA prompt - combine accomplishments into 2-3 statements
-        userPrompt = `Generate 2-3 HIGH-QUALITY EPB narrative statements for the "${mpa.label}" Major Performance Area.
+        // Regular MPA prompt - combine accomplishments into 2-3 statement VERSIONS
+        // Get abbreviations for injection into user prompt
+        const userAbbreviations = settings.abbreviations || [];
+        const userAcronyms = settings.acronyms || [];
+        
+        // Format abbreviations for prompt
+        const abbrevForPrompt = userAbbreviations.length > 0
+          ? userAbbreviations.map(a => `"${a.word}" → "${a.abbreviation}"`).join(", ")
+          : "hrs, mos, wks, & (for 'and'), K/M/B for metrics";
+        
+        // Get some key acronyms (top 10 most useful for character savings)
+        const keyAcronyms = userAcronyms
+          .filter(a => a.definition.length > 10) // Only include ones that save significant characters
+          .slice(0, 10)
+          .map(a => `${a.definition} → ${a.acronym}`)
+          .join(", ");
+        
+        // For multi-accomplishment MPAs, we want SEPARATE statements that get combined later
+        // Each statement should be ~half the max chars since they'll be joined
+        const perStatementTarget = Math.floor((effectiveMaxChars - 2) / mpaAccomplishments.length);
+        
+        userPrompt = `Generate EPB narrative statements for "${mpa.label}".
 
 RATEE: ${rateeRank} | AFSC: ${rateeAfsc || "N/A"}
 
-SOURCE ACCOMPLISHMENTS:
+**TASK**: Write ONE statement per accomplishment below. They will be combined on the frontend.
+
+**CHARACTER LIMITS (CRITICAL):**
+- Each statement: ~${perStatementTarget} characters (MAX ${perStatementTarget + 10})
+- All statements combined: ${effectiveMaxChars - 2} characters total
+${userAbbreviations.length > 0 ? `\n**YOUR ABBREVIATIONS (from settings):** ${abbrevForPrompt}` : ""}
+${keyAcronyms ? `\n**YOUR ACRONYMS (from settings):** ${keyAcronyms}` : ""}
+
+SOURCE ACCOMPLISHMENTS (write one statement per item):
 ${mpaAccomplishments
   .map(
     (a, i) => `
@@ -1119,33 +1156,24 @@ ${mpaAccomplishments
   .join("")}
 
 ${mpaExamples.length > 0 ? `
-EXAMPLE STATEMENTS (match this flow and readability):
-${mpaExamples.map((e, i) => `${i + 1}. ${e.statement}`).join("\n")}
+EXAMPLE STATEMENTS (match this style):
+${mpaExamples.slice(0, 2).map((e, i) => `${i + 1}. ${e.statement}`).join("\n")}
 ` : ""}
 
-CRITICAL REQUIREMENTS:
-1. TARGET: ${Math.floor(effectiveMaxChars * 0.65)}-${effectiveMaxChars} characters per statement. PRIORITIZE READABILITY over raw length.
-2. SENTENCE STRUCTURE (MOST IMPORTANT):
-   - Each statement must read naturally when spoken aloud
-   - Maximum 3-4 action clauses per statement (NOT a laundry list of 5+ actions)
-   - Use PARALLEL verb structure (all past tense OR all present participles, not mixed)
-   - Place the STRONGEST IMPACT at the END of each statement
-   - If source has 4+ distinct accomplishments, split across multiple statements
-3. STRUCTURE: [Action] + [Scope/Details] + [Result] + [BIGGEST IMPACT LAST]
-4. CHAIN impacts naturally: "achieved X, enabling Y" (max 2-3 chained results)
+**REQUIREMENTS:**
+1. Write ONE complete sentence per accomplishment
+2. Each sentence ~${perStatementTarget} chars (use abbreviations to fit!)
+3. COMPLETE sentences - no truncation, no cutting off mid-word
+4. BANNED VERBS: Spearheaded, Orchestrated, Synergized, Leveraged, Facilitated, Utilized, Impacted
 
-GOOD EXAMPLE (readable, focused, strong ending):
-"Led 12 Airmen in rapid overhaul of 8 authentication servers, delivering wing directive 29 days ahead of schedule, ensuring uninterrupted network access for 58K users."
+**ALLOWED ABBREVIATIONS (only these are permitted):**
+- TIME: "hours" → "hrs", "months" → "mos", "weeks" → "wks", "days" → "days"
+- NUMBERS: Use digits (e.g., "three" → "3", "twelve" → "12")
+- CONJUNCTION: "and" → "&" (saves 2 characters each time!)
+- METRICS: K, M, B for thousands/millions/billions (e.g., "$50K", "1.2M users")
 
-BAD EXAMPLE (run-on, laundry list, weak ending):
-"Directed 12 Amn in rebuilding 8 servers, advancing directive completion by 29 days, crafted assessment, fixed 27 errors, purged 9.6TB data, averting outage, streamlining access."
-
-BANNED VERBS: Spearheaded, Orchestrated, Synergized, Leveraged, Facilitated, Utilized, Impacted
-
-Generate EXACTLY 2-3 statements. Each must be READABLE in 2-3 seconds.
-
-Format as JSON array only:
-["Statement 1", "Statement 2", "Statement 3"]`;
+**OUTPUT FORMAT:**
+{"statements": ["Statement for accomplishment 1 (~${perStatementTarget} chars)", "Statement for accomplishment 2 (~${perStatementTarget} chars)"], "relevancy_score": 85}`;
       }
 
       // Inject clarifying context from previous generation (if user provided answers)
@@ -1159,22 +1187,30 @@ Use the clarifying information above to enhance your statements with more specif
       }
       
       // Add clarifying questions guidance (optional, non-blocking)
-      if (requestClarifyingQuestions && !clarifyingContext) {
+      const shouldRequestQuestions = requestClarifyingQuestions && !clarifyingContext;
+      if (shouldRequestQuestions) {
         // Only request questions on first generation, not on regeneration with answers
         finalPrompt = `${finalPrompt}
 
 ${CLARIFYING_QUESTION_GUIDANCE}
 
-If you have clarifying questions, include them in a "clarifyingQuestions" array in your JSON response.
-Each question should have: "question", "category" (impact/scope/leadership/recognition/metrics/general), and optional "hint".
-Example format:
+**IMPORTANT: OUTPUT FORMAT WHEN CLARIFYING QUESTIONS APPLY**
+You MUST respond with a JSON OBJECT (not array) in this format:
 {
-  "statements": ["Statement 1", "Statement 2"],
+  "statements": ["Statement 1", "Statement 2", "Statement 3"],
   "clarifyingQuestions": [
-    {"question": "Did this save time or money?", "category": "impact", "hint": "Quantify if possible"}
+    {"question": "Did this save time or money? How much?", "category": "impact", "hint": "Quantify savings if possible"},
+    {"question": "How many people were on the team they led?", "category": "leadership", "hint": "Specific numbers help"}
   ]
 }
-If no questions are needed, omit the clarifyingQuestions field entirely.`;
+
+Include 1-3 clarifying questions if the input lacks:
+- Specific metrics (time saved, money saved, people impacted)
+- Scope clarity (unit level vs wing level vs AF-wide)
+- Leadership details (team size, people developed)
+- Recognition context (why selected, competition level)
+
+If the input is already detailed enough, you may omit clarifyingQuestions but still use the object format with just "statements".`;
       }
 
       try {
@@ -1190,6 +1226,9 @@ If no questions are needed, omit the clarifyingQuestions field entirely.`;
         let relevancyScore: number | undefined;
         let clarifyingQuestions: ClarifyingQuestionResponse[] = [];
         
+        // Log raw response for debugging (first 500 chars)
+        console.log(`[Generate] Raw LLM response for ${mpa.key}:`, text.substring(0, 500));
+        
         try {
           // Try to parse as JSON object with statements, relevancy_score, and clarifyingQuestions
           const jsonObjMatch = text.match(/\{[\s\S]*"statements"[\s\S]*\}/);
@@ -1202,6 +1241,9 @@ If no questions are needed, omit the clarifyingQuestions field entirely.`;
               clarifyingQuestions = parsed.clarifyingQuestions.filter(
                 (q: unknown) => typeof q === "object" && q !== null && "question" in q
               );
+              console.log(`[Generate] Found ${clarifyingQuestions.length} clarifying questions for ${mpa.key}`);
+            } else if (shouldRequestQuestions) {
+              console.log(`[Generate] No clarifyingQuestions array in response for ${mpa.key}`);
             }
           } else {
             // Fallback: try to parse as array
@@ -1224,6 +1266,30 @@ If no questions are needed, omit the clarifyingQuestions field entirely.`;
         }
 
         if (statements.length > 0) {
+          // Log the raw statements BEFORE any processing
+          console.log(`[Generate] === RAW STATEMENTS (before sanitization) for ${mpa.key} ===`);
+          statements.forEach((s, i) => {
+            console.log(`  [${i + 1}] (${s.length} chars): "${s.substring(0, 150)}..."`);
+          });
+          
+          // IMMEDIATE SANITIZATION: Clean up any garbage from initial generation
+          // Also applies abbreviations and acronyms from user settings
+          const { sanitizeStatements } = await import("@/lib/quality-control");
+          const userAbbrevs = settings.abbreviations || [];
+          const userAcros = settings.acronyms || [];
+          const sanitizationResult = sanitizeStatements(statements, userAbbrevs, userAcros);
+          if (sanitizationResult.hadIssues) {
+            console.log(`[Generate] Sanitized ${sanitizationResult.issueCount} statement(s) from initial generation`);
+            console.log(`[Generate] Applied ${userAbbrevs.length} abbreviations and checked ${userAcros.length} acronyms`);
+            statements = sanitizationResult.sanitized;
+            
+            // Log after sanitization
+            console.log(`[Generate] === AFTER SANITIZATION for ${mpa.key} ===`);
+            statements.forEach((s, i) => {
+              console.log(`  [${i + 1}] (${s.length} chars): "${s.substring(0, 150)}..."`);
+            });
+          }
+          
           // POST-GENERATION QUALITY CONTROL
           // Single consolidated QC pass that handles:
           // - Character count enforcement (when fillToMax is enabled)
@@ -1233,7 +1299,10 @@ If no questions are needed, omit the clarifyingQuestions field entirely.`;
           let verifiedStatements = statements;
           let qcFeedback: string | undefined;
           
-          if (shouldEnforceCharLimits && fillToMax) {
+          // TEMPORARILY DISABLE QC to debug if QC is causing the issue
+          const ENABLE_QC = false; // Set to true to re-enable QC
+          
+          if (ENABLE_QC && shouldEnforceCharLimits && fillToMax) {
             const targetMin = effectiveMaxChars - 10;
             
             // Check if QC is worth running
@@ -1255,6 +1324,12 @@ If no questions are needed, omit the clarifyingQuestions field entirely.`;
                 
                 verifiedStatements = qcResult.statements;
                 qcFeedback = qcResult.evaluation.overallFeedback;
+                
+                // Log AFTER QC
+                console.log(`[Generate] === STATEMENTS AFTER QC for ${mpa.key} ===`);
+                verifiedStatements.forEach((s, i) => {
+                  console.log(`  [${i + 1}] (${s.length} chars): "${s.substring(0, 100)}..."`);
+                });
                 
                 // Log QC results
                 console.log(

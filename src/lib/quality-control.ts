@@ -15,6 +15,348 @@ import { generateText, type LanguageModel } from "ai";
 import { validateCharacterCount, type CharacterValidationResult } from "./character-verification";
 
 // ============================================================================
+// STATEMENT SANITIZATION
+// ============================================================================
+
+/**
+ * Patterns that indicate a malformed/garbage statement
+ */
+const MALFORMED_PATTERNS = [
+  /\.\.\s*/,  // ".." - double period (truncation indicator)
+  /\.\s+[A-Z][a-z]+\s+\d+\s+[A-Za-z]+\s*$/,  // Incomplete trailing sentence at end
+  /[a-z]{3,}\s*$/,  // Ends with incomplete word (no punctuation)
+  /\d+\s*$/,  // Ends with just a number (truncated mid-phrase like "execute 96")
+  /,\s*$/,  // Ends with comma
+  /;\s*$/,  // Ends with semicolon (also banned)
+  /\s{2,}/,  // Multiple consecutive spaces
+  /\.{2,}/,  // Multiple consecutive periods
+  /to\s+(execute|perform|complete|deliver)\s+\d+\s*$/i,  // "to execute 96" - truncated action
+  /\b(with|for|of|to|and|&)\s*$/i,  // Ends with preposition/conjunction
+];
+
+/**
+ * Banned words/phrases that should not appear
+ */
+const BANNED_WORDS = [
+  "spearheaded",
+  "orchestrated",
+  "synergized",
+  "leveraged",
+  "facilitated",
+  "utilized",
+  "impacted",
+];
+
+/**
+ * Check if a statement has malformed content (garbage filler, incomplete sentences, etc.)
+ */
+export function detectMalformedStatement(statement: string): {
+  isMalformed: boolean;
+  issues: string[];
+} {
+  const issues: string[] = [];
+  
+  // Check for malformed patterns
+  for (const pattern of MALFORMED_PATTERNS) {
+    if (pattern.test(statement)) {
+      issues.push(`Contains malformed pattern: ${pattern.source}`);
+    }
+  }
+  
+  // Check for banned words
+  const lowerStatement = statement.toLowerCase();
+  for (const word of BANNED_WORDS) {
+    if (lowerStatement.includes(word)) {
+      issues.push(`Contains banned word: "${word}"`);
+    }
+  }
+  
+  // Check for incomplete ending (doesn't end with period or proper punctuation)
+  if (!/[.!]$/.test(statement.trim())) {
+    issues.push("Statement doesn't end with proper punctuation");
+  }
+  
+  // Check for multiple sentences (shouldn't have multiple periods except abbreviations)
+  const periodCount = (statement.match(/\.\s+[A-Z]/g) || []).length;
+  if (periodCount > 0) {
+    issues.push("Contains multiple sentences (should be single flowing statement)");
+  }
+  
+  return {
+    isMalformed: issues.length > 0,
+    issues,
+  };
+}
+
+/**
+ * Clean up a statement by removing malformed content
+ */
+export function sanitizeStatement(statement: string): string {
+  let cleaned = statement;
+  
+  // AGGRESSIVE: If we see ".." anywhere, split there and only keep first part
+  if (cleaned.includes("..")) {
+    const parts = cleaned.split("..");
+    cleaned = parts[0].trim();
+    if (!cleaned.endsWith(".")) {
+      cleaned += ".";
+    }
+    console.log(`[Sanitize] Removed content after ".." - keeping first sentence only`);
+  }
+  
+  // Fix any remaining double periods
+  cleaned = cleaned.replace(/\.{2,}/g, ".");
+  
+  // Check for truncated endings and fix them
+  const truncatedEndings = [
+    /\s+to\s+(execute|perform|complete|deliver)\s+\d+\s*\.?$/i,  // "to execute 96"
+    /\s+\d+\s*\.?$/,  // ends with just a number like "execute 96"
+    /\s+(with|for|of|to|and|&)\s*\.?$/i,  // ends with preposition
+    /\s+[a-z]{1,3}\s*\.?$/i,  // ends with tiny word fragment
+  ];
+  
+  for (const pattern of truncatedEndings) {
+    if (pattern.test(cleaned)) {
+      // Find last complete sentence before truncation
+      const lastGoodPeriod = cleaned.lastIndexOf(".", cleaned.length - 15);
+      if (lastGoodPeriod > cleaned.length * 0.4) {
+        cleaned = cleaned.substring(0, lastGoodPeriod + 1);
+        console.log(`[Sanitize] Removed truncated ending`);
+      }
+      break;
+    }
+  }
+  
+  // Split into sentences and validate each
+  const sentences = cleaned.split(/(?<=\.)\s+/);
+  const completeSentences: string[] = [];
+  
+  for (const sentence of sentences) {
+    const trimmed = sentence.trim();
+    if (trimmed.length === 0) continue;
+    
+    const endsWithPeriod = /\.$/.test(trimmed);
+    const endsWithNumber = /\d\s*$/.test(trimmed) && !endsWithPeriod;
+    const endsWithTruncation = /[a-z]{2,}$/.test(trimmed) && !endsWithPeriod;
+    const endsWithComma = /,$/.test(trimmed);
+    
+    if (endsWithPeriod && trimmed.length > 20) {
+      // Good complete sentence
+      completeSentences.push(trimmed);
+    } else if (endsWithTruncation || endsWithComma || endsWithNumber) {
+      // Truncated - try to salvage
+      const lastPeriod = trimmed.lastIndexOf(".");
+      if (lastPeriod > trimmed.length * 0.5) {
+        completeSentences.push(trimmed.substring(0, lastPeriod + 1));
+      }
+      break; // Stop processing - rest is garbage
+    } else if (!endsWithPeriod && trimmed.length > 20) {
+      // Might be okay, add period
+      completeSentences.push(trimmed + ".");
+    }
+  }
+  
+  cleaned = completeSentences.join(" ");
+  
+  // Fix multiple spaces
+  cleaned = cleaned.replace(/\s{2,}/g, " ");
+  
+  // Ensure ends with period
+  cleaned = cleaned.trim();
+  if (cleaned.length > 0 && !/[.!]$/.test(cleaned)) {
+    cleaned += ".";
+  }
+  
+  return cleaned;
+}
+
+/**
+ * Replacement map for banned words
+ */
+const BANNED_WORD_REPLACEMENTS: Record<string, string> = {
+  "spearheaded": "led",
+  "orchestrated": "coordinated",
+  "synergized": "integrated",
+  "leveraged": "used",
+  "facilitated": "enabled",
+  "utilized": "used",
+  "impacted": "improved",
+};
+
+/**
+ * Replace banned words with acceptable alternatives
+ */
+export function replaceBannedWords(statement: string): string {
+  let result = statement;
+  
+  for (const [banned, replacement] of Object.entries(BANNED_WORD_REPLACEMENTS)) {
+    // Case-insensitive replacement, preserving case of first letter
+    const regex = new RegExp(`\\b${banned}\\b`, "gi");
+    result = result.replace(regex, (match) => {
+      // Preserve capitalization
+      if (match[0] === match[0].toUpperCase()) {
+        return replacement.charAt(0).toUpperCase() + replacement.slice(1);
+      }
+      return replacement;
+    });
+  }
+  
+  return result;
+}
+
+/**
+ * Abbreviation entry from user settings
+ */
+export interface Abbreviation {
+  word: string;
+  abbreviation: string;
+}
+
+/**
+ * Acronym entry from user settings
+ */
+export interface Acronym {
+  acronym: string;
+  definition: string;
+}
+
+/**
+ * Apply user's abbreviations to a statement (full word → abbreviation)
+ * This helps shorten statements to fit character limits
+ */
+export function applyAbbreviations(statement: string, abbreviations: Abbreviation[]): string {
+  let result = statement;
+  
+  for (const abbr of abbreviations) {
+    if (!abbr.word || !abbr.abbreviation) continue;
+    
+    // Case-insensitive word boundary match
+    const regex = new RegExp(`\\b${escapeRegExp(abbr.word)}\\b`, "gi");
+    result = result.replace(regex, (match) => {
+      // Try to preserve case - if original starts uppercase, capitalize abbreviation
+      if (match[0] === match[0].toUpperCase() && abbr.abbreviation.length > 0) {
+        return abbr.abbreviation.charAt(0).toUpperCase() + abbr.abbreviation.slice(1);
+      }
+      return abbr.abbreviation;
+    });
+  }
+  
+  return result;
+}
+
+/**
+ * Apply user's acronyms to a statement (full definition → acronym)
+ * This helps shorten statements by replacing full phrases with their acronyms
+ */
+export function applyAcronyms(statement: string, acronyms: Acronym[]): string {
+  let result = statement;
+  
+  // Sort by definition length descending to match longer phrases first
+  const sortedAcronyms = [...acronyms].sort((a, b) => 
+    b.definition.length - a.definition.length
+  );
+  
+  for (const acro of sortedAcronyms) {
+    if (!acro.acronym || !acro.definition) continue;
+    
+    // Case-insensitive match for the full definition
+    const regex = new RegExp(`\\b${escapeRegExp(acro.definition)}\\b`, "gi");
+    result = result.replace(regex, acro.acronym);
+  }
+  
+  return result;
+}
+
+/**
+ * Escape special regex characters in a string
+ */
+function escapeRegExp(string: string): string {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Apply both abbreviations and acronyms to a statement
+ */
+export function applyAllShortening(
+  statement: string, 
+  abbreviations: Abbreviation[] = [], 
+  acronyms: Acronym[] = []
+): { result: string; changesMade: number } {
+  let result = statement;
+  let changesMade = 0;
+  
+  // First apply acronyms (longer phrases)
+  const afterAcronyms = applyAcronyms(result, acronyms);
+  if (afterAcronyms !== result) {
+    changesMade++;
+    result = afterAcronyms;
+  }
+  
+  // Then apply abbreviations (single words)
+  const afterAbbreviations = applyAbbreviations(result, abbreviations);
+  if (afterAbbreviations !== result) {
+    changesMade++;
+    result = afterAbbreviations;
+  }
+  
+  return { result, changesMade };
+}
+
+/**
+ * Sanitize multiple statements and log issues
+ */
+export function sanitizeStatements(
+  statements: string[],
+  abbreviations: Abbreviation[] = [],
+  acronyms: Acronym[] = []
+): {
+  sanitized: string[];
+  hadIssues: boolean;
+  issueCount: number;
+} {
+  let issueCount = 0;
+  
+  const sanitized = statements.map((stmt, i) => {
+    let result = stmt;
+    
+    // First, replace banned words
+    const afterBannedReplace = replaceBannedWords(result);
+    if (afterBannedReplace !== result) {
+      console.log(`[QC] Statement ${i + 1}: Replaced banned words`);
+      result = afterBannedReplace;
+      issueCount++;
+    }
+    
+    // Apply abbreviations and acronyms from user settings
+    const shortening = applyAllShortening(result, abbreviations, acronyms);
+    if (shortening.changesMade > 0) {
+      console.log(`[QC] Statement ${i + 1}: Applied abbreviations/acronyms`);
+      result = shortening.result;
+    }
+    
+    // Then check for structural malformation
+    const check = detectMalformedStatement(result);
+    if (check.isMalformed) {
+      // Filter out the "banned word" issues since we already handled those
+      const structuralIssues = check.issues.filter(i => !i.includes("banned word"));
+      if (structuralIssues.length > 0) {
+        console.warn(`[QC] Statement ${i + 1} has structural issues:`, structuralIssues);
+        result = sanitizeStatement(result);
+        issueCount++;
+      }
+    }
+    
+    return result;
+  });
+  
+  return {
+    sanitized,
+    hadIssues: issueCount > 0,
+    issueCount,
+  };
+}
+
+// ============================================================================
 // TYPES
 // ============================================================================
 
@@ -165,6 +507,14 @@ export async function performQualityControl(
     // Parse the QC response
     const qcResult = parseQCResponse(text, statements, targetMaxChars, targetMinChars);
     
+    // Post-QC sanitization: clean up any malformed statements the LLM may have created
+    const sanitizationResult = sanitizeStatements(qcResult.statements);
+    if (sanitizationResult.hadIssues) {
+      console.warn(`[QualityControl] Sanitized ${sanitizationResult.issueCount} malformed statement(s)`);
+      qcResult.statements = sanitizationResult.sanitized;
+      qcResult.evaluation.overallFeedback += ` (${sanitizationResult.issueCount} statement(s) were cleaned up)`;
+    }
+    
     return qcResult;
 
   } catch (error) {
@@ -207,6 +557,15 @@ function buildQCSystemPrompt(): string {
 4. ENFORCE: Ensure character counts are within specified limits
 
 You must be OBJECTIVE and PRECISE. Count characters exactly. Identify specific issues.
+
+**CRITICAL RULES:**
+- Each statement must be ONE complete, flowing sentence
+- NEVER add a second sentence or fragment to "fill" character count
+- NEVER end a statement with ".." or start a new thought after a period
+- If you need more characters, EXPAND existing content (add adjectives, metrics, scope) - don't append new sentences
+- If a statement is slightly short, it's better to be short than to add garbage filler
+
+**BANNED WORDS (never use):** Spearheaded, Orchestrated, Synergized, Leveraged, Facilitated, Utilized, Impacted
 
 CRITICAL: Output ONLY valid JSON. No explanations outside the JSON structure.`;
 }

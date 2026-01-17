@@ -71,6 +71,7 @@ import {
   Pencil,
   FileText,
   Settings,
+  ClipboardPlus,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -97,6 +98,8 @@ import { AwardBadges } from "@/components/team/award-badges";
 import { AwardsPanel } from "@/components/team/awards-panel";
 import { AwardRequestsPanel } from "@/components/team/award-requests-panel";
 import { MemberStatementsDialog } from "@/components/team/member-statements-dialog";
+import { EntryFormDialog } from "@/components/entries/entry-form-dialog";
+import { AddTeamAccomplishmentDialog } from "@/components/team/add-team-accomplishment-dialog";
 import { 
   MPA_ABBREVIATIONS, 
   STANDARD_MGAS, 
@@ -308,6 +311,17 @@ export default function TeamPage() {
   
   // Edit managed member state
   const [editManagedMember, setEditManagedMember] = useState<ManagedMember | null>(null);
+  
+  // Add accomplishment for team member state
+  const [showAddEntryDialog, setShowAddEntryDialog] = useState(false);
+  const [entryRecipient, setEntryRecipient] = useState<{
+    profileId?: string;
+    teamMemberId?: string;
+    name: string;
+  } | null>(null);
+
+  // Team accomplishment dialog state
+  const [showTeamAccomplishmentDialog, setShowTeamAccomplishmentDialog] = useState(false);
 
   const supabase = createClient();
 
@@ -1525,6 +1539,19 @@ export default function TeamPage() {
                           </DropdownMenuItem>
                         }
                       />
+                      {canSupervise(profile?.rank) && (
+                        <DropdownMenuItem onClick={() => {
+                          setEntryRecipient({
+                            profileId: isManagedMember ? undefined : node.data.id,
+                            teamMemberId: isManagedMember ? node.data.id : undefined,
+                            name: `${node.data.rank || ""} ${node.data.full_name || "Unknown"}`.trim(),
+                          });
+                          setShowAddEntryDialog(true);
+                        }}>
+                          <ClipboardPlus className="size-4 mr-2" />
+                          Add Entry
+                        </DropdownMenuItem>
+                      )}
                       {/* Edit option only available to the user who created the managed member */}
                       {isManagedMember && !node.data.createdBy && (
                         <DropdownMenuItem onClick={() => {
@@ -2232,15 +2259,39 @@ export default function TeamPage() {
                     Tap to expand/collapse. Your position is highlighted.
                   </CardDescription>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-8"
-                  onClick={() => setShowRankColorsDialog(true)}
-                  aria-label="Rank color settings"
-                >
-                  <Settings className="size-4" />
-                </Button>
+                <div className="flex items-center gap-1">
+                  {canSupervise(profile?.rank) && (subordinates.length > 0 || managedMembers.length > 0) && (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 gap-1.5 text-xs"
+                            onClick={() => setShowTeamAccomplishmentDialog(true)}
+                            aria-label="Add team accomplishment"
+                          >
+                            <Users className="size-3.5" />
+                            <ClipboardPlus className="size-3.5" />
+                            <span className="hidden sm:inline">Team Entry</span>
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Add accomplishment for multiple team members</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-8"
+                    onClick={() => setShowRankColorsDialog(true)}
+                    aria-label="Rank color settings"
+                  >
+                    <Settings className="size-4" />
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent className="px-2 sm:px-4 md:px-6 pt-1.5 pb-3 sm:pb-4 md:pb-6">
@@ -2856,6 +2907,25 @@ export default function TeamPage() {
           loadAwards();
           setAwardRecipient(null);
         }}
+      />
+
+      {/* Add Entry Dialog for Team Members */}
+      <EntryFormDialog
+        open={showAddEntryDialog}
+        onOpenChange={(open) => {
+          setShowAddEntryDialog(open);
+          if (!open) setEntryRecipient(null);
+        }}
+        targetUserId={entryRecipient?.profileId}
+        targetManagedMemberId={entryRecipient?.teamMemberId}
+      />
+
+      {/* Team Accomplishment Dialog - For adding accomplishment to multiple team members */}
+      <AddTeamAccomplishmentDialog
+        open={showTeamAccomplishmentDialog}
+        onOpenChange={setShowTeamAccomplishmentDialog}
+        subordinates={subordinates}
+        managedMembers={managedMembers}
       />
 
       {/* Rank Colors Settings Dialog */}

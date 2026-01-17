@@ -192,6 +192,27 @@ export default function GeneratePage() {
     }
   }, [profile]);
 
+  // Load selectedRatee from localStorage on mount
+  useEffect(() => {
+    if (!profile || !cycleYear) return;
+
+    const key = `epb-selected-ratee-${profile.id}-${cycleYear}`;
+    const stored = localStorage.getItem(key);
+
+    if (stored) {
+      try {
+        const { ratee } = JSON.parse(stored);
+        if (ratee) {
+          // Set the ratee - validation will happen in the ratee validation useEffect
+          setSelectedRatee(ratee);
+        }
+      } catch (error) {
+        console.warn("Failed to parse stored ratee data:", error);
+        localStorage.removeItem(key);
+      }
+    }
+  }, [profile, cycleYear, setSelectedRatee]);
+
   // Load available AFSCs from community statements
   useEffect(() => {
     async function loadAvailableAfscs() {

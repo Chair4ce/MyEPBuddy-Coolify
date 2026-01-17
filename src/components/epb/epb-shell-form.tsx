@@ -1602,13 +1602,14 @@ export function EPBShellForm({
         
         if (statements.length === 0) return null;
 
-        // Combine statements if multiple
+        // Combine statements if multiple - don't add extra period if first statement ends with one
+        const separator = statements[0]?.trim().endsWith(".") ? " " : ". ";
         const combined = statements.length > 1
-          ? `${statements[0]}. ${statements[1]}`
+          ? `${statements[0]}${separator}${statements[1]}`
           : statements[0];
 
-        // Ensure it fits within limit
-        return combined.slice(0, maxChars);
+        // Return combined statement (don't slice - let QC handle character enforcement)
+        return combined;
       };
 
       // Generate requested number of versions in parallel

@@ -33,6 +33,7 @@ import {
   X,
   ChevronRight,
   Lightbulb,
+  CheckCircle2,
 } from "lucide-react";
 import {
   useClarifyingQuestionsStore,
@@ -302,57 +303,93 @@ export function ClarifyingQuestionsModal({
 }
 
 /**
- * Indicator button to show when clarifying questions are available
+ * Indicator button/badge to show clarifying questions status
+ * Shows different states:
+ * - Has questions (amber, pulsing) - click to open modal
+ * - No questions (green checkmark) - statement is complete
  */
 interface ClarifyingQuestionsIndicatorProps {
   mpaKey: string;
   rateeId: string;
+  /** Whether generation has completed for this MPA */
+  hasGenerated?: boolean;
   className?: string;
 }
 
 export function ClarifyingQuestionsIndicator({
   mpaKey,
   rateeId,
+  hasGenerated = false,
   className,
 }: ClarifyingQuestionsIndicatorProps) {
   const { getQuestionsForMPA, openModal } = useClarifyingQuestionsStore();
 
   const questionSet = getQuestionsForMPA(mpaKey, rateeId);
+  const questionCount = questionSet?.questions.length || 0;
+  const hasQuestions = questionCount > 0;
 
-  if (!questionSet || questionSet.questions.length === 0) {
+  // If no questions and hasn't generated, don't show anything
+  if (!hasQuestions && !hasGenerated) {
     return null;
   }
 
-  const isNew = !questionSet.hasBeenViewed;
+  // Show "no questions" badge when generated but no questions
+  if (!hasQuestions && hasGenerated) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge 
+            variant="outline" 
+            className={cn(
+              "gap-1 text-xs h-6 px-2 cursor-default",
+              "bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
+              className
+            )}
+          >
+            <CheckCircle2 className="h-3 w-3" />
+            Complete
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>No clarifying questions needed</p>
+          <p className="text-xs text-muted-foreground">
+            The AI had enough context to generate your statement
+          </p>
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  // Has questions - show indicator button
+  const isNew = !questionSet?.hasBeenViewed;
 
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <Button
           variant="ghost"
-          size="icon"
+          size="sm"
           className={cn(
-            "relative h-8 w-8",
+            "relative h-7 gap-1.5 px-2",
             isNew && "animate-pulse",
+            "bg-amber-500/10 hover:bg-amber-500/20 text-amber-600",
             className
           )}
-          onClick={() => openModal(questionSet.id)}
+          onClick={() => questionSet && openModal(questionSet.id)}
         >
-          <Lightbulb className={cn(
-            "h-4 w-4",
-            isNew ? "text-amber-500" : "text-muted-foreground"
-          )} />
+          <Lightbulb className="h-3.5 w-3.5" />
+          <span className="text-xs font-medium">
+            {questionCount} question{questionCount > 1 ? "s" : ""}
+          </span>
           {isNew && (
-            <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-amber-500 border-2 border-background" />
+            <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-amber-500 border border-background" />
           )}
         </Button>
       </TooltipTrigger>
       <TooltipContent>
-        <p>
-          {questionSet.questions.length} clarifying question{questionSet.questions.length > 1 ? "s" : ""} available
-        </p>
+        <p className="font-medium">Enhance your statement</p>
         <p className="text-xs text-muted-foreground">
-          Answer to enhance your statement
+          Answer {questionCount} question{questionCount > 1 ? "s" : ""} to add more impact
         </p>
       </TooltipContent>
     </Tooltip>
