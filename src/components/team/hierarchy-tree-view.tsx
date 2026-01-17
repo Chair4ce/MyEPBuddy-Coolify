@@ -949,8 +949,8 @@ export function HierarchyTreeView({
         )}
         style={{ 
           // Dynamic height calculated to fit viewport without causing page scroll
-          height: containerHeight ?? 380,
-          minHeight: 220,
+          height: containerHeight ?? 400,
+          minHeight: 300,
         }}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
@@ -972,6 +972,8 @@ export function HierarchyTreeView({
           height: totalHeight * zoom,
           marginLeft: "auto",
           marginRight: "auto",
+          // Smooth size transition when filtering changes tree dimensions
+          transition: "width 200ms ease-out, height 200ms ease-out",
         }}
       >
       {/* Inner content with transform for smooth zoom */}
@@ -1038,8 +1040,10 @@ export function HierarchyTreeView({
                 strokeWidth={1.5}
                 className="text-muted-foreground opacity-40"
                 style={{
-                  // Smooth transition for line changes
-                  transition: "d 300ms ease-out, opacity 200ms ease-out",
+                  // Smooth path transition for collapse mode, opacity for fade mode
+                  transition: filterMode === "collapse"
+                    ? "d 200ms ease-out, opacity 150ms ease-in-out"
+                    : "opacity 200ms ease-in-out",
                 }}
               />
             );
@@ -1054,8 +1058,8 @@ export function HierarchyTreeView({
             style={{ 
               top: row.y - cardHeight / 2, 
               height: row.height,
-              // Smooth transition for tier position changes
-              transition: "top 300ms ease-out, height 300ms ease-out",
+              // Smooth position transition for collapse mode
+              transition: filterMode === "collapse" ? "top 200ms ease-out, height 200ms ease-out" : "none",
             }}
           >
             {/* Members in this row */}
@@ -1079,16 +1083,17 @@ export function HierarchyTreeView({
               return (
                 <div
                   key={member.id}
-                  className={cn(
-                    "absolute z-10",
-                    !isVisible && "opacity-10 pointer-events-none"
-                  )}
+                  className="absolute z-10"
                   style={{
                     left: pos.x - cardWidth / 2,
                     top: stackOffset,
-                    // Smooth transition for position changes and opacity
-                    transition: "left 300ms ease-out, top 300ms ease-out, opacity 200ms ease-out",
-                    // Disable pointer events when spacebar is held for drag mode
+                    // Inline opacity for smooth CSS transition
+                    opacity: isVisible ? 1 : 0.1,
+                    // Smooth transitions for both position (collapse mode) and opacity (fade mode)
+                    transition: filterMode === "collapse" 
+                      ? "left 200ms ease-out, top 200ms ease-out, opacity 150ms ease-in-out"
+                      : "opacity 200ms ease-in-out",
+                    // Disable pointer events when spacebar is held for drag mode or not visible
                     pointerEvents: isSpaceHeld || !isVisible ? "none" : "auto",
                   }}
                 >
