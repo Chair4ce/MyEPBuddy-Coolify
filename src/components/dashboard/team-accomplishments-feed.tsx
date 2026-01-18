@@ -35,12 +35,23 @@ import {
   LayoutList,
   CalendarDays,
 } from "lucide-react";
-import { ENTRY_MGAS, SUPERVISOR_RANKS, AWARD_QUARTERS, getQuarterDateRange, getFiscalQuarterDateRange } from "@/lib/constants";
+import { ENTRY_MGAS, SUPERVISOR_RANKS, AWARD_QUARTERS, getQuarterDateRange, getFiscalQuarterDateRange, ENLISTED_RANKS, OFFICER_RANKS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import type { AwardQuarter } from "@/types/database";
 import { AccomplishmentDetailDialog } from "./accomplishment-detail-dialog";
 import { getAccomplishmentCommentCounts } from "@/app/actions/accomplishment-comments";
 import type { Accomplishment, Profile, ManagedMember, Rank } from "@/types/database";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
+
+// All ranks for filtering (enlisted + officer, excluding civilian for typical use)
+const FEED_FILTER_RANKS = [...ENLISTED_RANKS, ...OFFICER_RANKS];
 
 // Time period filter options
 const TIME_PERIODS = [
@@ -54,7 +65,7 @@ const TIME_PERIODS = [
 type TimePeriod = typeof TIME_PERIODS[number]["value"];
 
 interface TeamAccomplishmentsFeedProps {
-  cycleYear: number;
+  cycleYear: number; // Still passed for quarterly view grouping, but not used for filtering
 }
 
 export function TeamAccomplishmentsFeed({ cycleYear }: TeamAccomplishmentsFeedProps) {
@@ -79,6 +90,12 @@ export function TeamAccomplishmentsFeed({ cycleYear }: TeamAccomplishmentsFeedPr
   const [memberFilter, setMemberFilter] = useState<string>("all");
   const [mpaFilter, setMpaFilter] = useState<string>("all");
   const [timePeriodFilter, setTimePeriodFilter] = useState<TimePeriod>("all");
+  
+  // Rank filter - all ranks enabled by default
+  const [enabledRanks, setEnabledRanks] = useState<Set<string>>(() => 
+    new Set(FEED_FILTER_RANKS.map(r => r.value))
+  );
+  const [rankFilterOpen, setRankFilterOpen] = useState(false);
   
   // View mode: list or quarterly
   const [viewMode, setViewMode] = useState<"list" | "quarterly">("list");
@@ -136,7 +153,8 @@ export function TeamAccomplishmentsFeed({ cycleYear }: TeamAccomplishmentsFeedPr
           }
         }
 
-        // Fetch accomplishments from subordinates' user_ids
+        // Fetch all accomplishments from subordinates' user_ids
+        // No cycle_year filter - show all recent accomplishments regardless of performance cycle
         let allAccomplishments: Accomplishment[] = [];
 
         if (subordinateIds.length > 0) {
@@ -144,9 +162,9 @@ export function TeamAccomplishmentsFeed({ cycleYear }: TeamAccomplishmentsFeedPr
             .from("accomplishments")
             .select("*")
             .in("user_id", subordinateIds)
-            .eq("cycle_year", cycleYear)
             .is("team_member_id", null)
-            .order("created_at", { ascending: false });
+            .order("created_at", { ascending: false })
+            .limit(500); // Reasonable limit to prevent loading too much data
 
           if (subordinateAccomplishments) {
             allAccomplishments = subordinateAccomplishments as unknown as Accomplishment[];
@@ -164,8 +182,8 @@ export function TeamAccomplishmentsFeed({ cycleYear }: TeamAccomplishmentsFeedPr
               .from("accomplishments")
               .select("*")
               .in("team_member_id", managedMemberIds)
-              .eq("cycle_year", cycleYear)
-              .order("created_at", { ascending: false });
+              .order("created_at", { ascending: false })
+              .limit(500);
 
             if (managedAccomplishments) {
               allAccomplishments = [
@@ -277,7 +295,6 @@ export function TeamAccomplishmentsFeed({ cycleYear }: TeamAccomplishmentsFeedPr
     loadTeamFeed();
   }, [
     profile,
-    cycleYear,
     subordinates,
     managedMembers,
     supabase,
@@ -460,9 +477,54 @@ export function TeamAccomplishmentsFeed({ cycleYear }: TeamAccomplishmentsFeedPr
     return ENTRY_MGAS.filter((mpa) => mpaSet.has(mpa.key));
   }, [feedAccomplishments]);
 
+  // Get unique ranks that exist in the feed for display
+  const availableRanks = useMemo(() => {
+    const rankSet = new Set<string>();
+    feedAccomplishments.forEach((acc) => {
+      if (acc.author_rank) {
+        rankSet.add(acc.author_rank);
+      }
+    });
+    return FEED_FILTER_RANKS.filter((r) => rankSet.has(r.value));
+  }, [feedAccomplishments]);
+
+  // Toggle a rank in the filter
+  const toggleRank = (rank: string) => {
+    setEnabledRanks((prev) => {
+      const next = new Set(prev);
+      if (next.has(rank)) {
+        next.delete(rank);
+      } else {
+        next.add(rank);
+      }
+      return next;
+    });
+  };
+
+  // Select/deselect all ranks
+  const toggleAllRanks = (enabled: boolean) => {
+    if (enabled) {
+      setEnabledRanks(new Set(FEED_FILTER_RANKS.map((r) => r.value)));
+    } else {
+      setEnabledRanks(new Set());
+    }
+  };
+
+  // Check if rank filter is modified from default (all enabled)
+  const isRankFilterActive = enabledRanks.size !== FEED_FILTER_RANKS.length;
+
   // Filter accomplishments
   const filteredAccomplishments = useMemo(() => {
     let filtered = feedAccomplishments;
+
+    // Rank filter
+    if (isRankFilterActive) {
+      filtered = filtered.filter((acc) => {
+        // If no rank, show if "unknown" ranks should be shown (we'll include them)
+        if (!acc.author_rank) return true;
+        return enabledRanks.has(acc.author_rank);
+      });
+    }
 
     // Member filter
     if (memberFilter !== "all") {
@@ -510,16 +572,17 @@ export function TeamAccomplishmentsFeed({ cycleYear }: TeamAccomplishmentsFeedPr
     }
 
     return filtered;
-  }, [feedAccomplishments, memberFilter, mpaFilter, timePeriodFilter]);
+  }, [feedAccomplishments, memberFilter, mpaFilter, timePeriodFilter, enabledRanks, isRankFilterActive]);
 
   // Check if any filters are active
-  const hasActiveFilters = memberFilter !== "all" || mpaFilter !== "all" || timePeriodFilter !== "all";
+  const hasActiveFilters = memberFilter !== "all" || mpaFilter !== "all" || timePeriodFilter !== "all" || isRankFilterActive;
 
   // Clear all filters
   const clearFilters = () => {
     setMemberFilter("all");
     setMpaFilter("all");
     setTimePeriodFilter("all");
+    setEnabledRanks(new Set(FEED_FILTER_RANKS.map((r) => r.value)));
   };
 
   // Helper to get month key from date string
@@ -673,8 +736,8 @@ export function TeamAccomplishmentsFeed({ cycleYear }: TeamAccomplishmentsFeedPr
           <TrendingUp className="size-12 mx-auto text-muted-foreground mb-4" />
           <h3 className="font-semibold text-lg mb-2">No Team Activity Yet</h3>
           <p className="text-sm text-muted-foreground max-w-md mx-auto">
-            Your team members haven&apos;t logged any accomplishments for the {cycleYear} cycle
-            yet. Encourage them to start tracking their achievements!
+            Your team members haven&apos;t logged any accomplishments yet.
+            Encourage them to start tracking their achievements!
           </p>
         </CardContent>
       </Card>
@@ -692,7 +755,7 @@ export function TeamAccomplishmentsFeed({ cycleYear }: TeamAccomplishmentsFeedPr
             <div className="flex flex-wrap items-center gap-2">
               {/* Member Filter */}
               <Select value={memberFilter} onValueChange={setMemberFilter}>
-                <SelectTrigger className="w-[140px] sm:w-[160px] h-8 text-xs">
+                <SelectTrigger className="w-auto min-w-[130px] max-w-[200px] h-8 text-xs">
                   <Users className="size-3.5 mr-1.5 shrink-0 text-muted-foreground" />
                   <SelectValue placeholder="All Members" />
                 </SelectTrigger>
@@ -706,9 +769,131 @@ export function TeamAccomplishmentsFeed({ cycleYear }: TeamAccomplishmentsFeedPr
                 </SelectContent>
               </Select>
 
+              {/* Rank Filter */}
+              <Popover open={rankFilterOpen} onOpenChange={setRankFilterOpen}>
+                <PopoverTrigger asChild>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className={cn(
+                      "h-8 text-xs gap-1.5",
+                      isRankFilterActive && "border-primary"
+                    )}
+                  >
+                    <Award className="size-3.5 text-muted-foreground" />
+                    Ranks
+                    {isRankFilterActive && (
+                      <Badge variant="secondary" className="ml-1 h-4 px-1 text-[10px]">
+                        {enabledRanks.size}
+                      </Badge>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-64 p-0" align="start">
+                  <div className="p-3 border-b">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">Filter by Rank</span>
+                      <div className="flex gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-2 text-xs"
+                          onClick={() => toggleAllRanks(true)}
+                        >
+                          All
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-2 text-xs"
+                          onClick={() => toggleAllRanks(false)}
+                        >
+                          None
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                  <ScrollArea className="h-64">
+                    <div className="p-2 space-y-1">
+                      {/* Enlisted Ranks */}
+                      <div className="px-2 py-1">
+                        <span className="text-xs font-medium text-muted-foreground">Enlisted</span>
+                      </div>
+                      {ENLISTED_RANKS.map((rank) => {
+                        const hasEntries = availableRanks.some((r) => r.value === rank.value);
+                        return (
+                          <div
+                            key={rank.value}
+                            className={cn(
+                              "flex items-center space-x-2 px-2 py-1.5 rounded-md hover:bg-muted/50 cursor-pointer",
+                              !hasEntries && "opacity-50"
+                            )}
+                            onClick={() => toggleRank(rank.value)}
+                          >
+                            <Checkbox
+                              id={`rank-${rank.value}`}
+                              checked={enabledRanks.has(rank.value)}
+                              onCheckedChange={() => toggleRank(rank.value)}
+                              aria-label={`Filter by ${rank.value}`}
+                            />
+                            <Label
+                              htmlFor={`rank-${rank.value}`}
+                              className="text-sm cursor-pointer flex-1"
+                            >
+                              {rank.value}
+                            </Label>
+                            {hasEntries && (
+                              <span className="text-xs text-muted-foreground">
+                                {feedAccomplishments.filter((a) => a.author_rank === rank.value).length}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                      
+                      {/* Officer Ranks */}
+                      <div className="px-2 py-1 mt-2">
+                        <span className="text-xs font-medium text-muted-foreground">Officer</span>
+                      </div>
+                      {OFFICER_RANKS.map((rank) => {
+                        const hasEntries = availableRanks.some((r) => r.value === rank.value);
+                        return (
+                          <div
+                            key={rank.value}
+                            className={cn(
+                              "flex items-center space-x-2 px-2 py-1.5 rounded-md hover:bg-muted/50 cursor-pointer",
+                              !hasEntries && "opacity-50"
+                            )}
+                            onClick={() => toggleRank(rank.value)}
+                          >
+                            <Checkbox
+                              id={`rank-${rank.value}`}
+                              checked={enabledRanks.has(rank.value)}
+                              onCheckedChange={() => toggleRank(rank.value)}
+                              aria-label={`Filter by ${rank.value}`}
+                            />
+                            <Label
+                              htmlFor={`rank-${rank.value}`}
+                              className="text-sm cursor-pointer flex-1"
+                            >
+                              {rank.value}
+                            </Label>
+                            {hasEntries && (
+                              <span className="text-xs text-muted-foreground">
+                                {feedAccomplishments.filter((a) => a.author_rank === rank.value).length}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </ScrollArea>
+                </PopoverContent>
+              </Popover>
+
               {/* MPA Filter */}
               <Select value={mpaFilter} onValueChange={setMpaFilter}>
-                <SelectTrigger className="w-[120px] sm:w-[140px] h-8 text-xs">
+                <SelectTrigger className="w-auto min-w-[100px] h-8 text-xs">
                   <Filter className="size-3.5 mr-1.5 shrink-0 text-muted-foreground" />
                   <SelectValue placeholder="All MPAs" />
                 </SelectTrigger>
@@ -725,7 +910,7 @@ export function TeamAccomplishmentsFeed({ cycleYear }: TeamAccomplishmentsFeedPr
               {/* Time Period Filter - only show in list view */}
               {viewMode === "list" && (
                 <Select value={timePeriodFilter} onValueChange={(v) => setTimePeriodFilter(v as TimePeriod)}>
-                  <SelectTrigger className="w-[110px] sm:w-[130px] h-8 text-xs">
+                  <SelectTrigger className="w-auto min-w-[120px] h-8 text-xs">
                     <Calendar className="size-3.5 mr-1.5 shrink-0 text-muted-foreground" />
                     <SelectValue placeholder="All Time" />
                   </SelectTrigger>
