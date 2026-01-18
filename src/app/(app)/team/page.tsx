@@ -1809,14 +1809,8 @@ export default function TeamPage() {
   return (
     <div className="flex w-full h-full min-h-0 overflow-hidden">
       {/* Main Content Area */}
-      <div className={cn(
-        "flex-1 min-w-0 min-h-0 flex flex-col transition-all duration-300",
-        isProjectsPanelOpen ? "pr-0" : ""
-      )}>
-        <div className={cn(
-          "w-full flex-1 min-h-0 flex flex-col space-y-4 sm:space-y-6 px-4 sm:px-6",
-          isProjectsPanelOpen ? "max-w-7xl mx-auto" : "" // Allow full width when projects panel is closed
-        )}>
+      <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-y-auto">
+        <div className="w-full flex-1 min-h-0 flex flex-col space-y-4 sm:space-y-6 px-4 sm:px-6 max-w-7xl">
           {/* Assign Mode Banner */}
           {isAssignMode && selectedProjectId && (
             <div className="flex items-center justify-between p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">

@@ -155,10 +155,10 @@ export function ProjectsSidePanel({
   return (
     <div
       className={cn(
-        "shrink-0 border-l bg-background flex flex-col h-full overflow-hidden transition-all duration-300 ease-out",
+        "shrink-0 border-l bg-background flex flex-col h-full overflow-hidden transition-[width,opacity] duration-300 ease-out",
         isOpen 
           ? "w-full md:w-[380px] lg:w-[420px] opacity-100" 
-          : "w-0 opacity-0 border-l-0",
+          : "w-0 opacity-0 border-l-transparent",
         className
       )}
     >
