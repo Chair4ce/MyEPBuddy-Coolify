@@ -2279,7 +2279,25 @@ export default function TeamPage() {
                 </p>
               </div>
             </div>
-            <DialogFooter>
+            <DialogFooter className="flex-col sm:flex-row gap-2">
+              {/* Delete button for managed members */}
+              {selectedSubordinate?.isManagedMember && (
+                <Button 
+                  variant="destructive" 
+                  className="w-full sm:w-auto sm:mr-auto"
+                  onClick={() => {
+                    setConfirmDeleteMember({
+                      id: selectedSubordinate.id,
+                      name: `${selectedSubordinate.rank || ""} ${selectedSubordinate.name}`.trim(),
+                      type: "managed",
+                    });
+                    setSelectedSubordinate(null);
+                  }}
+                >
+                  <Trash2 className="mr-2 size-4" />
+                  Delete Member
+                </Button>
+              )}
               <Button variant="outline" onClick={() => setSelectedSubordinate(null)}>
                 Cancel
               </Button>
@@ -2455,7 +2473,7 @@ export default function TeamPage() {
                   <CardTitle className="flex items-center gap-2 text-sm sm:text-base md:text-lg">
                     <Users className="size-4 sm:size-5" />
                     Supervision Tree
-                  </CardTitle>
+                  </CardTitle> 
                 </div>
                 <div className="flex items-center gap-1">
                   {canSupervise(profile?.rank) && (subordinates.length > 0 || managedMembers.length > 0) && (
@@ -2580,7 +2598,7 @@ export default function TeamPage() {
                     }}
                   />
                 ) : (
-                  <div className="overflow-x-auto">
+                  <div className="overflow-auto max-h-[60vh]">
                     <div className="md:max-w-2xl lg:max-w-3xl">{renderTreeNode(tree)}</div>
                   </div>
                 )

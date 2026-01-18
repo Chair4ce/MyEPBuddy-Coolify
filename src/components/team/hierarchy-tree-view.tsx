@@ -100,6 +100,8 @@ interface HierarchyMember {
   children: string[]; // IDs of direct children
   stackIndex?: number; // Vertical position within junior enlisted stack (0 = top)
   stackTotal?: number; // Total items in the stack
+  depth?: number; // Depth in tree (0 = root)
+  isSameRankAsParent?: boolean; // True if parent has same rank tier (positioned to the right)
 }
 
 interface RankColors {
@@ -137,7 +139,9 @@ function flattenTree(
   result: Map<string, HierarchyMember>,
   collapsedNodes: Set<string>,
   visibleRanks: Set<Rank>,
-  filterMode: "fade" | "collapse"
+  filterMode: "fade" | "collapse",
+  depth: number = 0,
+  parentRank: Rank | null = null
 ): void {
   const isCollapsed = collapsedNodes.has(node.data.id);
   
@@ -151,6 +155,11 @@ function flattenTree(
   
   // The parent ID for children - either this node's ID or pass through the parent
   const childParentId = shouldInclude ? node.data.id : parentId;
+  
+  // Check if this node has the same display tier as its parent (for horizontal positioning)
+  const nodeTier = getDisplayTier(node.data.rank);
+  const parentTier = getDisplayTier(parentRank);
+  const isSameRankAsParent = parentId !== null && nodeTier === parentTier && nodeTier !== "JuniorEnlisted";
   
   if (shouldInclude) {
     // Collect visible children IDs (for collapse mode, only include children with visible ranks)
@@ -179,6 +188,8 @@ function flattenTree(
       isPlaceholder: node.data.isPlaceholder,
       isCurrentUser: node.data.id === currentUserId,
       children: childIds,
+      depth,
+      isSameRankAsParent,
     };
     result.set(node.data.id, member);
   }
@@ -186,7 +197,7 @@ function flattenTree(
   // Only recurse into children if not collapsed
   if (!isCollapsed) {
     for (const child of node.children) {
-      flattenTree(child, childParentId, currentUserId, result, collapsedNodes, visibleRanks, filterMode);
+      flattenTree(child, childParentId, currentUserId, result, collapsedNodes, visibleRanks, filterMode, depth + 1, node.data.rank);
     }
   }
 }
@@ -225,6 +236,21 @@ function groupByDisplayTier(members: Map<string, HierarchyMember>): Map<Rank | "
   return groups;
 }
 
+// Group members by depth (for proper tier placement when same-rank supervision exists)
+function groupByDepth(members: Map<string, HierarchyMember>): Map<number, HierarchyMember[]> {
+  const groups = new Map<number, HierarchyMember[]>();
+  
+  for (const member of members.values()) {
+    const depth = member.depth ?? 0;
+    if (!groups.has(depth)) {
+      groups.set(depth, []);
+    }
+    groups.get(depth)!.push(member);
+  }
+  
+  return groups;
+}
+
 // Get display tier index for ordering
 function getDisplayTierIndex(tier: Rank | "JuniorEnlisted" | "Unknown"): number {
   if (tier === "Unknown") return DISPLAY_TIERS.length;
@@ -255,20 +281,42 @@ function calculatePositions(
     });
   }
   
+  // Get the chain of same-rank children (horizontal chain)
+  function getSameRankChain(memberId: string): string[] {
+    const chain: string[] = [];
+    const member = members.get(memberId);
+    if (!member) return chain;
+    
+    for (const childId of member.children) {
+      const child = members.get(childId);
+      if (child?.isSameRankAsParent) {
+        chain.push(childId);
+        // Recursively get chain from this child too
+        chain.push(...getSameRankChain(childId));
+      }
+    }
+    return chain;
+  }
+  
   // Calculate subtree width recursively (bottom-up)
   // Junior enlisted children are stacked vertically, so they don't add horizontal width
+  // Same-rank children are positioned horizontally, adding to this node's row width
   function getSubtreeWidth(memberId: string): number {
     const member = members.get(memberId);
     if (!member) return nodeWidth;
+    
+    // Calculate width needed for same-rank horizontal chain at this level
+    const sameRankChain = getSameRankChain(memberId);
+    const horizontalChainWidth = (1 + sameRankChain.length) * nodeWidth;
     
     if (member.children.length === 0) {
       return nodeWidth;
     }
     
     // If this member only has junior enlisted children, they stack vertically
-    // So the subtree width is just this node's width
+    // So the subtree width is just this node's width (plus any same-rank chain)
     if (hasOnlyJuniorEnlistedChildren(memberId)) {
-      return nodeWidth;
+      return horizontalChainWidth;
     }
     
     // Sort children by rank, then alphabetically
@@ -280,17 +328,77 @@ function calculatePositions(
       return (memberA?.name || "").localeCompare(memberB?.name || "");
     });
     
-    let totalWidth = 0;
+    let totalChildWidth = 0;
     for (const childId of sortedChildren) {
       const child = members.get(childId);
       // Skip junior enlisted in width calculation - they're stacked vertically
       if (child && isJuniorEnlisted(child.rank)) {
         continue;
       }
-      totalWidth += getSubtreeWidth(childId);
+      // Skip same-rank children - they're positioned horizontally with parent
+      if (child?.isSameRankAsParent) {
+        continue;
+      }
+      totalChildWidth += getSubtreeWidth(childId);
     }
     
-    return Math.max(nodeWidth, totalWidth);
+    // Width is max of: horizontal chain width, or children subtree width
+    return Math.max(horizontalChainWidth, totalChildWidth);
+  }
+  
+  // Position a horizontal chain of same-rank members
+  function positionSameRankChain(startMemberId: string, startX: number): number {
+    let currentX = startX;
+    const member = members.get(startMemberId);
+    if (!member) return currentX;
+    
+    // Find same-rank children of this member
+    for (const childId of member.children) {
+      const child = members.get(childId);
+      if (child?.isSameRankAsParent) {
+        // Position this same-rank child to the right
+        positioned.set(childId, {
+          ...child,
+          x: currentX + nodeWidth / 2,
+          width: nodeWidth,
+        });
+        currentX += nodeWidth;
+        
+        // Recursively position any same-rank children of this child
+        currentX = positionSameRankChain(childId, currentX);
+        
+        // Also need to position non-same-rank children of this same-rank child
+        positionChildrenOfSameRankMember(childId);
+      }
+    }
+    return currentX;
+  }
+  
+  // Position children of a same-rank member (their regular children go below)
+  function positionChildrenOfSameRankMember(memberId: string): void {
+    const member = members.get(memberId);
+    if (!member) return;
+    
+    const memberPos = positioned.get(memberId);
+    if (!memberPos) return;
+    
+    // Position non-same-rank, non-junior children below this member
+    for (const childId of member.children) {
+      const child = members.get(childId);
+      if (!child) continue;
+      if (child.isSameRankAsParent) continue; // Already positioned in chain
+      if (isJuniorEnlisted(child.rank)) {
+        // Position junior enlisted at same X
+        positioned.set(childId, {
+          ...child,
+          x: memberPos.x,
+          width: nodeWidth,
+        });
+      } else {
+        // Regular child - position below centered
+        positionNode(childId, memberPos.x - nodeWidth / 2);
+      }
+    }
   }
   
   // Position nodes recursively (top-down)
@@ -342,7 +450,7 @@ function calculatePositions(
       return (memberA?.name || "").localeCompare(memberB?.name || "");
     });
     
-    // Position non-junior children first
+    // Position non-junior, non-same-rank children first (below this node)
     let currentX = startX;
     let minChildX = Infinity;
     let maxChildX = -Infinity;
@@ -353,6 +461,10 @@ function calculatePositions(
       if (child && isJuniorEnlisted(child.rank)) {
         continue;
       }
+      // Skip same-rank children - they get positioned horizontally
+      if (child?.isSameRankAsParent) {
+        continue;
+      }
       currentX = positionNode(childId, currentX);
       const childPos = positioned.get(childId);
       if (childPos) {
@@ -361,8 +473,15 @@ function calculatePositions(
       }
     }
     
-    // Center parent above children
-    const parentX = minChildX === Infinity ? startX + nodeWidth / 2 : (minChildX + maxChildX) / 2;
+    // Calculate parent X position
+    // If there are regular children below, center above them
+    // Otherwise, start at startX
+    let parentX: number;
+    if (minChildX !== Infinity) {
+      parentX = (minChildX + maxChildX) / 2;
+    } else {
+      parentX = startX + nodeWidth / 2;
+    }
     
     positioned.set(memberId, {
       ...member,
@@ -370,7 +489,12 @@ function calculatePositions(
       width: subtreeWidth,
     });
     
-    return startX + subtreeWidth;
+    // Position same-rank children to the right of this member
+    let chainEndX = parentX + nodeWidth / 2;
+    chainEndX = positionSameRankChain(memberId, chainEndX);
+    
+    // Return the rightmost edge of the subtree
+    return Math.max(currentX, chainEndX);
   }
   
   positionNode(rootId, leftPadding);
@@ -570,7 +694,7 @@ export function HierarchyTreeView({
       }
     }
     
-    // Group by display tier for row rendering
+    // Group by display tier for row rendering (rank-based)
     const groups = groupByDisplayTier(members);
     
     // Sort tiers by hierarchy order
@@ -1017,19 +1141,30 @@ export function HierarchyTreeView({
               ? member.stackIndex * juniorStackHeight 
               : 0;
             
-            // Draw line from parent bottom to child top (with tighter spacing)
-            const startX = parent.x;
-            const startY = parentRow.y + parentStackOffset + cardHeight / 2 + 2;
-            const endX = member.x;
-            const endY = childRow.y + childStackOffset - cardHeight / 2 - 2;
+            let pathD: string;
             
-            // If same x position (stacked column), draw straight line
-            // Otherwise draw Manhattan-style routed line with shorter middle segment
-            const isSameColumn = Math.abs(startX - endX) < 5;
-            const midY = startY + (endY - startY) * 0.5;
-            const pathD = isSameColumn
-              ? `M ${startX} ${startY} L ${endX} ${endY}`
-              : `M ${startX} ${startY} L ${startX} ${midY} L ${endX} ${midY} L ${endX} ${endY}`;
+            // Same-rank children get horizontal lines (left to right in same row)
+            if (member.isSameRankAsParent) {
+              const startX = parent.x + cardWidth / 2 + 2;
+              const startY = parentRow.y + parentStackOffset;
+              const endX = member.x - cardWidth / 2 - 2;
+              const endY = childRow.y + childStackOffset;
+              pathD = `M ${startX} ${startY} L ${endX} ${endY}`;
+            } else {
+              // Regular vertical line from parent bottom to child top
+              const startX = parent.x;
+              const startY = parentRow.y + parentStackOffset + cardHeight / 2 + 2;
+              const endX = member.x;
+              const endY = childRow.y + childStackOffset - cardHeight / 2 - 2;
+              
+              // If same x position (stacked column), draw straight line
+              // Otherwise draw Manhattan-style routed line with shorter middle segment
+              const isSameColumn = Math.abs(startX - endX) < 5;
+              const midY = startY + (endY - startY) * 0.5;
+              pathD = isSameColumn
+                ? `M ${startX} ${startY} L ${endX} ${endY}`
+                : `M ${startX} ${startY} L ${startX} ${midY} L ${endX} ${midY} L ${endX} ${endY}`;
+            }
             
             return (
               <path
