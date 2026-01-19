@@ -1046,7 +1046,10 @@ export function TeamAccomplishmentsFeed({ cycleYear }: TeamAccomplishmentsFeedPr
                               return (
                                 <div 
                                   key={acc.id} 
-                                  className="group p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors cursor-pointer"
+                                  className={cn(
+                                    "group p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors cursor-pointer",
+                                    acc.chain_depth === 1 && "border-l-2 border-l-primary/40"
+                                  )}
                                   onClick={() => handleAccomplishmentClick(acc)}
                                   role="button"
                                   tabIndex={0}
@@ -1059,7 +1062,10 @@ export function TeamAccomplishmentsFeed({ cycleYear }: TeamAccomplishmentsFeedPr
                                 >
                                   <div className="flex items-start gap-3">
                                     {/* Avatar */}
-                                    <div className="size-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0 text-xs font-medium text-primary">
+                                    <div className={cn(
+                                      "size-8 rounded-full flex items-center justify-center shrink-0 text-xs font-medium",
+                                      acc.chain_depth === 1 ? "bg-primary/20 text-primary" : "bg-primary/10 text-primary"
+                                    )}>
                                       {acc.author_name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
                                     </div>
                                     
@@ -1120,10 +1126,16 @@ export function TeamAccomplishmentsFeed({ cycleYear }: TeamAccomplishmentsFeedPr
                     const mpaLabel =
                       ENTRY_MGAS.find((m) => m.key === acc.mpa)?.label || acc.mpa;
 
+                    // Check if this is a direct subordinate (depth 1)
+                    const isDirectSubordinate = acc.chain_depth === 1;
+
                     return (
                       <Card
                         key={acc.id}
-                        className="cursor-pointer hover:bg-muted/50 transition-all hover:shadow-md group"
+                        className={cn(
+                          "cursor-pointer hover:bg-muted/50 transition-all hover:shadow-md group",
+                          isDirectSubordinate && "border-l-2 border-l-primary/40"
+                        )}
                         onClick={() => handleAccomplishmentClick(acc)}
                         tabIndex={0}
                         role="button"
@@ -1138,7 +1150,10 @@ export function TeamAccomplishmentsFeed({ cycleYear }: TeamAccomplishmentsFeedPr
                         <CardContent className="p-4">
                           <div className="flex items-start gap-3">
                             {/* Avatar */}
-                            <div className="size-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0 text-sm font-medium text-primary">
+                            <div className={cn(
+                              "size-10 rounded-full flex items-center justify-center shrink-0 text-sm font-medium",
+                              isDirectSubordinate ? "bg-primary/20 text-primary" : "bg-primary/10 text-primary"
+                            )}>
                               {acc.author_name
                                 .split(" ")
                                 .map((n) => n[0])

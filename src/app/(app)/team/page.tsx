@@ -74,6 +74,7 @@ import {
   FolderKanban,
   List,
   Network,
+  Target,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -110,6 +111,7 @@ import { ProjectMembersManager } from "@/components/team/project-members-manager
 import { AddProjectAccomplishmentDialog } from "@/components/team/add-project-accomplishment-dialog";
 import { ProjectsInfoModal, useProjectsInfoModal } from "@/components/team/projects-info-modal";
 import { HierarchyTreeView } from "@/components/team/hierarchy-tree-view";
+import { SetExpectationsDialog } from "@/components/team/set-expectations-dialog";
 import { useProjectsStore } from "@/stores/projects-store";
 import { toast } from "@/components/ui/sonner";
 import { 
@@ -335,6 +337,13 @@ export default function TeamPage() {
 
   // Team accomplishment dialog state
   const [showTeamAccomplishmentDialog, setShowTeamAccomplishmentDialog] = useState(false);
+
+  // Set expectations dialog state
+  const [showExpectationsDialog, setShowExpectationsDialog] = useState(false);
+  const [expectationsTarget, setExpectationsTarget] = useState<{
+    subordinate?: Profile;
+    managedMember?: ManagedMember;
+  } | null>(null);
 
   // Projects state
   const { 
@@ -1710,6 +1719,22 @@ export default function TeamPage() {
                           Add Entry
                         </DropdownMenuItem>
                       )}
+                      {/* Set Expectations - only for direct subordinates (depth 1) */}
+                      {canSupervise(profile?.rank) && depth === 1 && (
+                        <DropdownMenuItem onClick={() => {
+                          if (isManagedMember) {
+                            const member = managedMembers.find(m => m.id === node.data.id);
+                            setExpectationsTarget({ managedMember: member || undefined });
+                          } else {
+                            const sub = subordinates.find(s => s.id === node.data.id);
+                            setExpectationsTarget({ subordinate: sub || undefined });
+                          }
+                          setShowExpectationsDialog(true);
+                        }}>
+                          <Target className="size-4 mr-2" />
+                          Set Expectations
+                        </DropdownMenuItem>
+                      )}
                       {/* Edit option only available to the user who created the managed member */}
                       {isManagedMember && !node.data.createdBy && (
                         <DropdownMenuItem onClick={() => {
@@ -2012,6 +2037,16 @@ export default function TeamPage() {
           onSuccess={() => setEditManagedMember(null)}
         />
         
+        {/* Set Expectations Dialog */}
+        <SetExpectationsDialog
+          open={showExpectationsDialog}
+          onOpenChange={setShowExpectationsDialog}
+          subordinate={expectationsTarget?.subordinate}
+          managedMember={expectationsTarget?.managedMember}
+          supervisorRank={profile?.rank}
+          onSuccess={() => setExpectationsTarget(null)}
+        />
+        
         {/* Remove/Delete Member Confirmation Dialog */}
         <AlertDialog open={!!confirmDeleteMember} onOpenChange={() => { setConfirmDeleteMember(null); setDeleteWithData(false); }}>
           <AlertDialogContent>
@@ -2290,6 +2325,32 @@ export default function TeamPage() {
                 >
                   <Trash2 className="mr-2 size-4" />
                   Delete Member
+                </Button>
+              )}
+              {/* Set Expectations button - only for direct subordinates */}
+              {canSupervise(profile?.rank) && selectedSubordinate && (
+                // Check if this is a direct subordinate (in subordinates array or managed by current user)
+                (subordinates.some(s => s.id === selectedSubordinate.id) || 
+                 (selectedSubordinate.isManagedMember && managedMembers.some(m => m.id === selectedSubordinate.id && m.supervisor_id === profile?.id)))
+              ) && (
+                <Button 
+                  variant="outline"
+                  className="w-full sm:w-auto gap-2"
+                  onClick={() => {
+                    // Set up the target for expectations dialog
+                    if (selectedSubordinate.isManagedMember) {
+                      const member = managedMembers.find(m => m.id === selectedSubordinate.id);
+                      setExpectationsTarget({ managedMember: member || undefined });
+                    } else {
+                      const sub = subordinates.find(s => s.id === selectedSubordinate.id);
+                      setExpectationsTarget({ subordinate: sub || undefined });
+                    }
+                    setShowExpectationsDialog(true);
+                    setSelectedSubordinate(null);
+                  }}
+                >
+                  <Target className="size-4" />
+                  Set Expectations
                 </Button>
               )}
               <Button variant="outline" onClick={() => setSelectedSubordinate(null)}>

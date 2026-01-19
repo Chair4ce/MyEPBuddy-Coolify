@@ -310,6 +310,23 @@ export interface TeamHistory {
   created_at: string;
 }
 
+// Supervisor expectations - private expectations set by supervisor for subordinate
+export interface SupervisorExpectation {
+  id: string;
+  supervisor_id: string;
+  subordinate_id: string | null;
+  team_member_id: string | null;
+  expectation_text: string;
+  supervision_start_date: string;
+  supervision_end_date: string | null;
+  cycle_year: number;
+  created_at: string;
+  updated_at: string;
+  // Joined fields
+  supervisor_name?: string;
+  supervisor_rank?: Rank | null;
+}
+
 // Pending managed account links - when user signs up with matching email
 export interface PendingManagedLink {
   id: string;
