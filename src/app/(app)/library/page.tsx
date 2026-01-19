@@ -606,12 +606,15 @@ export default function LibraryPage() {
   }
 
   return (
-    <div className="w-full min-w-0 space-y-4 sm:space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Statement Library</h1>
-        </div>
+    <div className="w-full min-w-0 h-full flex flex-col">
+      {/* Fixed Header */}
+      <div className="shrink-0 space-y-4 sm:space-y-6 pb-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Statement Library</h1>
+          </div>
         <div className="flex items-center gap-2 shrink-0">
+          {/* TODO: Workspace feature - future version
           <Button
             variant="outline"
             onClick={() => setIsCombineDialogOpen(true)}
@@ -621,19 +624,20 @@ export default function LibraryPage() {
             <Combine className="size-4" />
             <span className="hidden sm:inline">Workspace</span>
           </Button>
+          */}
           <Button
-            onClick={() => setIsAddDialogOpen(true)}
-            className="gap-1.5"
-            aria-label="Add statement"
-          >
-            <Plus className="size-4" />
-            <span className="hidden sm:inline">Add</span>
-          </Button>
+              onClick={() => setIsAddDialogOpen(true)}
+              className="gap-1.5"
+              aria-label="Add statement"
+            >
+              <Plus className="size-4" />
+              <span className="hidden sm:inline">Add</span>
+            </Button>
+          </div>
         </div>
-      </div>
 
-      {/* Filters */}
-      <div className="w-full p-4 rounded-lg border bg-card">
+        {/* Filters */}
+        <div className="w-full p-4 rounded-lg border bg-card">
         <div className="flex flex-col gap-3 sm:gap-4">
           <div className="relative w-full">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
@@ -723,11 +727,12 @@ export default function LibraryPage() {
             )}
           </div>
         </div>
+        </div>
       </div>
 
-      {/* Tabs - Full width container */}
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)} className="w-full">
-        <TabsList className="w-full grid grid-cols-3 h-auto p-1">
+      {/* Tabs - Full width container with scrollable content */}
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)} className="w-full flex-1 min-h-0 flex flex-col">
+        <TabsList className="w-full grid grid-cols-3 h-auto p-1 shrink-0">
           <TabsTrigger value="my" className="gap-1.5 sm:gap-2 text-xs sm:text-sm py-2">
             <BookMarked className="size-3.5 sm:size-4 shrink-0" />
             <span className="hidden sm:inline">My </span>Library
@@ -752,118 +757,124 @@ export default function LibraryPage() {
         </TabsList>
 
         {/* My Statements */}
-        <TabsContent value="my" className="w-full mt-4 focus-visible:outline-none focus-visible:ring-0">
-          <div className="w-full space-y-3">
-            {/* Archived EPB Header - Shows when filtering by a specific archived EPB */}
-            {filterArchivedEPB !== "all" && (
-              <ArchivedEPBHeader
-                epbId={filterArchivedEPB}
-                epbLabel={archivedEPBs.find((e) => e.id === filterArchivedEPB)?.label || "Archived EPB"}
-                statementCount={filteredMy.length}
-                onClearFilter={() => setFilterArchivedEPB("all")}
-                onBulkShareComplete={loadStatements}
-              />
-            )}
-            {filteredMy.length === 0 ? (
-              <div className="w-full py-12 text-center text-muted-foreground text-sm sm:text-base rounded-lg border bg-card">
-                No saved statements yet. Generate statements and save them to your library.
-              </div>
-            ) : (
-              filteredMy.map((statement) => (
-                <StatementCard
-                  key={statement.id}
-                  type="my"
-                  statement={statement}
-                  shares={myStatementShares[statement.id]}
-                  creatorInfo={statement.created_by && statement.created_by !== statement.user_id ? creatorProfiles[statement.created_by] : null}
-                  mpaLabel={getMpaLabel(statement.mpa)}
-                  onToggleFavorite={toggleFavorite}
-                  onEdit={(s) => {
-                    setEditingStatement(s);
-                    setEditedText(s.statement);
-                    setEditedMpa(s.mpa);
-                    setEditedCycleYear(s.cycle_year);
-                    setEditedStatementType(s.statement_type || "epb");
-                    setEditedAfsc(s.afsc || "");
-                    setEditedRank(s.rank || "");
-                    setEditedApplicableMpas(s.applicable_mpas || [s.mpa]);
-                    setEditedAwardCategory(s.award_category || "");
-                    setEditedIsWinningPackage(s.is_winning_package || false);
-                    setEditedWinLevel(s.win_level || "");
-                    setEditedUseAsLlmExample(s.use_as_llm_example || false);
-                  }}
-                  onShare={setSharingStatement}
-                  onDelete={deleteStatement}
+        <TabsContent value="my" className="w-full flex-1 min-h-0 mt-4 focus-visible:outline-none focus-visible:ring-0 data-[state=inactive]:hidden">
+          <ScrollArea className="h-full pr-4 -mr-4">
+            <div className="w-full space-y-3 pb-4">
+              {/* Archived EPB Header - Shows when filtering by a specific archived EPB */}
+              {filterArchivedEPB !== "all" && (
+                <ArchivedEPBHeader
+                  epbId={filterArchivedEPB}
+                  epbLabel={archivedEPBs.find((e) => e.id === filterArchivedEPB)?.label || "Archived EPB"}
+                  statementCount={filteredMy.length}
+                  onClearFilter={() => setFilterArchivedEPB("all")}
+                  onBulkShareComplete={loadStatements}
                 />
-              ))
-            )}
-          </div>
+              )}
+              {filteredMy.length === 0 ? (
+                <div className="w-full py-12 text-center text-muted-foreground text-sm sm:text-base rounded-lg border bg-card">
+                  No saved statements yet. Generate statements and save them to your library.
+                </div>
+              ) : (
+                filteredMy.map((statement) => (
+                  <StatementCard
+                    key={statement.id}
+                    type="my"
+                    statement={statement}
+                    shares={myStatementShares[statement.id]}
+                    creatorInfo={statement.created_by && statement.created_by !== statement.user_id ? creatorProfiles[statement.created_by] : null}
+                    mpaLabel={getMpaLabel(statement.mpa)}
+                    onToggleFavorite={toggleFavorite}
+                    onEdit={(s) => {
+                      setEditingStatement(s);
+                      setEditedText(s.statement);
+                      setEditedMpa(s.mpa);
+                      setEditedCycleYear(s.cycle_year);
+                      setEditedStatementType(s.statement_type || "epb");
+                      setEditedAfsc(s.afsc || "");
+                      setEditedRank(s.rank || "");
+                      setEditedApplicableMpas(s.applicable_mpas || [s.mpa]);
+                      setEditedAwardCategory(s.award_category || "");
+                      setEditedIsWinningPackage(s.is_winning_package || false);
+                      setEditedWinLevel(s.win_level || "");
+                      setEditedUseAsLlmExample(s.use_as_llm_example || false);
+                    }}
+                    onShare={setSharingStatement}
+                    onDelete={deleteStatement}
+                  />
+                ))
+              )}
+            </div>
+          </ScrollArea>
         </TabsContent>
 
         {/* Shared With Me */}
-        <TabsContent value="shared" className="w-full mt-4 focus-visible:outline-none focus-visible:ring-0">
-          <div className="w-full space-y-3">
-            {filteredShared.length === 0 ? (
-              <div className="w-full py-12 text-center text-muted-foreground text-sm sm:text-base rounded-lg border bg-card px-4">
-                No statements have been shared with you yet.
-                <br />
-                <span className="text-xs">Ask team members to share their statements with you.</span>
-              </div>
-            ) : (
-              filteredShared.map((statement) => (
-                <StatementCard
-                  key={`${statement.id}-${statement.share_id}`}
-                  type="shared"
-                  statement={statement}
-                  mpaLabel={getMpaLabel(statement.mpa)}
-                  onCopyToLibrary={copyToLibrary}
-                  isCopying={copyingId === statement.id}
-                />
-              ))
-            )}
-          </div>
+        <TabsContent value="shared" className="w-full flex-1 min-h-0 mt-4 focus-visible:outline-none focus-visible:ring-0 data-[state=inactive]:hidden">
+          <ScrollArea className="h-full pr-4 -mr-4">
+            <div className="w-full space-y-3 pb-4">
+              {filteredShared.length === 0 ? (
+                <div className="w-full py-12 text-center text-muted-foreground text-sm sm:text-base rounded-lg border bg-card px-4">
+                  No statements have been shared with you yet.
+                  <br />
+                  <span className="text-xs">Ask team members to share their statements with you.</span>
+                </div>
+              ) : (
+                filteredShared.map((statement) => (
+                  <StatementCard
+                    key={`${statement.id}-${statement.share_id}`}
+                    type="shared"
+                    statement={statement}
+                    mpaLabel={getMpaLabel(statement.mpa)}
+                    onCopyToLibrary={copyToLibrary}
+                    isCopying={copyingId === statement.id}
+                  />
+                ))
+              )}
+            </div>
+          </ScrollArea>
         </TabsContent>
 
         {/* Community */}
-        <TabsContent value="community" className="w-full mt-4 focus-visible:outline-none focus-visible:ring-0">
-          <div className="w-full space-y-3 sm:space-y-4">
-            {!profile?.afsc ? (
-              <div className="w-full py-12 text-center text-muted-foreground text-sm sm:text-base rounded-lg border bg-card px-4">
-                Set your AFSC in settings to see community statements for your career field.
-              </div>
-            ) : filteredCommunity.length === 0 ? (
-              <div className="w-full py-12 text-center text-muted-foreground text-sm sm:text-base rounded-lg border bg-card px-4">
-                No crowdsourced statements for {profile.afsc} yet. Share your statements with the community to contribute!
-              </div>
-            ) : (
-              <>
-                {/* Info banner */}
-                <div className="w-full flex items-start sm:items-center gap-2 p-2.5 sm:p-3 rounded-lg bg-muted/50 text-xs sm:text-sm text-muted-foreground">
-                  <Trophy className="size-4 text-yellow-500 shrink-0 mt-0.5 sm:mt-0" />
-                  <span>Crowdsourced for {profile.afsc} — Each MPA has its own Top 20 used as examples when generating</span>
+        <TabsContent value="community" className="w-full flex-1 min-h-0 mt-4 focus-visible:outline-none focus-visible:ring-0 data-[state=inactive]:hidden">
+          <ScrollArea className="h-full pr-4 -mr-4">
+            <div className="w-full space-y-3 sm:space-y-4 pb-4">
+              {!profile?.afsc ? (
+                <div className="w-full py-12 text-center text-muted-foreground text-sm sm:text-base rounded-lg border bg-card px-4">
+                  Set your AFSC in settings to see community statements for your career field.
                 </div>
+              ) : filteredCommunity.length === 0 ? (
+                <div className="w-full py-12 text-center text-muted-foreground text-sm sm:text-base rounded-lg border bg-card px-4">
+                  No crowdsourced statements for {profile.afsc} yet. Share your statements with the community to contribute!
+                </div>
+              ) : (
+                <>
+                  {/* Info banner */}
+                  <div className="w-full flex items-start sm:items-center gap-2 p-2.5 sm:p-3 rounded-lg bg-muted/50 text-xs sm:text-sm text-muted-foreground">
+                    <Trophy className="size-4 text-yellow-500 shrink-0 mt-0.5 sm:mt-0" />
+                    <span>Crowdsourced for {profile.afsc} — Each MPA has its own Top 20 used as examples when generating</span>
+                  </div>
 
-                {filteredCommunity.map((statement) => {
-                  const mpaRank = mpaRankMap.get(statement.id) ?? 999;
-                  return (
-                    <StatementCard
-                      key={statement.id}
-                      type="community"
-                      statement={statement}
-                      mpaLabel={getMpaLabel(statement.mpa)}
-                      userVote={userVotes[statement.id]}
-                      isVoting={votingId === statement.id}
-                      isTopRated={mpaRank < 20}
-                      rank={mpaRank}
-                      onVote={voteOnStatement}
-                      onCopyToLibrary={copyToLibrary}
-                      isCopying={copyingId === statement.id}
-                    />
-                  );
-                })}
-              </>
-            )}
-          </div>
+                  {filteredCommunity.map((statement) => {
+                    const mpaRank = mpaRankMap.get(statement.id) ?? 999;
+                    return (
+                      <StatementCard
+                        key={statement.id}
+                        type="community"
+                        statement={statement}
+                        mpaLabel={getMpaLabel(statement.mpa)}
+                        userVote={userVotes[statement.id]}
+                        isVoting={votingId === statement.id}
+                        isTopRated={mpaRank < 20}
+                        rank={mpaRank}
+                        onVote={voteOnStatement}
+                        onCopyToLibrary={copyToLibrary}
+                        isCopying={copyingId === statement.id}
+                      />
+                    );
+                  })}
+                </>
+              )}
+            </div>
+          </ScrollArea>
         </TabsContent>
       </Tabs>
 

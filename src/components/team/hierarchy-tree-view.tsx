@@ -4,6 +4,7 @@ import { useMemo, useRef, useEffect, useState, useCallback, type MouseEvent as R
 import { cn } from "@/lib/utils";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import type { Rank } from "@/types/database";
+import { LuCircleMinus, LuCirclePlus, } from "react-icons/lu";
 
 // Layout configuration - compact spacing for large trees
 const LAYOUT_CONFIG = {
@@ -966,7 +967,7 @@ export function HierarchyTreeView({
       {/* Quick filter buttons and zoom controls */}
       <div className="flex items-center justify-between gap-2 flex-wrap">
         {/* Rank filter buttons - toggle visibility of each rank */}
-        <div className="flex items-center gap-1 flex-wrap">
+        <div className="flex items-center gap-1 flex-wrap ">
           {/* Filter mode toggle */}
           <button
             onClick={() => setFilterMode(prev => prev === "fade" ? "collapse" : "fade")}
@@ -1032,33 +1033,7 @@ export function HierarchyTreeView({
           ))}
         </div>
         
-        {/* Zoom controls */}
-        <div className="flex items-center gap-2 bg-background/80 backdrop-blur-sm rounded-md px-2 py-1 text-xs text-muted-foreground border border-border/50">
-          <span>{Math.round(zoom * 100)}%</span>
-          <div className="flex gap-1">
-            <button
-              onClick={() => setZoom(prev => Math.max(MIN_ZOOM, prev - 0.1))}
-              className="hover:text-foreground transition-colors px-1"
-              aria-label="Zoom out"
-            >
-              −
-            </button>
-            <button
-              onClick={() => setZoom(1)}
-              className="hover:text-foreground transition-colors px-1"
-              aria-label="Reset zoom"
-            >
-              ⟲
-            </button>
-            <button
-              onClick={() => setZoom(prev => Math.min(MAX_ZOOM, prev + 0.1))}
-              className="hover:text-foreground transition-colors px-1"
-              aria-label="Zoom in"
-            >
-              +
-            </button>
-          </div>
-        </div>
+       
       </div>
       
       <div
@@ -1086,6 +1061,33 @@ export function HierarchyTreeView({
         }}
         tabIndex={0} // Allow focus for keyboard events
       >
+         {/* Zoom controls */}
+ <div className="flex absolute top-0 right-0 items-center gap-2 bg-background/80 backdrop-blur-sm rounded-md px-2 py-1 text-sm text-muted-foreground border border-border/50">
+          <span>{Math.round(zoom * 100)}%</span>
+          <div className="flex gap-1">
+            <button
+              onClick={() => setZoom(prev => Math.max(MIN_ZOOM, prev - 0.1))}
+              className="hover:text-foreground transition-colors px-1"
+              aria-label="Zoom out"
+            >
+              <LuCircleMinus className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setZoom(1)}
+              className="hover:text-foreground transition-colors px-1"
+              aria-label="Reset zoom"
+            >
+            -
+            </button>
+            <button
+              onClick={() => setZoom(prev => Math.min(MAX_ZOOM, prev + 0.1))}
+              className="hover:text-foreground transition-colors px-1"
+              aria-label="Zoom in"
+            >
+              <LuCirclePlus className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
       {/* Inner div with explicit dimensions creates the scrollable area */}
       {/* Use margin auto for centering when content is smaller than container */}
       <div
@@ -1100,6 +1102,8 @@ export function HierarchyTreeView({
           transition: "width 200ms ease-out, height 200ms ease-out",
         }}
       >
+
+
       {/* Inner content with transform for smooth zoom */}
       <div
         className="absolute top-0 left-0"

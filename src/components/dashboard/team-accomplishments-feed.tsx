@@ -984,6 +984,7 @@ export function TeamAccomplishmentsFeed({ cycleYear }: TeamAccomplishmentsFeedPr
         </div>
 
         {/* Feed Items */}
+        <ScrollArea className="h-[800px] pr-3">
         {filteredAccomplishments.length === 0 ? (
           <div className="text-center py-8 text-sm text-muted-foreground">
             <Filter className="size-8 mx-auto mb-2 opacity-50" />
@@ -1212,6 +1213,7 @@ export function TeamAccomplishmentsFeed({ cycleYear }: TeamAccomplishmentsFeedPr
             ))}
           </div>
         )}
+        </ScrollArea>
       </div>
 
       {/* Detail Dialog */}
