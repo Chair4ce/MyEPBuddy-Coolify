@@ -50,6 +50,7 @@ import {
   Eye,
   Calendar,
   Loader2,
+  Clock,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { Rank } from "@/types/database";
@@ -97,7 +98,7 @@ interface PendingLink {
   statement_count: number;
 }
 
-type ActionType = "sync_data" | "accept_supervisor" | "dismiss" | null;
+type ActionType = "sync_data" | "accept_supervisor" | "dismiss" | "snooze" | null;
 
 export function PendingLinksCard() {
   const { profile } = useUserStore();
@@ -123,6 +124,7 @@ export function PendingLinksCard() {
     data_synced: boolean | null;
     supervisor_accepted: boolean | null;
     created_at: string;
+    snoozed_until: string | null;
   };
 
   type TeamMemberRow = {
@@ -147,11 +149,13 @@ export function PendingLinksCard() {
       setIsLoading(true);
 
       // Query pending links with type cast
+      // Filter out snoozed links (snoozed_until is null or in the past)
       const { data, error } = await supabase
         .from("pending_managed_links")
-        .select("id, team_member_id, status, data_synced, supervisor_accepted, created_at")
+        .select("id, team_member_id, status, data_synced, supervisor_accepted, created_at, snoozed_until")
         .eq("user_id", profile.id)
-        .eq("status", "pending") as { data: PendingLinkRow[] | null; error: Error | null };
+        .eq("status", "pending")
+        .or("snoozed_until.is.null,snoozed_until.lt." + new Date().toISOString()) as { data: PendingLinkRow[] | null; error: Error | null };
 
       if (error) {
         console.error("Error loading pending links:", error);
@@ -383,6 +387,26 @@ export function PendingLinksCard() {
     setActionType(null);
   };
 
+  const handleSnooze = async (link: PendingLink) => {
+    setIsProcessing(true);
+
+    const { error } = await (supabase as unknown as RpcClient).rpc("snooze_pending_link", {
+      link_id: link.id,
+    });
+
+    if (error) {
+      console.error("Error snoozing link:", error);
+      toast.error("Failed to snooze", { description: error.message });
+    } else {
+      toast.info("Request snoozed for 7 days");
+      setPendingLinks((prev) => prev.filter((l) => l.id !== link.id));
+    }
+
+    setIsProcessing(false);
+    setSelectedLink(null);
+    setActionType(null);
+  };
+
   const handleComplete = async (link: PendingLink) => {
     const { error } = await (supabase as unknown as RpcClient).rpc("complete_pending_link", {
       link_id: link.id,
@@ -439,19 +463,34 @@ export function PendingLinksCard() {
                     </p>
                   </div>
                 </div>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="text-muted-foreground hover:text-destructive shrink-0"
-                      onClick={() => openConfirmDialog(link, "dismiss")}
-                    >
-                      <X className="size-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Dismiss this link request</TooltipContent>
-                </Tooltip>
+                <div className="flex items-center gap-1 shrink-0">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="text-muted-foreground hover:text-amber-600 shrink-0"
+                        onClick={() => openConfirmDialog(link, "snooze")}
+                      >
+                        <Clock className="size-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Snooze for 7 days</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="text-muted-foreground hover:text-destructive shrink-0"
+                        onClick={() => openConfirmDialog(link, "dismiss")}
+                      >
+                        <X className="size-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Dismiss this link request</TooltipContent>
+                  </Tooltip>
+                </div>
               </div>
 
               {/* Data Summary */}
@@ -612,6 +651,7 @@ export function PendingLinksCard() {
               {actionType === "sync_data" && "Sync Data from Managed Account?"}
               {actionType === "accept_supervisor" && "Accept Supervisor?"}
               {actionType === "dismiss" && "Dismiss Link Request?"}
+              {actionType === "snooze" && "Snooze Link Request?"}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {actionType === "sync_data" && (
@@ -645,6 +685,16 @@ export function PendingLinksCard() {
                   . Any entries or statements they created will remain with them and won&apos;t be synced to your account.
                 </>
               )}
+              {actionType === "snooze" && (
+                <>
+                  This will hide the link request from{" "}
+                  <strong>
+                    {selectedLink?.team_member.supervisor?.rank}{" "}
+                    {selectedLink?.team_member.supervisor?.full_name}
+                  </strong>{" "}
+                  for 7 days. It will reappear after that, and you can still accept or dismiss it later.
+                </>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -654,13 +704,16 @@ export function PendingLinksCard() {
               className={
                 actionType === "dismiss"
                   ? "bg-destructive hover:bg-destructive/90"
-                  : "bg-amber-600 hover:bg-amber-700"
+                  : actionType === "snooze"
+                    ? "bg-amber-500 hover:bg-amber-600"
+                    : "bg-amber-600 hover:bg-amber-700"
               }
               onClick={() => {
                 if (!selectedLink) return;
                 if (actionType === "sync_data") handleSyncData(selectedLink);
                 else if (actionType === "accept_supervisor") handleAcceptSupervisor(selectedLink);
                 else if (actionType === "dismiss") handleDismiss(selectedLink);
+                else if (actionType === "snooze") handleSnooze(selectedLink);
               }}
             >
               {isProcessing
@@ -669,7 +722,9 @@ export function PendingLinksCard() {
                   ? "Sync Data"
                   : actionType === "accept_supervisor"
                     ? "Accept Supervisor"
-                    : "Dismiss"}
+                    : actionType === "snooze"
+                      ? "Snooze"
+                      : "Dismiss"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
