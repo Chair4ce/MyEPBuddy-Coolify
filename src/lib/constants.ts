@@ -343,6 +343,32 @@ export function getCloseoutUrgency(daysUntil: number | null): "none" | "low" | "
 }
 
 // ============================================
+// FEEDBACK SYSTEM CONSTANTS
+// ============================================
+
+import type { FeedbackType } from "@/types/database";
+
+export const FEEDBACK_TYPE_LABELS: Record<FeedbackType, string> = {
+  initial: "Initial Feedback",
+  midterm: "Midterm Review",
+  final: "Final Assessment",
+};
+
+export const FEEDBACK_TYPE_DESCRIPTIONS: Record<FeedbackType, string> = {
+  initial: "ACA expectations and initial performance goals",
+  midterm: "Mid-cycle progress review and accomplishment assessment",
+  final: "End-of-cycle assessment after EPB completion",
+};
+
+export function getFeedbackTypeLabel(type: FeedbackType): string {
+  return FEEDBACK_TYPE_LABELS[type] || type;
+}
+
+export function getFeedbackTypeDescription(type: FeedbackType): string {
+  return FEEDBACK_TYPE_DESCRIPTIONS[type] || "";
+}
+
+// ============================================
 // AWARDS SYSTEM CONSTANTS
 // ============================================
 

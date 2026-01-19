@@ -52,12 +52,13 @@ export async function getExpectation(
 
   // Transform the joined data
   if (data) {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { supervisor, ...rest } = data;
     const expectation: SupervisorExpectation = {
-      ...data,
-      supervisor_name: data.supervisor?.full_name || null,
-      supervisor_rank: data.supervisor?.rank || null,
+      ...rest,
+      supervisor_name: supervisor?.full_name || null,
+      supervisor_rank: supervisor?.rank || null,
     };
-    delete (expectation as Record<string, unknown>).supervisor;
     return { data: expectation, error: null };
   }
 

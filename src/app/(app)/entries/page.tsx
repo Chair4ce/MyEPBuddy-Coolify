@@ -40,6 +40,7 @@ import { deleteAccomplishment } from "@/app/actions/accomplishments";
 import { Plus, Pencil, Trash2, Filter, FileText, LayoutList, CalendarDays, Calendar } from "lucide-react";
 import { ENTRY_MGAS, AWARD_QUARTERS, getQuarterDateRange, getFiscalQuarterDateRange, getActiveCycleYear, isEnlisted } from "@/lib/constants";
 import { EPBProgressCard } from "@/components/epb/epb-progress-card";
+import { SupervisorFeedbackPanel } from "@/components/entries/supervisor-feedback-panel";
 import type { Rank } from "@/types/database";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -292,10 +293,13 @@ function EntriesContent() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Accomplishments</h1>
         </div>
-        <Button onClick={() => setDialogOpen(true)}>
-          <Plus className="size-4 mr-2" />
-          New Entry
-        </Button>
+        <div className="flex items-center gap-2">
+          <SupervisorFeedbackPanel />
+          <Button onClick={() => setDialogOpen(true)}>
+            <Plus className="size-4 mr-2" />
+            New Entry
+          </Button>
+        </div>
       </div>
 
       {/* Performance Coverage & Progress - Only for military enlisted */}

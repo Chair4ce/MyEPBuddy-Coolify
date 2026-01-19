@@ -327,6 +327,31 @@ export interface SupervisorExpectation {
   supervisor_rank?: Rank | null;
 }
 
+// Feedback types for supervisor-subordinate feedback sessions
+export type FeedbackType = 'initial' | 'midterm' | 'final';
+export type FeedbackStatus = 'draft' | 'shared';
+
+// Supervisor feedbacks - feedback sessions conducted by supervisor
+export interface SupervisorFeedback {
+  id: string;
+  supervisor_id: string;
+  subordinate_id: string | null;
+  team_member_id: string | null;
+  feedback_type: FeedbackType;
+  cycle_year: number;
+  content: string;
+  reviewed_accomplishment_ids: string[];
+  status: FeedbackStatus;
+  shared_at: string | null;
+  supervision_start_date: string;
+  supervision_end_date: string | null;
+  created_at: string;
+  updated_at: string;
+  // Joined fields
+  supervisor_name?: string;
+  supervisor_rank?: Rank | null;
+}
+
 // Pending managed account links - when user signs up with matching email
 export interface PendingManagedLink {
   id: string;
