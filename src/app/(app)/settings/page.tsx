@@ -357,22 +357,16 @@ export default function SettingsPage() {
     e.preventDefault();
     setPhoneLoading(true);
 
-    // newPhone now contains just the 10 digits from the PhoneInput component
-    const digitsOnly = newPhone.replace(/\D/g, '');
-    
-    // SECURITY: Validate phone number format - must be exactly 10 digits
-    if (digitsOnly.length !== 10) {
-      toast.error("Please enter a complete 10-digit phone number");
+    // newPhone is now in E.164 format from react-phone-number-input (e.g., +15551234567)
+    if (!newPhone || newPhone.length < 10) {
+      toast.error("Please enter a valid phone number");
       setPhoneLoading(false);
       return;
     }
 
-    // Format phone to E.164 (always US +1)
-    const formattedPhone = `+1${digitsOnly}`;
-
     try {
       const { data, error } = await supabase.auth.updateUser({
-        phone: formattedPhone,
+        phone: newPhone,
       });
 
       if (error) {
@@ -402,13 +396,9 @@ export default function SettingsPage() {
 
     setPhoneLoading(true);
 
-    // newPhone contains just the 10 digits
-    const digitsOnly = newPhone.replace(/\D/g, '');
-    const formattedPhone = `+1${digitsOnly}`;
-
     try {
       const { data, error } = await supabase.auth.verifyOtp({
-        phone: formattedPhone,
+        phone: newPhone,
         token: phoneOtp,
         type: 'phone_change',
       });
@@ -421,7 +411,7 @@ export default function SettingsPage() {
         return;
       }
 
-      setUserPhone(formattedPhone);
+      setUserPhone(newPhone);
       setNewPhone("");
       setPhoneOtp("");
       setPhoneOtpSent(false);
@@ -789,14 +779,12 @@ export default function SettingsPage() {
                   <PhoneInput
                     id="updatePhone"
                     value={newPhone}
-                    onChange={setNewPhone}
+                    onChange={(value) => setNewPhone(value || "")}
+                    defaultCountry="US"
                     disabled={phoneLoading}
                   />
-                  <p className="text-xs text-muted-foreground">
-                    Enter your 10-digit US phone number
-                  </p>
                 </div>
-                <Button type="submit" disabled={phoneLoading || newPhone.length !== 10}>
+                <Button type="submit" disabled={phoneLoading || !newPhone || newPhone.length < 10}>
                   {phoneLoading ? (
                     <>
                       <Loader2 className="size-4 animate-spin mr-2" />
@@ -818,7 +806,7 @@ export default function SettingsPage() {
                 <p className="text-sm text-muted-foreground">
                   Code sent to:
                 </p>
-                <p className="font-medium font-mono">+1 ({newPhone.slice(0, 3)}) {newPhone.slice(3, 6)}-{newPhone.slice(6)}</p>
+                <p className="font-medium font-mono">{formatPhoneForDisplay(newPhone)}</p>
               </div>
 
               <div className="space-y-2">
@@ -894,14 +882,12 @@ export default function SettingsPage() {
                 <PhoneInput
                   id="newPhone"
                   value={newPhone}
-                  onChange={setNewPhone}
+                  onChange={(value) => setNewPhone(value || "")}
+                  defaultCountry="US"
                   disabled={phoneLoading}
                 />
-                <p className="text-xs text-muted-foreground">
-                  Enter your 10-digit US phone number
-                </p>
               </div>
-              <Button type="submit" disabled={phoneLoading || newPhone.length !== 10}>
+              <Button type="submit" disabled={phoneLoading || !newPhone || newPhone.length < 10}>
                 {phoneLoading ? (
                   <>
                     <Loader2 className="size-4 animate-spin mr-2" />

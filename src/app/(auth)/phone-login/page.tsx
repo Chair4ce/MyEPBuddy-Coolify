@@ -25,9 +25,11 @@ import { Loader2, ArrowLeft, Smartphone } from "lucide-react";
 import { AppLogo } from "@/components/layout/app-logo";
 
 // Format phone number for masked display: +1 (***) ***-XXXX
-function formatPhoneForMaskedDisplay(digits: string): string {
-  if (digits.length !== 10) return `+1 ***-${digits.slice(-4)}`;
-  return `+1 (***) ***-${digits.slice(6)}`;
+function formatPhoneForMaskedDisplay(phone: string): string {
+  // Phone is in E.164 format like +15551234567
+  const digits = phone.replace(/\D/g, "");
+  const last4 = digits.slice(-4);
+  return `+* (***) ***-${last4}`;
 }
 
 // SECURITY: Track last OTP request to prevent rate limit bypass via refresh
@@ -60,18 +62,15 @@ export default function PhoneLoginPage() {
     setIsLoading(true);
     setShowSignupOption(false);
 
-    // phone now contains just the 10 digits from PhoneInput
-    const digitsOnly = phone.replace(/\D/g, '');
-    
-    // SECURITY: Validate phone number format - must be exactly 10 digits
-    if (digitsOnly.length !== 10) {
-      toast.error("Please enter a complete 10-digit phone number");
+    // phone is now in E.164 format from react-phone-number-input (e.g., +15551234567)
+    if (!phone || phone.length < 10) {
+      toast.error("Please enter a valid phone number");
       setIsLoading(false);
       return;
     }
 
     // SECURITY: Check client-side rate limit (prevent bypass via refresh)
-    const lastRequest = getLastOtpRequest(digitsOnly);
+    const lastRequest = getLastOtpRequest(phone);
     if (lastRequest && Date.now() - lastRequest < 60000) {
       const secondsRemaining = Math.ceil((60000 - (Date.now() - lastRequest)) / 1000);
       toast.error(`Please wait ${secondsRemaining} seconds before requesting another code`);
@@ -79,13 +78,10 @@ export default function PhoneLoginPage() {
       return;
     }
 
-    // Format phone number to E.164 format
-    const formattedPhone = `+1${digitsOnly}`;
-
     try {
       // Try to sign in with phone (won't create new user)
       const { error } = await supabase.auth.signInWithOtp({
-        phone: formattedPhone,
+        phone: phone,
         options: {
           shouldCreateUser: false, // Don't auto-create new users
         },
@@ -100,7 +96,7 @@ export default function PhoneLoginPage() {
       }
 
       // SECURITY: Track request timestamp to prevent rate limit bypass
-      setLastOtpRequest(digitsOnly);
+      setLastOtpRequest(phone);
       
       setOtpSent(true);
       toast.success("Verification code sent! Check your phone.");
@@ -124,12 +120,9 @@ export default function PhoneLoginPage() {
 
     setIsLoading(true);
 
-    // phone contains just the 10 digits
-    const formattedPhone = `+1${phone.replace(/\D/g, '')}`;
-
     try {
       const { error } = await supabase.auth.verifyOtp({
-        phone: formattedPhone,
+        phone: phone,
         token: otp,
         type: 'sms',
       });
@@ -293,16 +286,14 @@ export default function PhoneLoginPage() {
                     id="phone"
                     value={phone}
                     onChange={(value) => {
-                      setPhone(value);
+                      setPhone(value || "");
                       setShowSignupOption(false); // Reset when user changes phone
                     }}
+                    defaultCountry="US"
                     disabled={isLoading}
                   />
-                  <p className="text-xs text-muted-foreground">
-                    Enter your 10-digit US phone number
-                  </p>
                 </div>
-                <Button type="submit" className="w-full" disabled={isLoading || phone.length !== 10}>
+                <Button type="submit" className="w-full" disabled={isLoading || !phone || phone.length < 10}>
                   {isLoading ? (
                     <Loader2 className="size-4 animate-spin" />
                   ) : (
