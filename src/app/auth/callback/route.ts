@@ -5,6 +5,14 @@ export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
   const next = searchParams.get("next") ?? "/dashboard";
+  const error_description = searchParams.get("error_description");
+
+  // Handle error from auth provider
+  if (error_description) {
+    return NextResponse.redirect(
+      `${origin}/login?error=${encodeURIComponent(error_description)}`
+    );
+  }
 
   if (code) {
     const supabase = await createClient();

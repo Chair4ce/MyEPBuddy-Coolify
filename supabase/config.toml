@@ -108,7 +108,42 @@ enable_signup = true
 # If enabled, users need to confirm their phone number before signing in.
 enable_confirmations = false
 # Maximum frequency for sending SMS (in seconds)
+# SECURITY: Rate limit to prevent SMS bombing attacks
 max_frequency = 60
+
+# SECURITY: SMS/OTP Settings (configure in Supabase Dashboard for production)
+# Dashboard > Authentication > Providers > Phone:
+# - Enable phone authentication
+# - Configure Twilio credentials (Account SID, Auth Token, Messaging Service SID)
+# - Set OTP expiry: 3600 seconds (1 hour)
+# - Max OTP attempts: 5 per phone number
+# - Consider enabling phone confirmations for production (prevents unverified signups)
+
+# Custom email templates (dark theme with MyEPBuddy branding)
+# These templates use Go template syntax with variables like {{ .ConfirmationURL }}
+[auth.email.template.confirmation]
+subject = "Confirm your MyEPBuddy account"
+content_path = "./supabase/templates/confirmation.html"
+
+[auth.email.template.invite]
+subject = "You've been invited to MyEPBuddy"
+content_path = "./supabase/templates/invite.html"
+
+[auth.email.template.magic_link]
+subject = "Sign in to MyEPBuddy"
+content_path = "./supabase/templates/magic_link.html"
+
+[auth.email.template.recovery]
+subject = "Reset your MyEPBuddy password"
+content_path = "./supabase/templates/recovery.html"
+
+[auth.email.template.email_change]
+subject = "Confirm your new email address"
+content_path = "./supabase/templates/email_change.html"
+
+[auth.email.template.reauthentication]
+subject = "Verify it's you - MyEPBuddy"
+content_path = "./supabase/templates/reauthentication.html"
 
 [auth.external.google]
 enabled = true

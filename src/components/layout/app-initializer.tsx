@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { useUserStore } from "@/stores/user-store";
 import { TermsAgreementDialog } from "@/components/layout/terms-agreement-dialog";
 import { UpdatePrompt } from "@/components/layout/update-prompt";
+import { RankCompletionModal } from "@/components/modals/rank-completion-modal";
 import type { Profile, EPBConfig, ManagedMember } from "@/types/database";
 
 interface AppInitializerProps {
@@ -66,6 +67,8 @@ export function AppInitializer({
           userId={currentProfile.id}
         />
       )}
+      {/* Show rank completion modal after terms are accepted */}
+      {!showTermsDialog && <RankCompletionModal />}
       {children}
     </>
   );

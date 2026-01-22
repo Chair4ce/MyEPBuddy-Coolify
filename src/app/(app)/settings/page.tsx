@@ -33,7 +33,12 @@ import {
   RANK_TO_TIER,
   isOfficer 
 } from "@/lib/constants";
-import { Loader2, User, Calendar, Clock, Camera, X, RotateCcw } from "lucide-react";
+import { Loader2, User, Calendar, Clock, Camera, X, RotateCcw, Smartphone, CheckCircle2 } from "lucide-react";
+import {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSlot,
+} from "@/components/ui/input-otp";
 import { Progress } from "@/components/ui/progress";
 import type { Rank, Profile } from "@/types/database";
 
@@ -51,6 +56,14 @@ export default function SettingsPage() {
     afsc: "",
     unit: "",
   });
+
+  // Phone number management state
+  const [userPhone, setUserPhone] = useState<string | null>(null);
+  const [newPhone, setNewPhone] = useState("");
+  const [phoneOtp, setPhoneOtp] = useState("");
+  const [phoneOtpSent, setPhoneOtpSent] = useState(false);
+  const [phoneLoading, setPhoneLoading] = useState(false);
+  const [canResendPhone, setCanResendPhone] = useState(false);
 
   const supabase = createClient();
 
@@ -275,6 +288,15 @@ export default function SettingsPage() {
     }
   }, [profile]);
 
+  // Load user phone number
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) {
+        setUserPhone(user.phone || null);
+      }
+    });
+  }, [supabase.auth]);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setIsLoading(true);
@@ -305,6 +327,91 @@ export default function SettingsPage() {
     } finally {
       setIsLoading(false);
     }
+  }
+
+  async function handleAddPhone(e: React.FormEvent) {
+    e.preventDefault();
+    setPhoneLoading(true);
+
+    // SECURITY: Validate phone number format
+    const digitsOnly = newPhone.replace(/\D/g, '');
+    if (digitsOnly.length < 10 || digitsOnly.length > 15) {
+      toast.error("Please enter a valid phone number");
+      setPhoneLoading(false);
+      return;
+    }
+
+    // Format phone to E.164
+    const formattedPhone = newPhone.startsWith('+') 
+      ? newPhone 
+      : `+1${digitsOnly}`;
+
+    try {
+      const { error } = await supabase.auth.updateUser({
+        phone: formattedPhone,
+      });
+
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
+
+      setPhoneOtpSent(true);
+      toast.success("Verification code sent to your phone!");
+      setTimeout(() => setCanResendPhone(true), 60000);
+    } catch {
+      toast.error("An unexpected error occurred");
+    } finally {
+      setPhoneLoading(false);
+    }
+  }
+
+  async function handleVerifyPhone(e: React.FormEvent) {
+    e.preventDefault();
+
+    if (phoneOtp.length !== 6) {
+      toast.error("Please enter the complete 6-digit code");
+      return;
+    }
+
+    setPhoneLoading(true);
+
+    const formattedPhone = newPhone.startsWith('+') 
+      ? newPhone 
+      : `+1${newPhone.replace(/\D/g, '')}`;
+
+    try {
+      const { error } = await supabase.auth.verifyOtp({
+        phone: formattedPhone,
+        token: phoneOtp,
+        type: 'phone_change',
+      });
+
+      if (error) {
+        // SECURITY: Clear OTP on failed verification
+        setPhoneOtp("");
+        toast.error("Invalid or expired code. Please try again.");
+        return;
+      }
+
+      setUserPhone(formattedPhone);
+      setNewPhone("");
+      setPhoneOtp("");
+      setPhoneOtpSent(false);
+      toast.success("Phone number updated successfully!");
+    } catch {
+      // SECURITY: Clear OTP on error
+      setPhoneOtp("");
+      toast.error("An unexpected error occurred");
+    } finally {
+      setPhoneLoading(false);
+    }
+  }
+
+  async function handleResendPhoneOTP() {
+    setCanResendPhone(false);
+    setPhoneOtp("");
+    await handleAddPhone(new Event('submit') as unknown as React.FormEvent);
   }
 
   return (
@@ -551,6 +658,179 @@ export default function SettingsPage() {
               </Button>
             </div>
           </form>
+        </CardContent>
+      </Card>
+
+      {/* Phone Number Management Card */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="size-10 rounded-full bg-primary/10 flex items-center justify-center">
+              <Smartphone className="size-5 text-primary" />
+            </div>
+            <div>
+              <CardTitle>Phone Number</CardTitle>
+              <CardDescription>
+                {userPhone ? "Manage your phone number for sign-in" : "Add a phone number to enable phone-based sign-in"}
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {userPhone && !phoneOtpSent ? (
+            <div className="space-y-4">
+              <div className="flex items-center gap-4 p-4 bg-muted/50 rounded-lg">
+                <Smartphone className="size-5 text-muted-foreground" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium">Current Phone</p>
+                  <p className="text-sm text-muted-foreground">{userPhone}</p>
+                </div>
+                <CheckCircle2 className="size-5 text-green-500" />
+              </div>
+
+              <form onSubmit={handleAddPhone} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="updatePhone">Update Phone Number</Label>
+                  <Input
+                    id="updatePhone"
+                    type="tel"
+                    placeholder="+1 (555) 123-4567"
+                    value={newPhone}
+                    onChange={(e) => setNewPhone(e.target.value)}
+                    required
+                    disabled={phoneLoading}
+                    aria-label="New phone number"
+                    autoComplete="tel"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Enter your new phone number with country code (e.g., +1 for US)
+                  </p>
+                </div>
+                <Button type="submit" disabled={phoneLoading}>
+                  {phoneLoading ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin mr-2" />
+                      Sending...
+                    </>
+                  ) : (
+                    "Update Phone Number"
+                  )}
+                </Button>
+              </form>
+            </div>
+          ) : phoneOtpSent ? (
+            <form onSubmit={handleVerifyPhone} className="space-y-6">
+              <div className="flex items-center justify-center p-6 rounded-lg bg-primary/10 border border-primary/20">
+                <Smartphone className="size-12 text-primary" />
+              </div>
+
+              <div className="text-center space-y-2">
+                <p className="text-sm text-muted-foreground">
+                  Code sent to:
+                </p>
+                <p className="font-medium">{newPhone}</p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="phone-otp" className="text-center block">
+                  Verification Code
+                </Label>
+                <div className="flex justify-center">
+                  <InputOTP
+                    maxLength={6}
+                    value={phoneOtp}
+                    onChange={setPhoneOtp}
+                    disabled={phoneLoading}
+                  >
+                    <InputOTPGroup>
+                      <InputOTPSlot index={0} />
+                      <InputOTPSlot index={1} />
+                      <InputOTPSlot index={2} />
+                      <InputOTPSlot index={3} />
+                      <InputOTPSlot index={4} />
+                      <InputOTPSlot index={5} />
+                    </InputOTPGroup>
+                  </InputOTP>
+                </div>
+                <p className="text-xs text-center text-muted-foreground">
+                  Code expires in 60 minutes
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={phoneLoading || phoneOtp.length !== 6}
+                >
+                  {phoneLoading ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin mr-2" />
+                      Verifying...
+                    </>
+                  ) : (
+                    "Verify Phone Number"
+                  )}
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  onClick={handleResendPhoneOTP}
+                  disabled={!canResendPhone || phoneLoading}
+                >
+                  {canResendPhone ? "Resend code" : "Resend available in 60s"}
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="w-full"
+                  onClick={() => {
+                    setPhoneOtpSent(false);
+                    setPhoneOtp("");
+                    setNewPhone("");
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          ) : (
+            <form onSubmit={handleAddPhone} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="newPhone">Phone Number</Label>
+                <Input
+                  id="newPhone"
+                  type="tel"
+                  placeholder="+1 (555) 123-4567"
+                  value={newPhone}
+                  onChange={(e) => setNewPhone(e.target.value)}
+                  required
+                  disabled={phoneLoading}
+                  aria-label="Phone number"
+                  autoComplete="tel"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Enter your phone number with country code (e.g., +1 for US)
+                </p>
+              </div>
+              <Button type="submit" disabled={phoneLoading}>
+                {phoneLoading ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin mr-2" />
+                    Sending...
+                  </>
+                ) : (
+                  "Add Phone Number"
+                )}
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                You'll receive a 6-digit code via SMS to verify your number. Message and data rates may apply.
+              </p>
+            </form>
+          )}
         </CardContent>
       </Card>
 

@@ -44,7 +44,18 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const publicPaths = ["/", "/login", "/signup", "/auth/callback"];
+  const publicPaths = [
+    "/",
+    "/login",
+    "/signup",
+    "/phone-login",
+    "/complete-profile",
+    "/forgot-password",
+    "/reset-password",
+    "/auth/callback",
+    "/privacy",
+    "/terms",
+  ];
   const isPublicPath = publicPaths.some(
     (path) =>
       request.nextUrl.pathname === path ||
@@ -58,8 +69,14 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (user && (request.nextUrl.pathname === "/login" || request.nextUrl.pathname === "/signup")) {
-    // User is logged in but trying to access auth pages
+  if (
+    user &&
+    (request.nextUrl.pathname === "/login" ||
+      request.nextUrl.pathname === "/signup" ||
+      request.nextUrl.pathname === "/phone-login" ||
+      request.nextUrl.pathname === "/forgot-password")
+  ) {
+    // User is logged in but trying to access auth pages (except reset-password)
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
     return NextResponse.redirect(url);
