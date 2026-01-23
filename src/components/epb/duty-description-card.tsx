@@ -32,8 +32,11 @@ import {
   Circle,
 } from "lucide-react";
 import { useEPBShellStore } from "@/stores/epb-shell-store";
-import type { DutyDescriptionSnapshot, DutyDescriptionExample } from "@/types/database";
+import type { DutyDescriptionSnapshot, DutyDescriptionExample, DutyDescriptionTemplate } from "@/types/database";
 import { useStyleFeedback } from "@/hooks/use-style-feedback";
+import { SaveDutyDescriptionTemplateDialog } from "./save-duty-description-template-dialog";
+import { DutyDescriptionTemplatesPanel } from "./duty-description-templates-panel";
+import { FileText } from "lucide-react";
 
 interface DutyDescriptionCardProps {
   currentDutyDescription: string;
@@ -47,10 +50,25 @@ interface DutyDescriptionCardProps {
   // Snapshots (history)
   snapshots?: DutyDescriptionSnapshot[];
   onCreateSnapshot?: (text: string) => Promise<void>;
-  // Saved examples
+  // Saved examples (shell-specific)
   savedExamples?: DutyDescriptionExample[];
   onSaveExample?: (text: string, note?: string) => Promise<void>;
   onDeleteExample?: (id: string) => Promise<void>;
+  // Templates (reusable across team members)
+  templates?: DutyDescriptionTemplate[];
+  onSaveTemplate?: (data: {
+    template_text: string;
+    office_label: string | null;
+    role_label: string | null;
+    rank_label: string | null;
+    note: string | null;
+  }) => Promise<void>;
+  onDeleteTemplate?: (id: string) => Promise<void>;
+  templateLabels?: {
+    offices: string[];
+    roles: string[];
+    ranks: string[];
+  };
   // Lock props for single-user mode
   isLockedByOther?: boolean;
   lockedByInfo?: { name: string; rank: string | null } | null;
@@ -71,6 +89,10 @@ export function DutyDescriptionCard({
   savedExamples = [],
   onSaveExample,
   onDeleteExample,
+  templates = [],
+  onSaveTemplate,
+  onDeleteTemplate,
+  templateLabels = { offices: [], roles: [], ranks: [] },
   isLockedByOther = false,
   lockedByInfo,
   onAcquireLock,
@@ -101,6 +123,8 @@ export function DutyDescriptionCard({
   const [generatedRevisions, setGeneratedRevisions] = useState<string[]>([]);
   const [showHistoryPanel, setShowHistoryPanel] = useState(false);
   const [showExamplesPanel, setShowExamplesPanel] = useState(false);
+  const [showTemplatesPanel, setShowTemplatesPanel] = useState(false);
+  const [showSaveTemplateDialog, setShowSaveTemplateDialog] = useState(false);
   const [isCreatingSnapshot, setIsCreatingSnapshot] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lastSavedRef = useRef<string>(currentDutyDescription);
@@ -235,6 +259,14 @@ export function DutyDescriptionCard({
     setIsDutyDescriptionDirty(text !== currentDutyDescription);
     setShowExamplesPanel(false);
     toast.success("Example applied");
+  };
+
+  // Apply a template
+  const handleApplyTemplate = (text: string) => {
+    setLocalText(text);
+    setDutyDescriptionDraft(text);
+    setIsDutyDescriptionDirty(text !== currentDutyDescription);
+    setShowTemplatesPanel(false);
   };
 
   // Revise duty description with AI
@@ -438,6 +470,7 @@ export function DutyDescriptionCard({
                     setShowRevisePanel(opening);
                     setShowHistoryPanel(false);
                     setShowExamplesPanel(false);
+                    setShowTemplatesPanel(false);
                     if (opening) {
                       setGeneratedRevisions([]);
                       setTimeout(() => {
@@ -468,6 +501,7 @@ export function DutyDescriptionCard({
                     onClick={() => {
                       setShowHistoryPanel(!showHistoryPanel);
                       setShowExamplesPanel(false);
+                      setShowTemplatesPanel(false);
                       setShowRevisePanel(false);
                     }}
                     className={cn(
@@ -492,6 +526,7 @@ export function DutyDescriptionCard({
                     onClick={() => {
                       setShowExamplesPanel(!showExamplesPanel);
                       setShowHistoryPanel(false);
+                      setShowTemplatesPanel(false);
                       setShowRevisePanel(false);
                     }}
                     className={cn(
@@ -510,6 +545,32 @@ export function DutyDescriptionCard({
                 </TooltipTrigger>
                 <TooltipContent>
                   Examples {savedExamples.length > 0 && `(${savedExamples.length})`}
+                </TooltipContent>
+              </Tooltip>
+
+              {/* Templates button */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => {
+                      setShowTemplatesPanel(!showTemplatesPanel);
+                      setShowExamplesPanel(false);
+                      setShowHistoryPanel(false);
+                      setShowRevisePanel(false);
+                    }}
+                    className={cn(
+                      "size-7 rounded-md inline-flex items-center justify-center transition-colors",
+                      showTemplatesPanel
+                        ? "bg-indigo-600 text-white"
+                        : "hover:bg-accent hover:text-accent-foreground"
+                    )}
+                    aria-label="Saved templates"
+                  >
+                    <FileText className="size-3.5" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  Templates {templates.length > 0 && `(${templates.length})`}
                 </TooltipContent>
               </Tooltip>
 
@@ -595,15 +656,29 @@ export function DutyDescriptionCard({
                     {savedExamples.length} example{savedExamples.length !== 1 && "s"} saved
                   </p>
                 </div>
-                {hasContent && onSaveExample && (
-                  <button
-                    onClick={handleSaveAsExample}
-                    className="h-7 px-2.5 rounded-md text-xs bg-indigo-600 text-white hover:bg-indigo-700 inline-flex items-center"
-                  >
-                    <Bookmark className="size-3 mr-1" />
-                    Save Current
-                  </button>
-                )}
+                <div className="flex items-center gap-1.5">
+                  {hasContent && onSaveTemplate && (
+                    <button
+                      onClick={() => setShowSaveTemplateDialog(true)}
+                      className="h-7 px-2.5 rounded-md text-xs border border-indigo-600 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 inline-flex items-center"
+                      aria-label="Save as reusable template"
+                    >
+                      <FileText className="size-3 mr-1" />
+                      <span className="hidden sm:inline">Save as Template</span>
+                      <span className="sm:hidden">Template</span>
+                    </button>
+                  )}
+                  {hasContent && onSaveExample && (
+                    <button
+                      onClick={handleSaveAsExample}
+                      className="h-7 px-2.5 rounded-md text-xs bg-indigo-600 text-white hover:bg-indigo-700 inline-flex items-center"
+                    >
+                      <Bookmark className="size-3 mr-1" />
+                      <span className="hidden sm:inline">Save Current</span>
+                      <span className="sm:hidden">Save</span>
+                    </button>
+                  )}
+                </div>
               </div>
               <div className="max-h-64 overflow-y-auto">
                 {savedExamples.length === 0 ? (
@@ -654,6 +729,16 @@ export function DutyDescriptionCard({
                 )}
               </div>
             </div>
+          )}
+
+          {/* Templates Panel */}
+          {showTemplatesPanel && (
+            <DutyDescriptionTemplatesPanel
+              templates={templates}
+              onApply={handleApplyTemplate}
+              onDelete={onDeleteTemplate}
+              onClose={() => setShowTemplatesPanel(false)}
+            />
           )}
 
           {/* Revise Panel */}
@@ -866,6 +951,17 @@ export function DutyDescriptionCard({
             </div>
           )}
         </CardContent>
+      )}
+
+      {/* Save Template Dialog */}
+      {onSaveTemplate && (
+        <SaveDutyDescriptionTemplateDialog
+          open={showSaveTemplateDialog}
+          onOpenChange={setShowSaveTemplateDialog}
+          templateText={localText}
+          onSave={onSaveTemplate}
+          existingLabels={templateLabels}
+        />
       )}
     </Card>
   );

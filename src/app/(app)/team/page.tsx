@@ -112,6 +112,7 @@ import { AddProjectAccomplishmentDialog } from "@/components/team/add-project-ac
 import { ProjectsInfoModal, useProjectsInfoModal } from "@/components/team/projects-info-modal";
 import { HierarchyTreeView } from "@/components/team/hierarchy-tree-view";
 import { SetExpectationsDialog } from "@/components/team/set-expectations-dialog";
+import { AwardPackagesManager } from "@/components/team/award-packages-manager";
 import { useProjectsStore } from "@/stores/projects-store";
 import { toast } from "@/components/ui/sonner";
 import { 
@@ -344,6 +345,9 @@ export default function TeamPage() {
     subordinate?: Profile;
     managedMember?: ManagedMember;
   } | null>(null);
+
+  // Award packages manager state
+  const [showAwardPackagesManager, setShowAwardPackagesManager] = useState(false);
 
   // Projects state
   const { 
@@ -1870,14 +1874,24 @@ export default function TeamPage() {
             </div>
             <div className="flex flex-col sm:flex-row gap-2">
           {canSupervise(profile?.rank) && (
-            <Button 
-              variant="outline" 
-              className="w-full sm:w-auto shrink-0"
-              onClick={() => setShowAddMemberDialog(true)}
-            >
-              <UserPlus className="size-4 mr-2" />
-              Add Member
-            </Button>
+            <>
+              <Button 
+                variant="outline" 
+                className="w-full sm:w-auto shrink-0"
+                onClick={() => setShowAwardPackagesManager(true)}
+              >
+                <Trophy className="size-4 mr-2" />
+                Award Packages
+              </Button>
+              <Button 
+                variant="outline" 
+                className="w-full sm:w-auto shrink-0"
+                onClick={() => setShowAddMemberDialog(true)}
+              >
+                <UserPlus className="size-4 mr-2" />
+                Add Member
+              </Button>
+            </>
           )}
           <Dialog open={showInviteDialog} onOpenChange={setShowInviteDialog}>
             <DialogTrigger asChild>
@@ -2044,6 +2058,16 @@ export default function TeamPage() {
           managedMember={expectationsTarget?.managedMember}
           supervisorRank={profile?.rank}
           onSuccess={() => setExpectationsTarget(null)}
+        />
+
+        {/* Award Packages Manager */}
+        <AwardPackagesManager
+          open={showAwardPackagesManager}
+          onOpenChange={setShowAwardPackagesManager}
+          onAwardsApplied={() => {
+            // Refresh awards when win status changes
+            loadAwards();
+          }}
         />
         
         {/* Remove/Delete Member Confirmation Dialog */}

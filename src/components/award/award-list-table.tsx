@@ -23,14 +23,15 @@ import {
   Crown,
   FileEdit,
   Eye,
+  Trophy,
 } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { AWARD_LEVELS, AWARD_CATEGORIES } from "@/lib/constants";
-import type { AwardShell, Profile, ManagedMember, Rank, AwardLevel, AwardCategory, AwardPeriodType } from "@/types/database";
+import { AWARD_LEVELS, AWARD_CATEGORIES, AWARD_WIN_LEVELS } from "@/lib/constants";
+import type { AwardShell, Profile, ManagedMember, Rank, AwardLevel, AwardCategory, AwardPeriodType, AwardWinLevel } from "@/types/database";
 
 // ============================================================================
 // Types
@@ -45,12 +46,21 @@ export interface AwardShellWithDetails {
   award_level: AwardLevel;
   award_category: AwardCategory;
   sentences_per_statement: 2 | 3;
+  // Title/label
+  title?: string | null;
   // Period fields
   award_period_type: AwardPeriodType;
   quarter: 1 | 2 | 3 | 4 | null;
   is_fiscal_year: boolean;
   period_start_date: string | null;
   period_end_date: string | null;
+  // Team award fields
+  is_team_award?: boolean;
+  // Win tracking fields
+  is_winner?: boolean;
+  win_level?: AwardWinLevel | null;
+  won_at?: string | null;
+  generated_award_id?: string | null;
   created_at: string;
   updated_at: string;
   owner_profile?: Profile | null;
@@ -75,6 +85,14 @@ type SortOrder = "asc" | "desc";
 // ============================================================================
 
 function getRecipientName(award: AwardShellWithDetails): string {
+  // Team awards show title or fallback to "Team Award"
+  if (award.is_team_award) {
+    return award.title || "Team Award";
+  }
+  // Individual awards can also have a title that takes precedence
+  if (award.title) {
+    return award.title;
+  }
   if (award.owner_team_member) {
     return `${award.owner_team_member.rank || ""} ${award.owner_team_member.full_name}`.trim();
   }
@@ -140,6 +158,10 @@ function getLevelLabel(level: string): string {
 
 function getCategoryLabel(category: string): string {
   return AWARD_CATEGORIES.find((c) => c.value === category)?.label || category;
+}
+
+function getWinLevelShortLabel(level: AwardWinLevel): string {
+  return AWARD_WIN_LEVELS.find((l) => l.value === level)?.shortLabel || level;
 }
 
 function getProgress(award: AwardShellWithDetails): number {
@@ -284,7 +306,18 @@ export function AwardListTable({
                     <TooltipContent>You created this award</TooltipContent>
                   </Tooltip>
                 )}
-                {isManagedMember && (
+                {award.is_team_award && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Badge variant="outline" className="text-[10px] h-4 px-1 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800">
+                        <Users className="size-2.5 mr-0.5" />
+                        Team
+                      </Badge>
+                    </TooltipTrigger>
+                    <TooltipContent>Team award with multiple members</TooltipContent>
+                  </Tooltip>
+                )}
+                {isManagedMember && !award.is_team_award && (
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Badge variant="outline" className="text-[10px] h-4 px-1">
@@ -293,6 +326,17 @@ export function AwardListTable({
                       </Badge>
                     </TooltipTrigger>
                     <TooltipContent>Managed team member</TooltipContent>
+                  </Tooltip>
+                )}
+                {award.is_winner && award.win_level && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Badge className="text-[10px] h-4 px-1 gap-0.5 bg-amber-500 hover:bg-amber-600">
+                        <Trophy className="size-2.5" />
+                        {getWinLevelShortLabel(award.win_level)}
+                      </Badge>
+                    </TooltipTrigger>
+                    <TooltipContent>Won at {getWinLevelShortLabel(award.win_level)} level</TooltipContent>
                   </Tooltip>
                 )}
               </div>

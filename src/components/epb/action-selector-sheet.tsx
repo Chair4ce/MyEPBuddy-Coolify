@@ -55,9 +55,11 @@ import type { Accomplishment, AccomplishmentMPARelevancy } from "@/types/databas
 type SortOption = "date" | "relevancy" | "quality";
 
 interface ActionSelectorSheetProps {
-  accomplishments: Accomplishment[];
+  /** All accomplishments available (for searching across all MPAs) */
+  allAccomplishments: Accomplishment[];
   selectedIds: string[];
   onSelectionChange: (ids: string[]) => void;
+  /** The MPA this selector is opened from - used as default filter */
   targetMpa?: string;
   statementNumber?: 1 | 2;
   cycleYear: number;
@@ -65,7 +67,7 @@ interface ActionSelectorSheetProps {
 }
 
 export function ActionSelectorSheet({
-  accomplishments,
+  allAccomplishments,
   selectedIds,
   onSelectionChange,
   targetMpa,
@@ -93,20 +95,20 @@ export function ActionSelectorSheet({
     return action.assessment_scores?.overall_score || 0;
   };
 
-  // Extract unique tags from accomplishments
+  // Extract unique tags from all accomplishments
   const availableTags = useMemo(() => {
     const tagSet = new Set<string>();
-    accomplishments.forEach((a) => {
+    allAccomplishments.forEach((a) => {
       if (Array.isArray(a.tags)) {
         a.tags.forEach((tag) => tagSet.add(tag));
       }
     });
     return Array.from(tagSet).sort((a, b) => a.localeCompare(b));
-  }, [accomplishments]);
+  }, [allAccomplishments]);
 
-  // Filter and sort accomplishments
+  // Filter and sort accomplishments from the full list
   const filteredAccomplishments = useMemo(() => {
-    let filtered = accomplishments;
+    let filtered = allAccomplishments;
 
     // Filter by MPA
     if (mpaFilter !== "all") {
@@ -169,7 +171,7 @@ export function ActionSelectorSheet({
     }
 
     return sorted;
-  }, [accomplishments, mpaFilter, selectedTags, searchQuery, sortBy]);
+  }, [allAccomplishments, mpaFilter, selectedTags, searchQuery, sortBy]);
 
   // Toggle tag selection
   const toggleTag = (tag: string) => {
@@ -250,7 +252,7 @@ export function ActionSelectorSheet({
     <>
       {triggerWithClick}
       <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-lg max-h-[85vh] flex flex-col">
+      <DialogContent className="sm:max-w-5xl! w-[95vw] max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Zap className="size-5 text-primary" />
@@ -289,8 +291,8 @@ export function ActionSelectorSheet({
             {/* Filter Controls - Responsive Grid */}
             <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:gap-2">
               <Select value={mpaFilter} onValueChange={setMpaFilter}>
-                <SelectTrigger className="h-9 w-full sm:w-[160px]">
-                  <Filter className="size-3.5 mr-1.5 text-muted-foreground" />
+                <SelectTrigger className="h-9 w-full sm:w-auto sm:min-w-[200px]">
+                  <Filter className="size-3.5 mr-1.5 text-muted-foreground shrink-0" />
                   <SelectValue placeholder="Filter MPA" />
                 </SelectTrigger>
                 <SelectContent>
@@ -436,8 +438,8 @@ export function ActionSelectorSheet({
             </div>
             <div className="flex items-center gap-2">
               <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortOption)}>
-                <SelectTrigger className="h-8 w-full sm:w-[140px] text-xs">
-                  <ArrowUpDown className="size-3 mr-1.5" />
+                <SelectTrigger className="h-8 w-auto min-w-[120px] text-xs">
+                  <ArrowUpDown className="size-3 mr-1.5 shrink-0" />
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -458,7 +460,7 @@ export function ActionSelectorSheet({
           </div>
 
           {/* Action list */}
-          <ScrollArea className="h-[300px] pr-4">
+          <ScrollArea className="h-[50vh] pr-4">
             <div className="space-y-2">
               {filteredAccomplishments.length === 0 ? (
                 <div className="py-8 text-center">
@@ -561,12 +563,12 @@ export function ActionSelectorSheet({
                               </div>
                             )}
                           </div>
-                          <p className="text-xs text-muted-foreground line-clamp-2">
+                          <p className="text-sm text-muted-foreground">
                             {action.details}
                           </p>
                           {action.impact && (
-                            <p className="text-xs text-muted-foreground/70 line-clamp-1">
-                              Impact: {action.impact}
+                            <p className="text-sm text-muted-foreground/70 mt-1">
+                              <span className="font-medium">Impact:</span> {action.impact}
                             </p>
                           )}
                         </div>

@@ -1,4 +1,4 @@
-import type { Rank, MajorGradedArea } from "@/types/database";
+import type { Rank, MajorGradedArea, AwardWinLevel } from "@/types/database";
 
 // Standard Major Performance Areas - AFI 36-2406
 // These are the same for all users and should not be modified
@@ -387,6 +387,17 @@ export const AWARD_LEVELS: { value: AwardLevel; label: string; shortLabel: strin
   { value: "wing", label: "Wing", shortLabel: "WG" },
   { value: "majcom", label: "MAJCOM", shortLabel: "MAJCOM" },
   { value: "haf", label: "Headquarters Air Force", shortLabel: "HAF" },
+];
+
+// Award Win Levels - levels at which an award package can win (more granular than AWARD_LEVELS)
+export const AWARD_WIN_LEVELS: { value: AwardWinLevel; label: string; shortLabel: string }[] = [
+  { value: "flight", label: "Flight", shortLabel: "FLT" },
+  { value: "squadron", label: "Squadron", shortLabel: "SQ" },
+  { value: "tenant_unit", label: "Tenant Unit", shortLabel: "TU" },
+  { value: "group", label: "Group", shortLabel: "GP" },
+  { value: "wing", label: "Wing", shortLabel: "WG" },
+  { value: "haf", label: "Headquarters Air Force", shortLabel: "HAF" },
+  { value: "12_oay", label: "12 Outstanding Airmen of the Year", shortLabel: "12 OAY" },
 ];
 
 export const AWARD_CATEGORIES: { value: AwardCategory; label: string }[] = [

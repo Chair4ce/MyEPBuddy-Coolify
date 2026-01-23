@@ -201,6 +201,9 @@ export interface StatementHistory {
 
 export type WinLevel = "squadron" | "group" | "wing" | "tenant_unit" | "haf";
 
+// Award Win Level - levels at which an award package can win
+export type AwardWinLevel = "flight" | "squadron" | "tenant_unit" | "group" | "wing" | "haf" | "12_oay";
+
 export interface RefinedStatement {
   id: string;
   user_id: string;
@@ -499,9 +502,22 @@ export interface WorkspaceSessionParticipant {
 
 export type AwardType = "coin" | "quarterly" | "annual" | "special";
 export type AwardLevel = "squadron" | "group" | "wing" | "majcom" | "haf";
-export type AwardCategory = "snco" | "nco" | "amn" | "jr_tech" | "sr_tech" | "innovation" | "volunteer" | "team";
+export type AwardCategory = "snco" | "nco" | "amn" | "jr_tech" | "sr_tech" | "innovation" | "volunteer" | "team" | string;
 export type AwardRequestStatus = "pending" | "approved" | "denied";
 export type AwardQuarter = "Q1" | "Q2" | "Q3" | "Q4";
+
+// User-customizable award categories
+export interface UserAwardCategory {
+  id: string;
+  user_id: string;
+  category_key: string;
+  label: string;
+  description: string | null;
+  is_default: boolean;
+  display_order: number;
+  created_at: string;
+  updated_at: string;
+}
 
 export interface Award {
   id: string;
@@ -664,6 +680,18 @@ export interface DutyDescriptionExample {
   created_at: string;
 }
 
+export interface DutyDescriptionTemplate {
+  id: string;
+  user_id: string;
+  template_text: string;
+  office_label: string | null;
+  role_label: string | null;
+  rank_label: string | null;
+  note: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface EPBShellShare {
   id: string;
   shell_id: string;
@@ -709,12 +737,21 @@ export interface AwardShell {
   award_level: AwardLevel;
   award_category: AwardCategory;
   sentences_per_statement: 2 | 3;
+  // Award title/label
+  title: string | null;
   // Award period fields
   award_period_type: AwardPeriodType;
   quarter: 1 | 2 | 3 | 4 | null;
   is_fiscal_year: boolean;
   period_start_date: string | null;
   period_end_date: string | null;
+  // Team award fields
+  is_team_award: boolean;
+  // Win tracking fields
+  is_winner: boolean;
+  win_level: AwardWinLevel | null;
+  won_at: string | null;
+  generated_award_id: string | null;
   created_at: string;
   updated_at: string;
   // Joined fields
@@ -722,6 +759,32 @@ export interface AwardShell {
   owner_profile?: Profile;
   owner_team_member?: ManagedMember;
   creator_profile?: Profile;
+  team_members?: AwardShellTeamMember[];
+  wins?: AwardShellWin[];
+}
+
+// Team members nominated for a team award
+export interface AwardShellTeamMember {
+  id: string;
+  shell_id: string;
+  profile_id: string | null;
+  team_member_id: string | null;
+  added_by: string;
+  created_at: string;
+  // Joined fields
+  profile?: Profile;
+  team_member?: ManagedMember;
+}
+
+// Win levels for an award shell (awards can win at multiple levels over time)
+export interface AwardShellWin {
+  id: string;
+  shell_id: string;
+  win_level: AwardWinLevel;
+  won_at: string;
+  added_by: string;
+  generated_award_id: string | null;
+  created_at: string;
 }
 
 export interface AwardShellSection {
@@ -998,6 +1061,73 @@ type Json = string | number | boolean | null | { [key: string]: Json | undefined
 export interface Database {
   public: {
     Tables: {
+      user_award_categories: {
+        Row: {
+          id: string;
+          user_id: string;
+          category_key: string;
+          label: string;
+          description: string | null;
+          is_default: boolean;
+          display_order: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          category_key: string;
+          label: string;
+          description?: string | null;
+          is_default?: boolean;
+          display_order?: number;
+        };
+        Update: {
+          label?: string;
+          description?: string | null;
+          display_order?: number;
+        };
+      };
+      award_shell_team_members: {
+        Row: {
+          id: string;
+          shell_id: string;
+          profile_id: string | null;
+          team_member_id: string | null;
+          added_by: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          shell_id: string;
+          profile_id?: string | null;
+          team_member_id?: string | null;
+          added_by: string;
+        };
+        Update: never;
+      };
+      award_shell_wins: {
+        Row: {
+          id: string;
+          shell_id: string;
+          win_level: AwardWinLevel;
+          won_at: string;
+          added_by: string;
+          generated_award_id: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          shell_id: string;
+          win_level: AwardWinLevel;
+          won_at?: string;
+          added_by: string;
+          generated_award_id?: string | null;
+        };
+        Update: {
+          generated_award_id?: string | null;
+        };
+      };
       profiles: {
         Row: {
           id: string;
@@ -1588,6 +1718,18 @@ export interface Database {
           afsc: string | null;
           can_view_accomplishments: boolean;
         }[];
+      };
+      initialize_user_award_categories: {
+        Args: { p_user_id: string };
+        Returns: UserAwardCategory[];
+      };
+      add_award_shell_win_level: {
+        Args: { p_shell_id: string; p_win_level: AwardWinLevel };
+        Returns: string;
+      };
+      remove_award_shell_win_level: {
+        Args: { p_shell_id: string; p_win_level: AwardWinLevel };
+        Returns: boolean;
       };
     };
     Enums: {

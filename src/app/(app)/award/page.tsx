@@ -33,13 +33,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { AWARD_CATEGORIES } from "@/lib/constants";
+// AWARD_CATEGORIES moved to user-customizable categories
 import {
   Award,
   Loader2,
   Plus,
   UserPlus,
   RefreshCw,
+  Users,
 } from "lucide-react";
 import {
   Tooltip,
@@ -49,6 +50,8 @@ import {
 } from "@/components/ui/tooltip";
 import { AwardListTable, type AwardShellWithDetails } from "@/components/award/award-list-table";
 import { AwardWorkspaceDialog } from "@/components/award/award-workspace-dialog";
+import { AwardCategoriesManager } from "@/components/award/award-categories-manager";
+import { TeamMemberSelector } from "@/components/award/team-member-selector";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import type {
@@ -58,6 +61,7 @@ import type {
   Profile,
   ManagedMember,
   Rank,
+  UserAwardCategory,
 } from "@/types/database";
 
 // ============================================================================
@@ -167,10 +171,76 @@ export default function AwardPage() {
   const [createCustomStartDate, setCreateCustomStartDate] = useState<string>("");
   const [createCustomEndDate, setCreateCustomEndDate] = useState<string>("");
   const [isCreating, setIsCreating] = useState(false);
+  // Team award state
+  const [isTeamAward, setIsTeamAward] = useState(false);
+  const [selectedTeamMemberIds, setSelectedTeamMemberIds] = useState<string[]>([]);
+  // Award title/label
+  const [createAwardTitle, setCreateAwardTitle] = useState<string>("");
 
   // Workspace dialog state
   const [selectedAward, setSelectedAward] = useState<AwardShellWithDetails | null>(null);
   const [showWorkspaceDialog, setShowWorkspaceDialog] = useState(false);
+
+  // User award categories state
+  const [userCategories, setUserCategories] = useState<UserAwardCategory[]>([]);
+  const [isLoadingCategories, setIsLoadingCategories] = useState(false);
+
+  // ============================================================================
+  // Load User Award Categories
+  // ============================================================================
+
+  const loadUserCategories = useCallback(async () => {
+    if (!profile) return;
+
+    setIsLoadingCategories(true);
+    try {
+      // Try to fetch existing categories
+      const { data: existingCategories, error: fetchError } = await supabase
+        .from("user_award_categories")
+        .select("*")
+        .eq("user_id", profile.id)
+        .order("display_order", { ascending: true });
+
+      if (fetchError) throw fetchError;
+
+      if (existingCategories && existingCategories.length > 0) {
+        const categories = existingCategories as unknown as UserAwardCategory[];
+        setUserCategories(categories);
+        // Set default selection to first category if current selection is invalid
+        const validKeys = new Set(categories.map((c) => c.category_key));
+        if (!validKeys.has(createAwardCategory)) {
+          setCreateAwardCategory(categories[0].category_key as AwardCategory);
+        }
+      } else {
+        // Initialize default categories for this user
+        const { data: initializedCategories, error: initError } = await supabase.rpc(
+          "initialize_user_award_categories",
+          // @ts-ignore - RPC function types not yet regenerated in supabase types
+          { p_user_id: profile.id }
+        );
+
+        if (initError) throw initError;
+
+        const categories = initializedCategories as unknown as UserAwardCategory[];
+        if (categories && categories.length > 0) {
+          setUserCategories(categories);
+          setCreateAwardCategory(categories[0].category_key as AwardCategory);
+        }
+      }
+    } catch (error) {
+      console.error("Error loading user categories:", error);
+      // Fallback: categories will be empty, user can reset to defaults
+    } finally {
+      setIsLoadingCategories(false);
+    }
+  }, [profile, supabase, createAwardCategory]);
+
+  // Load categories when profile is available
+  useEffect(() => {
+    if (profile) {
+      loadUserCategories();
+    }
+  }, [profile, loadUserCategories]);
 
   // ============================================================================
   // Build nominee options
@@ -322,6 +392,11 @@ export default function AwardPage() {
             is_fiscal_year: shell.is_fiscal_year || false,
             period_start_date: shell.period_start_date,
             period_end_date: shell.period_end_date,
+            is_team_award: shell.is_team_award,
+            is_winner: shell.is_winner,
+            win_level: shell.win_level,
+            won_at: shell.won_at,
+            generated_award_id: shell.generated_award_id,
             created_at: shell.created_at,
             updated_at: shell.updated_at,
             owner_profile: ownerProfile,
@@ -372,8 +447,23 @@ export default function AwardPage() {
   const handleCreateAward = async () => {
     if (!profile) return;
 
-    const nominee = nomineeOptions.find((n) => n.id === selectedNomineeId);
-    if (!nominee) return;
+    // For team awards, skip nominee validation (team members are selected separately)
+    if (!isTeamAward) {
+      const nominee = nomineeOptions.find((n) => n.id === selectedNomineeId);
+      if (!nominee) return;
+    }
+
+    // Validate team award has title and at least one member selected
+    if (isTeamAward) {
+      if (!createAwardTitle.trim()) {
+        toast.error("Please enter a team/office name for the team award");
+        return;
+      }
+      if (selectedTeamMemberIds.length === 0) {
+        toast.error("Please select at least one team member for the team award");
+        return;
+      }
+    }
 
     // Validate special award dates
     if (createPeriodType === "special" && (!createCustomStartDate || !createCustomEndDate)) {
@@ -384,7 +474,8 @@ export default function AwardPage() {
     setIsCreating(true);
 
     try {
-      const isManagedMember = nominee.isManagedMember;
+      const nominee = nomineeOptions.find((n) => n.id === selectedNomineeId);
+      const isManagedMember = nominee?.isManagedMember || false;
       const actualNomineeId = isManagedMember
         ? selectedNomineeId.replace("managed:", "")
         : selectedNomineeId === "self"
@@ -405,26 +496,88 @@ export default function AwardPage() {
       const { data: newShell, error: createError } = await supabase
         .from("award_shells")
         .insert({
-          user_id: isManagedMember ? profile.id : actualNomineeId,
-          team_member_id: isManagedMember ? actualNomineeId : null,
+          user_id: isTeamAward ? profile.id : (isManagedMember ? profile.id : actualNomineeId),
+          team_member_id: isTeamAward ? null : (isManagedMember ? actualNomineeId : null),
           created_by: profile.id,
           cycle_year: createYear,
-          award_level: "squadron", // Default level, can be changed in settings
+          award_level: "squadron",
           award_category: createAwardCategory,
           sentences_per_statement: 2,
+          title: createAwardTitle.trim() || null,
           award_period_type: createPeriodType,
           quarter: createPeriodType === "quarterly" ? createQuarter : null,
           is_fiscal_year: createIsFiscalYear,
           period_start_date: periodDates.start,
           period_end_date: periodDates.end,
+          is_team_award: isTeamAward,
         } as never)
         .select("*")
         .single();
 
       if (createError) throw createError;
 
-      toast.success("Award package created successfully");
+      // If team award, save team members
+      if (isTeamAward && newShell && selectedTeamMemberIds.length > 0) {
+        const shell = newShell as unknown as AwardShell;
+        
+        // Deduplicate member IDs
+        const uniqueMemberIds = [...new Set(selectedTeamMemberIds)];
+        
+        // Build insert records, ensuring no duplicates
+        const seenProfiles = new Set<string>();
+        const seenTeamMembers = new Set<string>();
+        const teamMemberInserts: Array<{
+          shell_id: string;
+          profile_id: string | null;
+          team_member_id: string | null;
+          added_by: string;
+        }> = [];
+
+        for (const memberId of uniqueMemberIds) {
+          const isManaged = memberId.startsWith("managed:");
+          const actualId = isManaged ? memberId.replace("managed:", "") : memberId;
+          
+          // Skip if we've already seen this profile or team member
+          if (isManaged) {
+            if (seenTeamMembers.has(actualId)) continue;
+            seenTeamMembers.add(actualId);
+          } else {
+            if (seenProfiles.has(actualId)) continue;
+            seenProfiles.add(actualId);
+          }
+
+          teamMemberInserts.push({
+            shell_id: shell.id,
+            profile_id: isManaged ? null : actualId,
+            team_member_id: isManaged ? actualId : null,
+            added_by: profile.id,
+          });
+        }
+
+        if (teamMemberInserts.length > 0) {
+          const { error: teamError } = await supabase
+            .from("award_shell_team_members")
+            // @ts-ignore - Table types not yet regenerated in supabase types
+            .insert(teamMemberInserts);
+
+          if (teamError) {
+            console.error("Error saving team members:", teamError);
+            // Don't fail the whole operation, just warn
+            toast.warning("Award created but some team members could not be saved");
+          }
+        }
+      }
+
+      toast.success(isTeamAward 
+        ? `Team award package created with ${selectedTeamMemberIds.length} members` 
+        : "Award package created successfully"
+      );
       setShowCreateDialog(false);
+      
+      // Reset form state
+      setIsTeamAward(false);
+      setSelectedTeamMemberIds([]);
+      setCreateAwardTitle("");
       
       // Refresh the list
       await loadAwards();
@@ -441,19 +594,25 @@ export default function AwardPage() {
           award_level: shell.award_level,
           award_category: shell.award_category,
           sentences_per_statement: shell.sentences_per_statement,
+          title: shell.title,
           award_period_type: shell.award_period_type,
           quarter: shell.quarter,
           is_fiscal_year: shell.is_fiscal_year,
           period_start_date: shell.period_start_date,
           period_end_date: shell.period_end_date,
+          is_team_award: shell.is_team_award,
           created_at: shell.created_at,
           updated_at: shell.updated_at,
-          owner_profile: !isManagedMember
-            ? (actualNomineeId === profile.id ? profile : subordinates.find((s) => s.id === actualNomineeId) || null)
-            : null,
-          owner_team_member: isManagedMember
-            ? managedMembers.find((m) => m.id === actualNomineeId) || null
-            : null,
+          owner_profile: isTeamAward 
+            ? profile 
+            : (!isManagedMember
+              ? (actualNomineeId === profile.id ? profile : subordinates.find((s) => s.id === actualNomineeId) || null)
+              : null),
+          owner_team_member: isTeamAward 
+            ? null 
+            : (isManagedMember
+              ? managedMembers.find((m) => m.id === actualNomineeId) || null
+              : null),
           creator_profile: profile,
           sections_count: 3,
           filled_sections_count: 0,
@@ -558,60 +717,112 @@ export default function AwardPage() {
             </DialogHeader>
 
             <div className="space-y-4 py-4">
-              {/* Nominee Selection */}
-              <div className="space-y-2">
-                <Label>Nominee</Label>
-                <Select value={selectedNomineeId} onValueChange={handleNomineeChange}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select nominee" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="self">
-                      {profile?.rank} {profile?.full_name} (Self)
-                    </SelectItem>
-                    {(subordinates.length > 0 || managedMembers.length > 0) && (
-                      <Separator className="my-1" />
-                    )}
-                    {subordinates.map((sub) => (
-                      <SelectItem key={sub.id} value={sub.id}>
-                        {sub.rank} {sub.full_name}
-                      </SelectItem>
-                    ))}
-                    {managedMembers.map((member) => (
-                      <SelectItem key={member.id} value={`managed:${member.id}`}>
-                        {member.rank} {member.full_name}
-                      </SelectItem>
-                    ))}
-                    <Separator className="my-1" />
-                    <SelectItem value="add-member" className="text-primary">
-                      <span className="flex items-center gap-2">
-                        <UserPlus className="size-4" />
-                        Add Team Member
-                      </span>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
+              {/* Team Award Toggle */}
+              <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+                <div className="flex items-center gap-2">
+                  <Users className="size-4 text-muted-foreground" />
+                  <div>
+                    <Label htmlFor="team-award-toggle" className="cursor-pointer font-medium">
+                      Team Award
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Award for multiple team members
+                    </p>
+                  </div>
+                </div>
+                <Switch
+                  id="team-award-toggle"
+                  checked={isTeamAward}
+                  onCheckedChange={(checked) => {
+                    setIsTeamAward(checked);
+                    // Clear team members when switching off
+                    if (!checked) {
+                      setSelectedTeamMemberIds([]);
+                    }
+                  }}
+                />
               </div>
 
-              {/* Award Category */}
-              <div className="space-y-2">
-                <Label>Award Category</Label>
-                <Select
-                  value={createAwardCategory}
-                  onValueChange={(v) => setCreateAwardCategory(v as AwardCategory)}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {AWARD_CATEGORIES.map((c) => (
-                      <SelectItem key={c.value} value={c.value}>
-                        {c.label}
+              {/* Single Nominee Selection (when not team award) */}
+              {!isTeamAward && (
+                <div className="space-y-2">
+                  <Label>Nominee</Label>
+                  <Select value={selectedNomineeId} onValueChange={handleNomineeChange}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select nominee" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="self">
+                        {profile?.rank} {profile?.full_name} (Self)
                       </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+                      {(subordinates.length > 0 || managedMembers.length > 0) && (
+                        <Separator className="my-1" />
+                      )}
+                      {subordinates.map((sub) => (
+                        <SelectItem key={sub.id} value={sub.id}>
+                          {sub.rank} {sub.full_name}
+                        </SelectItem>
+                      ))}
+                      {managedMembers.map((member) => (
+                        <SelectItem key={member.id} value={`managed:${member.id}`}>
+                          {member.rank} {member.full_name}
+                        </SelectItem>
+                      ))}
+                      <Separator className="my-1" />
+                      <SelectItem value="add-member" className="text-primary">
+                        <span className="flex items-center gap-2">
+                          <UserPlus className="size-4" />
+                          Add Team Member
+                        </span>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {/* Team Member Selection (when team award) */}
+              {isTeamAward && (
+                <>
+                  {/* Team Award Title */}
+                  <div className="space-y-2">
+                    <Label htmlFor="team-award-title">
+                      Team/Office Name <span className="text-muted-foreground font-normal">(required)</span>
+                    </Label>
+                    <Input
+                      id="team-award-title"
+                      value={createAwardTitle}
+                      onChange={(e) => setCreateAwardTitle(e.target.value)}
+                      placeholder="e.g., Flight Operations, CSS, Resource Advisors"
+                      maxLength={100}
+                    />
+                    <p className="text-[10px] text-muted-foreground">
+                      This will be displayed as the award recipient in the list
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Team Members</Label>
+                    <TeamMemberSelector
+                      subordinates={subordinates}
+                      managedMembers={managedMembers}
+                      selectedMemberIds={selectedTeamMemberIds}
+                      onSelectionChange={setSelectedTeamMemberIds}
+                    />
+                  </div>
+                </>
+              )}
+
+              {/* Award Category with User Management */}
+              {profile && (
+                <AwardCategoriesManager
+                  userId={profile.id}
+                  categories={userCategories}
+                  onCategoriesChange={setUserCategories}
+                  selectedCategoryKey={createAwardCategory}
+                  onSelectCategory={(key) => setCreateAwardCategory(key as AwardCategory)}
+                  compact
+                />
+              )}
 
               <Separator />
 

@@ -66,7 +66,7 @@ import { useEPBCollaboration } from "@/hooks/use-epb-collaboration";
 import { useSectionLocks } from "@/hooks/use-section-locks";
 import { useShellFieldLocks } from "@/hooks/use-shell-field-locks";
 import { useIdleDetection } from "@/hooks/use-idle-detection";
-import type { EPBShell, EPBShellSection, EPBShellSnapshot, EPBSavedExample, Accomplishment, Profile, ManagedMember, UserLLMSettings, Rank, DutyDescriptionSnapshot, DutyDescriptionExample } from "@/types/database";
+import type { EPBShell, EPBShellSection, EPBShellSnapshot, EPBSavedExample, Accomplishment, Profile, ManagedMember, UserLLMSettings, Rank, DutyDescriptionSnapshot, DutyDescriptionExample, DutyDescriptionTemplate } from "@/types/database";
 import { useClarifyingQuestionsStore } from "@/stores/clarifying-questions-store";
 
 // Shared EPB info - represents an EPB shell that has been shared with the current user
@@ -173,6 +173,14 @@ export function EPBShellForm({
   // Duty description snapshots and examples
   const [dutyDescriptionSnapshots, setDutyDescriptionSnapshots] = useState<DutyDescriptionSnapshot[]>([]);
   const [dutyDescriptionExamples, setDutyDescriptionExamples] = useState<DutyDescriptionExample[]>([]);
+  
+  // Duty description templates (reusable across team members)
+  const [dutyDescriptionTemplates, setDutyDescriptionTemplates] = useState<DutyDescriptionTemplate[]>([]);
+  const [templateLabels, setTemplateLabels] = useState<{ offices: string[]; roles: string[]; ranks: string[] }>({
+    offices: [],
+    roles: [],
+    ranks: [],
+  });
   
   // Ref for cursor tracking container
   const contentContainerRef = useRef<HTMLDivElement>(null);
@@ -1002,6 +1010,36 @@ export function EPBShellForm({
           if (dutyExamples) {
             setDutyDescriptionExamples(dutyExamples as DutyDescriptionExample[]);
           }
+          
+          // Load duty description templates (user-owned, not shell-specific)
+          // Guard against profile being null during async operation
+          if (!profile) return;
+          
+          const { data: templates } = await supabase
+            .from("duty_description_templates")
+            .select("*")
+            .eq("user_id", profile.id)
+            .order("created_at", { ascending: false });
+          
+          if (aborted) return;
+          
+          if (templates) {
+            setDutyDescriptionTemplates(templates as DutyDescriptionTemplate[]);
+            // Extract unique labels for autocomplete
+            const offices = new Set<string>();
+            const roles = new Set<string>();
+            const ranks = new Set<string>();
+            (templates as DutyDescriptionTemplate[]).forEach((t) => {
+              if (t.office_label) offices.add(t.office_label);
+              if (t.role_label) roles.add(t.role_label);
+              if (t.rank_label) ranks.add(t.rank_label);
+            });
+            setTemplateLabels({
+              offices: Array.from(offices).sort(),
+              roles: Array.from(roles).sort(),
+              ranks: Array.from(ranks).sort(),
+            });
+          }
         } else {
           setCurrentShell(null);
         }
@@ -1407,6 +1445,64 @@ export function EPBShellForm({
 
     // Remove from local state
     setDutyDescriptionExamples(dutyDescriptionExamples.filter((e) => e.id !== exampleId));
+  };
+
+  // Save a duty description template (reusable across team members)
+  const handleSaveDutyDescriptionTemplate = async (data: {
+    template_text: string;
+    office_label: string | null;
+    role_label: string | null;
+    rank_label: string | null;
+    note: string | null;
+  }) => {
+    if (!profile || !data.template_text.trim()) return;
+
+    const { data: newTemplate, error } = await supabase
+      .from("duty_description_templates")
+      .insert({
+        user_id: profile.id,
+        template_text: data.template_text,
+        office_label: data.office_label,
+        role_label: data.role_label,
+        rank_label: data.rank_label,
+        note: data.note,
+      } as never)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    // Add to local state
+    const template = newTemplate as DutyDescriptionTemplate;
+    setDutyDescriptionTemplates([template, ...dutyDescriptionTemplates]);
+    
+    // Update labels if new ones were added
+    setTemplateLabels((prev) => {
+      const newLabels = { ...prev };
+      if (data.office_label && !prev.offices.includes(data.office_label)) {
+        newLabels.offices = [...prev.offices, data.office_label].sort();
+      }
+      if (data.role_label && !prev.roles.includes(data.role_label)) {
+        newLabels.roles = [...prev.roles, data.role_label].sort();
+      }
+      if (data.rank_label && !prev.ranks.includes(data.rank_label)) {
+        newLabels.ranks = [...prev.ranks, data.rank_label].sort();
+      }
+      return newLabels;
+    });
+  };
+
+  // Delete a duty description template
+  const handleDeleteDutyDescriptionTemplate = async (templateId: string) => {
+    const { error } = await supabase
+      .from("duty_description_templates")
+      .delete()
+      .eq("id", templateId);
+
+    if (error) throw error;
+
+    // Remove from local state
+    setDutyDescriptionTemplates(dutyDescriptionTemplates.filter((t) => t.id !== templateId));
   };
 
   // Create a snapshot (max 10 per section, oldest gets deleted when 11th is added)
@@ -2184,6 +2280,11 @@ export function EPBShellForm({
           savedExamples={dutyDescriptionExamples}
           onSaveExample={handleSaveDutyDescriptionExample}
           onDeleteExample={handleDeleteDutyDescriptionExample}
+          // Templates (reusable across team members)
+          templates={dutyDescriptionTemplates}
+          onSaveTemplate={handleSaveDutyDescriptionTemplate}
+          onDeleteTemplate={handleDeleteDutyDescriptionTemplate}
+          templateLabels={templateLabels}
           // Lock props for single-user mode
           isLockedByOther={!isMultiUserMode && fieldLocks.isLockedByOther("duty_description")}
           lockedByInfo={!isMultiUserMode ? fieldLocks.getLockedByInfo("duty_description") : null}

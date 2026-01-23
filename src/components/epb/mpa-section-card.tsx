@@ -1704,7 +1704,7 @@ export function MPASectionCard({
                           {state.usesTwoStatements ? "Statement 1 Actions" : "Load Actions"}
                         </span>
                         <ActionSelectorSheet
-                          accomplishments={mpaAccomplishments}
+                          allAccomplishments={accomplishments}
                           selectedIds={state.statement1ActionIds}
                           onSelectionChange={handleStatement1ActionsChange}
                           targetMpa={section.mpa}
@@ -1738,7 +1738,7 @@ export function MPASectionCard({
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-medium">Statement 2 Actions</span>
                           <ActionSelectorSheet
-                            accomplishments={mpaAccomplishments}
+                            allAccomplishments={accomplishments}
                             selectedIds={state.statement2ActionIds}
                             onSelectionChange={handleStatement2ActionsChange}
                             targetMpa={section.mpa}

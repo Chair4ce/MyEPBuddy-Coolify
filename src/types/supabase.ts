@@ -553,6 +553,114 @@ export type Database = {
           },
         ]
       }
+      award_shell_team_members: {
+        Row: {
+          added_by: string
+          created_at: string
+          id: string
+          profile_id: string | null
+          shell_id: string
+          team_member_id: string | null
+        }
+        Insert: {
+          added_by: string
+          created_at?: string
+          id?: string
+          profile_id?: string | null
+          shell_id: string
+          team_member_id?: string | null
+        }
+        Update: {
+          added_by?: string
+          created_at?: string
+          id?: string
+          profile_id?: string | null
+          shell_id?: string
+          team_member_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "award_shell_team_members_added_by_fkey"
+            columns: ["added_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "award_shell_team_members_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "award_shell_team_members_shell_id_fkey"
+            columns: ["shell_id"]
+            isOneToOne: false
+            referencedRelation: "award_shells"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "award_shell_team_members_team_member_id_fkey"
+            columns: ["team_member_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      award_shell_wins: {
+        Row: {
+          added_by: string
+          created_at: string
+          generated_award_id: string | null
+          id: string
+          shell_id: string
+          win_level: Database["public"]["Enums"]["award_win_level"]
+          won_at: string
+        }
+        Insert: {
+          added_by: string
+          created_at?: string
+          generated_award_id?: string | null
+          id?: string
+          shell_id: string
+          win_level: Database["public"]["Enums"]["award_win_level"]
+          won_at?: string
+        }
+        Update: {
+          added_by?: string
+          created_at?: string
+          generated_award_id?: string | null
+          id?: string
+          shell_id?: string
+          win_level?: Database["public"]["Enums"]["award_win_level"]
+          won_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "award_shell_wins_added_by_fkey"
+            columns: ["added_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "award_shell_wins_generated_award_id_fkey"
+            columns: ["generated_award_id"]
+            isOneToOne: false
+            referencedRelation: "awards"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "award_shell_wins_shell_id_fkey"
+            columns: ["shell_id"]
+            isOneToOne: false
+            referencedRelation: "award_shells"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       award_shells: {
         Row: {
           award_category: string
@@ -561,15 +669,21 @@ export type Database = {
           created_at: string
           created_by: string
           cycle_year: number
+          generated_award_id: string | null
           id: string
           is_fiscal_year: boolean
+          is_team_award: boolean
+          is_winner: boolean
           period_end_date: string | null
           period_start_date: string | null
           quarter: number | null
           sentences_per_statement: number
           team_member_id: string | null
+          title: string | null
           updated_at: string
           user_id: string
+          win_level: Database["public"]["Enums"]["award_win_level"] | null
+          won_at: string | null
         }
         Insert: {
           award_category?: string
@@ -578,15 +692,21 @@ export type Database = {
           created_at?: string
           created_by: string
           cycle_year: number
+          generated_award_id?: string | null
           id?: string
           is_fiscal_year?: boolean
+          is_team_award?: boolean
+          is_winner?: boolean
           period_end_date?: string | null
           period_start_date?: string | null
           quarter?: number | null
           sentences_per_statement?: number
           team_member_id?: string | null
+          title?: string | null
           updated_at?: string
           user_id: string
+          win_level?: Database["public"]["Enums"]["award_win_level"] | null
+          won_at?: string | null
         }
         Update: {
           award_category?: string
@@ -595,15 +715,21 @@ export type Database = {
           created_at?: string
           created_by?: string
           cycle_year?: number
+          generated_award_id?: string | null
           id?: string
           is_fiscal_year?: boolean
+          is_team_award?: boolean
+          is_winner?: boolean
           period_end_date?: string | null
           period_start_date?: string | null
           quarter?: number | null
           sentences_per_statement?: number
           team_member_id?: string | null
+          title?: string | null
           updated_at?: string
           user_id?: string
+          win_level?: Database["public"]["Enums"]["award_win_level"] | null
+          won_at?: string | null
         }
         Relationships: [
           {
@@ -611,6 +737,13 @@ export type Database = {
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "award_shells_generated_award_id_fkey"
+            columns: ["generated_award_id"]
+            isOneToOne: false
+            referencedRelation: "awards"
             referencedColumns: ["id"]
           },
           {
@@ -833,6 +966,50 @@ export type Database = {
             columns: ["refined_statement_id"]
             isOneToOne: false
             referencedRelation: "shared_statements_view"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      duty_description_templates: {
+        Row: {
+          created_at: string
+          id: string
+          note: string | null
+          office_label: string | null
+          rank_label: string | null
+          role_label: string | null
+          template_text: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          note?: string | null
+          office_label?: string | null
+          rank_label?: string | null
+          role_label?: string | null
+          template_text: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          note?: string | null
+          office_label?: string | null
+          rank_label?: string | null
+          role_label?: string | null
+          template_text?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "duty_description_templates_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -1759,6 +1936,7 @@ export type Database = {
           data_synced: boolean | null
           id: string
           responded_at: string | null
+          snoozed_until: string | null
           status: string
           supervisor_accepted: boolean | null
           team_member_id: string
@@ -1769,6 +1947,7 @@ export type Database = {
           data_synced?: boolean | null
           id?: string
           responded_at?: string | null
+          snoozed_until?: string | null
           status?: string
           supervisor_accepted?: boolean | null
           team_member_id: string
@@ -1779,6 +1958,7 @@ export type Database = {
           data_synced?: boolean | null
           id?: string
           responded_at?: string | null
+          snoozed_until?: string | null
           status?: string
           supervisor_accepted?: boolean | null
           team_member_id?: string
@@ -2325,6 +2505,140 @@ export type Database = {
           },
         ]
       }
+      supervisor_expectations: {
+        Row: {
+          created_at: string | null
+          cycle_year: number
+          expectation_text: string
+          id: string
+          subordinate_id: string | null
+          supervision_end_date: string | null
+          supervision_start_date: string
+          supervisor_id: string
+          team_member_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          cycle_year: number
+          expectation_text: string
+          id?: string
+          subordinate_id?: string | null
+          supervision_end_date?: string | null
+          supervision_start_date: string
+          supervisor_id: string
+          team_member_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          cycle_year?: number
+          expectation_text?: string
+          id?: string
+          subordinate_id?: string | null
+          supervision_end_date?: string | null
+          supervision_start_date?: string
+          supervisor_id?: string
+          team_member_id?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supervisor_expectations_subordinate_id_fkey"
+            columns: ["subordinate_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supervisor_expectations_supervisor_id_fkey"
+            columns: ["supervisor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supervisor_expectations_team_member_id_fkey"
+            columns: ["team_member_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      supervisor_feedbacks: {
+        Row: {
+          content: string
+          created_at: string | null
+          cycle_year: number
+          feedback_type: string
+          id: string
+          reviewed_accomplishment_ids: string[] | null
+          shared_at: string | null
+          status: string
+          subordinate_id: string | null
+          supervision_end_date: string | null
+          supervision_start_date: string
+          supervisor_id: string
+          team_member_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          content?: string
+          created_at?: string | null
+          cycle_year: number
+          feedback_type: string
+          id?: string
+          reviewed_accomplishment_ids?: string[] | null
+          shared_at?: string | null
+          status?: string
+          subordinate_id?: string | null
+          supervision_end_date?: string | null
+          supervision_start_date: string
+          supervisor_id: string
+          team_member_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          content?: string
+          created_at?: string | null
+          cycle_year?: number
+          feedback_type?: string
+          id?: string
+          reviewed_accomplishment_ids?: string[] | null
+          shared_at?: string | null
+          status?: string
+          subordinate_id?: string | null
+          supervision_end_date?: string | null
+          supervision_start_date?: string
+          supervisor_id?: string
+          team_member_id?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supervisor_feedbacks_subordinate_id_fkey"
+            columns: ["subordinate_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supervisor_feedbacks_supervisor_id_fkey"
+            columns: ["supervisor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supervisor_feedbacks_team_member_id_fkey"
+            columns: ["team_member_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       team_history: {
         Row: {
           created_at: string | null
@@ -2605,6 +2919,50 @@ export type Database = {
             foreignKeyName: "user_api_keys_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_award_categories: {
+        Row: {
+          category_key: string
+          created_at: string
+          description: string | null
+          display_order: number
+          id: string
+          is_default: boolean
+          label: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          category_key: string
+          created_at?: string
+          description?: string | null
+          display_order?: number
+          id?: string
+          is_default?: boolean
+          label: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          category_key?: string
+          created_at?: string
+          description?: string | null
+          display_order?: number
+          id?: string
+          is_default?: boolean
+          label?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_award_categories_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -2978,6 +3336,14 @@ export type Database = {
           },
         ]
       }
+      duty_description_template_labels: {
+        Row: {
+          office_label: string | null
+          rank_label: string | null
+          role_label: string | null
+        }
+        Relationships: []
+      }
       my_subordinate_history: {
         Row: {
           created_at: string | null
@@ -3086,6 +3452,13 @@ export type Database = {
           success: boolean
         }[]
       }
+      add_award_shell_win_level: {
+        Args: {
+          p_shell_id: string
+          p_win_level: Database["public"]["Enums"]["award_win_level"]
+        }
+        Returns: string
+      }
       approve_award_request: { Args: { p_request_id: string }; Returns: string }
       archive_epb_shell: {
         Args: {
@@ -3186,7 +3559,7 @@ export type Database = {
         }[]
       }
       get_all_managed_members: {
-        Args: { supervisor_uuid: string }
+        Args: { max_depth?: number; supervisor_uuid: string }
         Returns: {
           afsc: string
           created_at: string
@@ -3262,6 +3635,23 @@ export type Database = {
           statement_text: string
           team_member_id: string
           user_id: string
+        }[]
+      }
+      get_expectations_for_member: {
+        Args: { p_subordinate_id?: string; p_team_member_id?: string }
+        Returns: {
+          created_at: string
+          cycle_year: number
+          expectation_text: string
+          id: string
+          subordinate_id: string
+          supervision_end_date: string
+          supervision_start_date: string
+          supervisor_id: string
+          supervisor_name: string
+          supervisor_rank: string
+          team_member_id: string
+          updated_at: string
         }[]
       }
       get_member_awards: {
@@ -3389,7 +3779,7 @@ export type Database = {
         }
       }
       get_visible_managed_members: {
-        Args: { viewer_uuid: string }
+        Args: { max_depth?: number; viewer_uuid: string }
         Returns: {
           afsc: string
           created_at: string
@@ -3409,6 +3799,26 @@ export type Database = {
           unit: string
           updated_at: string
         }[]
+      }
+      initialize_user_award_categories: {
+        Args: { p_user_id: string }
+        Returns: {
+          category_key: string
+          created_at: string
+          description: string | null
+          display_order: number
+          id: string
+          is_default: boolean
+          label: string
+          updated_at: string
+          user_id: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "user_award_categories"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
       is_enlisted_rank: {
         Args: { rank_value: Database["public"]["Enums"]["user_rank"] }
@@ -3434,6 +3844,7 @@ export type Database = {
         Args: { p_batch_size?: number; p_user_id: string }
         Returns: number
       }
+      raise_security_exception: { Args: { code: string }; Returns: undefined }
       refresh_section_lock: {
         Args: { p_section_id: string; p_user_id: string }
         Returns: boolean
@@ -3451,8 +3862,24 @@ export type Database = {
         Args: { p_field_key: string; p_shell_id: string; p_user_id: string }
         Returns: undefined
       }
+      remove_award_shell_win_level: {
+        Args: {
+          p_shell_id: string
+          p_win_level: Database["public"]["Enums"]["award_win_level"]
+        }
+        Returns: boolean
+      }
+      share_supervisor_feedback: {
+        Args: { p_feedback_id: string }
+        Returns: boolean
+      }
+      snooze_pending_link: { Args: { link_id: string }; Returns: boolean }
       sync_managed_account_data: { Args: { link_id: string }; Returns: Json }
       unarchive_epb_shell: { Args: { p_shell_id: string }; Returns: boolean }
+      unshare_supervisor_feedback: {
+        Args: { p_feedback_id: string }
+        Returns: boolean
+      }
       update_managed_member_dates: {
         Args: {
           p_end_date?: string
@@ -3468,6 +3895,26 @@ export type Database = {
           p_subordinate_id: string
         }
         Returns: Json
+      }
+      upsert_supervisor_expectation: {
+        Args: {
+          p_cycle_year: number
+          p_expectation_text: string
+          p_subordinate_id: string
+          p_team_member_id: string
+        }
+        Returns: string
+      }
+      upsert_supervisor_feedback: {
+        Args: {
+          p_content: string
+          p_cycle_year: number
+          p_feedback_type: string
+          p_reviewed_accomplishment_ids?: string[]
+          p_subordinate_id: string
+          p_team_member_id: string
+        }
+        Returns: string
       }
       user_can_access_shell: {
         Args: { p_shell_id: string; p_user_id: string }
@@ -3488,6 +3935,14 @@ export type Database = {
       award_quarter: "Q1" | "Q2" | "Q3" | "Q4"
       award_request_status: "pending" | "approved" | "denied"
       award_type: "coin" | "quarterly" | "annual" | "special"
+      award_win_level:
+        | "flight"
+        | "squadron"
+        | "tenant_unit"
+        | "group"
+        | "wing"
+        | "haf"
+        | "12_oay"
       user_rank:
         | "AB"
         | "Amn"
@@ -3654,6 +4109,15 @@ export const Constants = {
       award_quarter: ["Q1", "Q2", "Q3", "Q4"],
       award_request_status: ["pending", "approved", "denied"],
       award_type: ["coin", "quarterly", "annual", "special"],
+      award_win_level: [
+        "flight",
+        "squadron",
+        "tenant_unit",
+        "group",
+        "wing",
+        "haf",
+        "12_oay",
+      ],
       user_rank: [
         "AB",
         "Amn",
