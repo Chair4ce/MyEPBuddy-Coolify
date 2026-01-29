@@ -71,7 +71,7 @@ import { DecorationStatementSelector } from "@/components/decoration/decoration-
 import { DecorationCitationEditor } from "@/components/decoration/decoration-citation-editor";
 import { DecorationShellShareDialog } from "@/components/decoration/decoration-shell-share-dialog";
 import type {
-  Accomplishment,
+  RefinedStatement,
   DecorationShell,
   DecorationAwardType,
   DecorationReason,
@@ -141,6 +141,7 @@ export function DecorationWorkspaceDialog({
     setEndDate,
     citationText,
     selectedStatementIds,
+    statementColors,
     selectedRatee,
     setSelectedRatee,
     selectedModel,
@@ -155,7 +156,7 @@ export function DecorationWorkspaceDialog({
   } = useDecorationShellStore();
 
   // Local state
-  const [accomplishments, setAccomplishments] = useState<Accomplishment[]>([]);
+  const [statements, setStatements] = useState<RefinedStatement[]>([]);
   const [showConfig, setShowConfig] = useState(false);
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -281,29 +282,31 @@ export function DecorationWorkspaceDialog({
     }
   }, [shell, profile, subordinates, managedMembers, setSelectedRatee, unit, setUnit]);
 
-  // Load accomplishments for the ratee
+  // Load refined statements (finalized statements library) for the ratee
   useEffect(() => {
-    async function loadAccomplishments() {
+    async function loadStatements() {
       if (!rateeInfo) return;
 
       if (rateeInfo.isManagedMember) {
+        // For managed members, get their refined statements
         const { data } = await supabase
-          .from("accomplishments")
+          .from("refined_statements")
           .select("*")
           .eq("team_member_id", rateeInfo.id)
-          .order("date", { ascending: false });
-        setAccomplishments((data as Accomplishment[]) || []);
+          .order("created_at", { ascending: false });
+        setStatements((data as RefinedStatement[]) || []);
       } else {
+        // For self or linked users, get statements by user_id with no team_member_id
         const { data } = await supabase
-          .from("accomplishments")
+          .from("refined_statements")
           .select("*")
           .eq("user_id", rateeInfo.id)
           .is("team_member_id", null)
-          .order("date", { ascending: false });
-        setAccomplishments((data as Accomplishment[]) || []);
+          .order("created_at", { ascending: false });
+        setStatements((data as RefinedStatement[]) || []);
       }
     }
-    loadAccomplishments();
+    loadStatements();
   }, [rateeInfo, supabase]);
 
   // Reset store when dialog closes
@@ -336,6 +339,7 @@ export function DecorationWorkspaceDialog({
           end_date: endDate || null,
           citation_text: citationText,
           selected_statement_ids: selectedStatementIds,
+          statement_colors: statementColors,
         } as never)
         .eq("id", currentShell.id);
 
@@ -361,6 +365,7 @@ export function DecorationWorkspaceDialog({
     endDate,
     citationText,
     selectedStatementIds,
+    statementColors,
     supabase,
     setIsSaving,
     setIsDirty,
@@ -731,10 +736,10 @@ export function DecorationWorkspaceDialog({
                 /* Main Content */
                 <div className="grid gap-4 lg:grid-cols-2">
                   {/* Statement Selector */}
-                  <DecorationStatementSelector accomplishments={accomplishments} />
+                  <DecorationStatementSelector statements={statements} />
 
                   {/* Citation Editor */}
-                  <DecorationCitationEditor accomplishments={accomplishments} />
+                  <DecorationCitationEditor statements={statements} />
                 </div>
               )}
             </div>

@@ -921,6 +921,7 @@ export interface DecorationShell {
   end_date: string | null;
   citation_text: string;
   selected_statement_ids: string[];
+  statement_colors: Record<string, string>; // Map of statement ID to color ID
   status: DecorationStatus;
   created_at: string;
   updated_at: string;

@@ -26,15 +26,15 @@ import {
 import { ENTRY_MGAS, MPA_ABBREVIATIONS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { FileText, X, Palette } from "lucide-react";
-import type { Accomplishment } from "@/types/database";
+import type { RefinedStatement } from "@/types/database";
 
 interface DecorationStatementSelectorProps {
-  accomplishments: Accomplishment[];
+  statements: RefinedStatement[];
   className?: string;
 }
 
 export function DecorationStatementSelector({
-  accomplishments,
+  statements,
   className,
 }: DecorationStatementSelectorProps) {
   const { 
@@ -55,26 +55,26 @@ export function DecorationStatementSelector({
     return HIGHLIGHT_COLORS.find(c => c.id === colorId) || null;
   };
 
-  // Group accomplishments by MPA
-  const groupedAccomplishments = useMemo(() => {
-    const groups: Record<string, Accomplishment[]> = {};
+  // Group statements by MPA
+  const groupedStatements = useMemo(() => {
+    const groups: Record<string, RefinedStatement[]> = {};
 
     // Initialize all MPA groups
     ENTRY_MGAS.forEach((mpa) => {
       groups[mpa.key] = [];
     });
 
-    // Group accomplishments by MPA
-    accomplishments.forEach((acc) => {
-      const mpaKey = acc.mpa || "miscellaneous";
+    // Group statements by MPA
+    statements.forEach((stmt) => {
+      const mpaKey = stmt.mpa || "miscellaneous";
       if (!groups[mpaKey]) {
         groups[mpaKey] = [];
       }
-      groups[mpaKey].push(acc);
+      groups[mpaKey].push(stmt);
     });
 
     return groups;
-  }, [accomplishments]);
+  }, [statements]);
 
   // Get MPA label
   const getMPALabel = (mpaKey: string) => {
@@ -82,13 +82,8 @@ export function DecorationStatementSelector({
     return mpa?.label || mpaKey;
   };
 
-  // Format accomplishment as display text (show full text, no truncation)
-  const formatAccomplishment = (acc: Accomplishment) => {
-    return `${acc.action_verb} ${acc.details}`;
-  };
-
   // Count total and selected
-  const totalCount = accomplishments.length;
+  const totalCount = statements.length;
   const selectedCount = selectedStatementIds.length;
 
   if (totalCount === 0) {
@@ -97,10 +92,10 @@ export function DecorationStatementSelector({
         <CardContent className="flex flex-col items-center justify-center py-8 text-center">
           <FileText className="size-10 text-muted-foreground mb-3" />
           <p className="text-sm text-muted-foreground">
-            No accomplishments found for this member.
+            No finalized statements found for this member.
           </p>
           <p className="text-xs text-muted-foreground mt-1">
-            Add accomplishments to their log to use them in decorations.
+            Save statements from EPBs or the statements library to use them in decorations.
           </p>
         </CardContent>
       </Card>
@@ -165,14 +160,14 @@ export function DecorationStatementSelector({
         </div>
       </CardHeader>
       <CardContent className="pt-0">
-        <ScrollArea className="h-[500px] pr-4">
+        <ScrollArea className="h-[calc(100vh-280px)] min-h-[400px] pr-4">
           <div className="space-y-4">
             {ENTRY_MGAS.map((mpa) => {
-              const mpaAccomplishments = groupedAccomplishments[mpa.key] || [];
-              if (mpaAccomplishments.length === 0) return null;
+              const mpaStatements = groupedStatements[mpa.key] || [];
+              if (mpaStatements.length === 0) return null;
 
-              const selectedInMPA = mpaAccomplishments.filter((a) =>
-                selectedStatementIds.includes(a.id)
+              const selectedInMPA = mpaStatements.filter((s) =>
+                selectedStatementIds.includes(s.id)
               ).length;
 
               return (
@@ -191,57 +186,57 @@ export function DecorationStatementSelector({
                     )}
                   </div>
                   <div className="space-y-1.5 pl-2">
-                    {mpaAccomplishments.map((acc) => {
-                      const isSelected = selectedStatementIds.includes(acc.id);
-                      const colorConfig = getColorConfig(acc.id);
+                    {mpaStatements.map((stmt) => {
+                      const isSelected = selectedStatementIds.includes(stmt.id);
+                      const colorConfig = getColorConfig(stmt.id);
                       const isActiveColor = activeHighlightColor && colorConfig?.id === activeHighlightColor;
                       
                       return (
                         <div
-                          key={acc.id}
+                          key={stmt.id}
                           className={cn(
-                            "flex items-start gap-2.5 p-2 rounded-md transition-all duration-200",
-                            "hover:bg-muted/50",
-                            isSelected && !colorConfig && "bg-primary/5 border border-primary/20",
-                            colorConfig && `${colorConfig.bg} ${colorConfig.border} border`,
-                            isActiveColor && "ring-2 ring-offset-1 ring-primary"
+                            "flex items-start gap-2.5 p-2 rounded-md transition-all duration-200 border-l-4",
+                            // Default state
+                            "border-l-transparent border border-transparent",
+                            // Hover state (only when no color assigned)
+                            !colorConfig && "hover:bg-muted/30",
+                            // Selected but no color
+                            isSelected && !colorConfig && "bg-primary/5 border-primary/20 border-l-primary/50",
+                            // Color assigned: glass-style transparent bg + colored left border
+                            colorConfig && `${colorConfig.bgGlass} ${colorConfig.borderLeft}`,
+                            // Active/hovered matching color - subtle ring
+                            isActiveColor && "ring-1 ring-offset-1 ring-primary/30"
                           )}
                           onMouseEnter={() => colorConfig && setActiveHighlightColor(colorConfig.id)}
                           onMouseLeave={() => setActiveHighlightColor(null)}
                         >
                           <Checkbox
                             checked={isSelected}
-                            onCheckedChange={() => toggleStatementSelection(acc.id)}
+                            onCheckedChange={() => toggleStatementSelection(stmt.id)}
                             className="mt-0.5"
-                            aria-label={`Select accomplishment: ${acc.action_verb} ${acc.details}`}
+                            aria-label={`Select statement: ${stmt.statement}`}
                           />
                           <div className="flex-1 min-w-0">
-                            <p className={cn(
-                              "text-sm leading-relaxed break-words",
-                              colorConfig && colorConfig.text
-                            )}>
-                              {formatAccomplishment(acc)}
+                            <p className="text-sm leading-relaxed break-words">
+                              {stmt.statement}
                             </p>
-                            {(acc.impact || acc.metrics) && (
-                              <div className="flex flex-col gap-0.5 mt-1.5">
-                                {acc.impact && (
-                                  <span className={cn(
-                                    "text-xs break-words",
-                                    colorConfig ? colorConfig.text : "text-muted-foreground"
-                                  )}>
-                                    <span className="font-medium">Impact:</span> {acc.impact}
-                                  </span>
-                                )}
-                                {acc.metrics && (
-                                  <span className={cn(
-                                    "text-xs break-words",
-                                    colorConfig ? colorConfig.text : "text-muted-foreground"
-                                  )}>
-                                    <span className="font-medium">Metrics:</span> {acc.metrics}
-                                  </span>
-                                )}
-                              </div>
-                            )}
+                            {/* Show cycle year and type as metadata */}
+                            <div className="flex items-center gap-2 mt-1">
+                              <Badge 
+                                variant="outline" 
+                                className="text-[10px]"
+                              >
+                                {stmt.cycle_year}
+                              </Badge>
+                              {stmt.is_favorite && (
+                                <Badge 
+                                  variant="secondary" 
+                                  className="text-[10px]"
+                                >
+                                  Favorite
+                                </Badge>
+                              )}
+                            </div>
                           </div>
                           
                           {/* Color picker - always present for layout stability, visible only when selected */}
@@ -256,7 +251,7 @@ export function DecorationStatementSelector({
                                   className={cn(
                                     "size-6 rounded flex items-center justify-center transition-colors",
                                     colorConfig 
-                                      ? `${colorConfig.bg} ${colorConfig.border} border`
+                                      ? `${colorConfig.bgSolid} ${colorConfig.border} border`
                                       : "border border-dashed border-muted-foreground/50 hover:border-primary hover:bg-muted"
                                   )}
                                   aria-label="Assign highlight color"
@@ -264,7 +259,7 @@ export function DecorationStatementSelector({
                                 >
                                   <Palette className={cn(
                                     "size-3",
-                                    colorConfig ? colorConfig.text : "text-muted-foreground"
+                                    colorConfig ? colorConfig.textSolid : "text-muted-foreground"
                                   )} />
                                 </button>
                               </PopoverTrigger>
@@ -276,10 +271,10 @@ export function DecorationStatementSelector({
                                       <button
                                         key={color.id}
                                         type="button"
-                                        onClick={() => setStatementColor(acc.id, color.id)}
+                                        onClick={() => setStatementColor(stmt.id, color.id)}
                                         className={cn(
                                           "size-6 rounded-full border-2 transition-all",
-                                          color.bg,
+                                          color.bgSolid,
                                           colorConfig?.id === color.id 
                                             ? "ring-2 ring-offset-1 ring-primary border-primary" 
                                             : "border-transparent hover:scale-110"
@@ -291,7 +286,7 @@ export function DecorationStatementSelector({
                                   {colorConfig && (
                                     <button
                                       type="button"
-                                      onClick={() => setStatementColor(acc.id, null)}
+                                      onClick={() => setStatementColor(stmt.id, null)}
                                       className="w-full text-xs text-muted-foreground hover:text-foreground py-1"
                                     >
                                       Remove color

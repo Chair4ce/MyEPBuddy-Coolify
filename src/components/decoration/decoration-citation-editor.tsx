@@ -34,7 +34,6 @@ import {
   RefreshCw,
   BookA,
   Palette,
-  Highlighter,
 } from "lucide-react";
 import {
   Tooltip,
@@ -53,17 +52,17 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import type { Accomplishment } from "@/types/database";
+import type { RefinedStatement } from "@/types/database";
 
 interface DecorationCitationEditorProps {
-  accomplishments: Accomplishment[];
+  statements: RefinedStatement[];
   className?: string;
 }
 
 const MAX_SNAPSHOTS = 10;
 
 export function DecorationCitationEditor({
-  accomplishments,
+  statements,
   className,
 }: DecorationCitationEditorProps) {
   const supabase = createClient();
@@ -80,7 +79,7 @@ export function DecorationCitationEditor({
     citationText,
     setCitationText,
     selectedStatementIds,
-    getSelectedAccomplishmentTexts,
+    getSelectedStatementTexts,
     selectedRatee,
     selectedModel,
     currentShell,
@@ -127,6 +126,222 @@ export function DecorationCitationEditor({
     }
     prevCitationLengthRef.current = citationText.length;
   }, [citationText.length, citationHighlights.length, clearCitationHighlights]);
+  
+  // Helper: Extract all numbers from text (for matching)
+  const extractNumbers = useCallback((text: string): string[] => {
+    const matches = text.match(/\d+(?:,\d{3})*(?:\.\d+)?/g) || [];
+    return matches.map(n => n.replace(/,/g, '')); // Normalize by removing commas
+  }, []);
+  
+  // Helper: Extract significant words from text (removes common words)
+  const extractKeywords = useCallback((text: string): string[] => {
+    const stopWords = new Set([
+      'a', 'an', 'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 
+      'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'were', 'been',
+      'be', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 
+      'could', 'should', 'may', 'might', 'must', 'shall', 'can', 'need',
+      'he', 'she', 'it', 'they', 'we', 'you', 'i', 'his', 'her', 'its',
+      'their', 'our', 'your', 'my', 'this', 'that', 'these', 'those',
+      'who', 'which', 'what', 'when', 'where', 'how', 'why', 'all', 'each',
+      'every', 'both', 'few', 'more', 'most', 'other', 'some', 'such', 'no',
+      'not', 'only', 'same', 'so', 'than', 'too', 'very', 'just', 'also',
+      'additionally', 'furthermore', 'finally', 'moreover', 'during', 'period'
+    ]);
+    
+    return text
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .split(/\s+/)
+      .filter(word => word.length > 2 && !stopWords.has(word));
+  }, []);
+  
+  // Helper: Split citation into sentences
+  const splitIntoSentences = useCallback((text: string): Array<{ start: number; end: number; text: string }> => {
+    const sentences: Array<{ start: number; end: number; text: string }> = [];
+    let sentenceStart = 0;
+    
+    // Skip leading whitespace
+    while (sentenceStart < text.length && /\s/.test(text[sentenceStart])) {
+      sentenceStart++;
+    }
+    
+    for (let i = sentenceStart; i < text.length; i++) {
+      if (text[i] === '.' || text[i] === ';') {
+        const sentenceEnd = i + 1;
+        const sentenceText = text.slice(sentenceStart, sentenceEnd);
+        
+        // Only add non-empty sentences
+        if (sentenceText.trim().length > 10) {
+          sentences.push({ start: sentenceStart, end: sentenceEnd, text: sentenceText });
+        }
+        
+        // Move to next sentence, skipping whitespace
+        sentenceStart = sentenceEnd;
+        while (sentenceStart < text.length && /\s/.test(text[sentenceStart])) {
+          sentenceStart++;
+        }
+        i = sentenceStart - 1;
+      }
+    }
+    
+    return sentences;
+  }, []);
+  
+  // Helper: Score how well a sentence matches a refined statement
+  const scoreSentenceMatch = useCallback((
+    sentence: string,
+    stmtNumbers: string[],
+    stmtKeywords: string[]
+  ): number => {
+    const sentenceLower = sentence.toLowerCase();
+    const sentenceNumbers = extractNumbers(sentence);
+    
+    let score = 0;
+    
+    // Numbers are the strongest signal - each matching number is worth a lot
+    for (const num of stmtNumbers) {
+      if (sentenceNumbers.includes(num)) {
+        score += 15; // Very high weight for number matches
+      }
+    }
+    
+    // Keywords provide context
+    for (const keyword of stmtKeywords) {
+      if (sentenceLower.includes(keyword)) {
+        score += 1;
+      }
+    }
+    
+    return score;
+  }, [extractNumbers]);
+  
+  // Sync highlights locally using smart matching
+  const syncHighlightsLocally = useCallback(() => {
+    if (!citationText.trim() || Object.keys(statementColors).length === 0) {
+      clearCitationHighlights();
+      return;
+    }
+    
+    // Get statements with colors assigned
+    const coloredStmts = statements.filter(stmt => statementColors[stmt.id]);
+    
+    if (coloredStmts.length === 0) {
+      clearCitationHighlights();
+      return;
+    }
+    
+    // Split citation into sentences
+    const sentences = splitIntoSentences(citationText);
+    
+    if (sentences.length === 0) {
+      clearCitationHighlights();
+      return;
+    }
+    
+    // Pre-compute numbers and keywords for each statement
+    // RefinedStatement has a single 'statement' field containing the full text
+    const statementData = coloredStmts.map(stmt => {
+      return {
+        stmt,
+        colorId: statementColors[stmt.id],
+        numbers: extractNumbers(stmt.statement),
+        keywords: extractKeywords(stmt.statement),
+      };
+    });
+    
+    // Sort statements by how many unique numbers they have (more = easier to match = do first)
+    statementData.sort((a, b) => b.numbers.length - a.numbers.length);
+    
+    // Track which sentences have been assigned
+    const assignedSentences = new Set<number>();
+    const newHighlights: Array<{ 
+      startIndex: number; 
+      endIndex: number; 
+      colorId: HighlightColorId; 
+      statementId: string;
+      matchedText: string;
+      keyNumbers: string[];
+    }> = [];
+    
+    // For each statement, find the best matching sentence
+    for (const { stmt, colorId, numbers, keywords } of statementData) {
+      if (!colorId) continue;
+      
+      let bestSentenceIdx = -1;
+      let bestScore = 0;
+      
+      for (let i = 0; i < sentences.length; i++) {
+        if (assignedSentences.has(i)) continue;
+        
+        const score = scoreSentenceMatch(sentences[i].text, numbers, keywords);
+        
+        if (score > bestScore) {
+          bestScore = score;
+          bestSentenceIdx = i;
+        }
+      }
+      
+      // Only match if we have a reasonable score (at least one number match or 3+ keywords)
+      if (bestSentenceIdx >= 0 && bestScore >= 3) {
+        const sentence = sentences[bestSentenceIdx];
+        assignedSentences.add(bestSentenceIdx);
+        
+        newHighlights.push({
+          startIndex: sentence.start,
+          endIndex: sentence.end,
+          colorId,
+          statementId: stmt.id,
+          matchedText: sentence.text,
+          keyNumbers: numbers,
+        });
+      }
+    }
+    
+    // Sort highlights by position for consistent rendering
+    newHighlights.sort((a, b) => a.startIndex - b.startIndex);
+    
+    // Clear and add new highlights
+    clearCitationHighlights();
+    newHighlights.forEach(h => addCitationHighlight(h));
+  }, [citationText, statementColors, statements, splitIntoSentences, extractNumbers, extractKeywords, scoreSentenceMatch, clearCitationHighlights, addCitationHighlight]);
+  
+  // Debounce ref for citation text changes
+  const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Auto-sync when statement colors change
+  useEffect(() => {
+    if (Object.keys(statementColors).length === 0) {
+      clearCitationHighlights();
+      return;
+    }
+    
+    // Immediate sync when colors change
+    syncHighlightsLocally();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statementColors]); // Only trigger on color changes
+  
+  // Debounced sync when citation text changes (user edits)
+  useEffect(() => {
+    if (Object.keys(statementColors).length === 0) return;
+    if (!citationText.trim()) return;
+    
+    // Clear existing timeout
+    if (syncTimeoutRef.current) {
+      clearTimeout(syncTimeoutRef.current);
+    }
+    
+    // Debounce: wait 500ms after user stops typing before re-syncing
+    syncTimeoutRef.current = setTimeout(() => {
+      syncHighlightsLocally();
+    }, 500);
+    
+    return () => {
+      if (syncTimeoutRef.current) {
+        clearTimeout(syncTimeoutRef.current);
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [citationText]); // Only trigger on citation text changes
   
   // Check if selection is a single word (no spaces, reasonable length)
   const isSingleWord = useMemo(() => {
@@ -235,7 +450,7 @@ export function DecorationCitationEditor({
     setIsGenerating(true);
 
     try {
-      const accomplishmentTexts = getSelectedAccomplishmentTexts(accomplishments);
+      const statementTexts = getSelectedStatementTexts(statements);
 
       const response = await fetch("/api/generate-decoration", {
         method: "POST",
@@ -251,7 +466,7 @@ export function DecorationCitationEditor({
           endDate: endDate || "",
           awardType,
           reason,
-          accomplishments: accomplishmentTexts,
+          accomplishments: statementTexts,
           model: selectedModel,
         }),
       });
@@ -280,7 +495,7 @@ export function DecorationCitationEditor({
   }, [
     selectedStatementIds,
     selectedRatee,
-    accomplishments,
+    statements,
     dutyTitle,
     unit,
     startDate,
@@ -288,7 +503,7 @@ export function DecorationCitationEditor({
     awardType,
     reason,
     selectedModel,
-    getSelectedAccomplishmentTexts,
+    getSelectedStatementTexts,
     setCitationText,
     setIsGenerating,
   ]);
@@ -362,33 +577,6 @@ export function DecorationCitationEditor({
       toast.success("Word replaced");
     },
     [citationText, selectionStart, selectionEnd, setCitationText, closeSelectionPopup]
-  );
-  
-  // Apply highlight color to selected text
-  const applyHighlightColor = useCallback(
-    (colorId: HighlightColorId, statementId?: string) => {
-      if (selectionStart === selectionEnd) return;
-      
-      addCitationHighlight({
-        startIndex: selectionStart,
-        endIndex: selectionEnd,
-        colorId,
-        statementId,
-      });
-      closeSelectionPopup();
-      toast.success("Highlight added");
-    },
-    [selectionStart, selectionEnd, addCitationHighlight, closeSelectionPopup]
-  );
-  
-  // Get highlight for a text range (for rendering)
-  const getHighlightAtPosition = useCallback(
-    (position: number) => {
-      return citationHighlights.find(
-        h => position >= h.startIndex && position < h.endIndex
-      );
-    },
-    [citationHighlights]
   );
   
   // Render citation text with highlights
@@ -743,8 +931,8 @@ export function DecorationCitationEditor({
               onBlur={handleTextareaBlur}
               placeholder={
                 selectedStatementIds.length === 0
-                  ? "Select accomplishments above, then click Generate to create a citation..."
-                  : "Click Generate to create a citation based on selected accomplishments..."
+                  ? "Select statements from your library, then click Generate to create a citation..."
+                  : "Click Generate to create a citation based on selected statements..."
               }
               className={cn(
                 "min-h-[280px] font-mono text-sm resize-none",
@@ -765,42 +953,30 @@ export function DecorationCitationEditor({
             )}
           </div>
           
-          {/* Highlighted text preview - shows when highlights exist */}
+          {/* Highlighted preview - shows color-coded statements when colors are assigned */}
           {renderHighlightedText && renderHighlightedText.length > 0 && (
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Highlighter className="size-3 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground font-medium">
-                  Highlighted Preview
-                </span>
-                <span className="text-[10px] text-muted-foreground">
-                  (hover to match with statements)
-                </span>
-              </div>
-              <div className="p-3 rounded-md border bg-muted/20 font-mono text-sm whitespace-pre-wrap break-words">
-                {renderHighlightedText.map((segment, index) => {
-                  if (segment.highlight) {
-                    const colorConfig = HIGHLIGHT_COLORS.find(c => c.id === segment.highlight?.colorId);
-                    const isActive = activeHighlightColor === segment.highlight.colorId;
-                    return (
-                      <span
-                        key={index}
-                        className={cn(
-                          "px-0.5 rounded transition-all duration-200",
-                          colorConfig?.bg,
-                          colorConfig?.text,
-                          isActive && "ring-2 ring-offset-1 ring-primary"
-                        )}
-                        onMouseEnter={() => setActiveHighlightColor(segment.highlight!.colorId)}
-                        onMouseLeave={() => setActiveHighlightColor(null)}
-                      >
-                        {segment.text}
-                      </span>
-                    );
-                  }
-                  return <span key={index}>{segment.text}</span>;
-                })}
-              </div>
+            <div className="p-3 rounded-md border bg-muted/30 font-mono text-sm whitespace-pre-wrap break-words">
+              {renderHighlightedText.map((segment, index) => {
+                if (segment.highlight) {
+                  const colorConfig = HIGHLIGHT_COLORS.find(c => c.id === segment.highlight?.colorId);
+                  const isActive = activeHighlightColor === segment.highlight.colorId;
+                  return (
+                    <span
+                      key={index}
+                      style={{ color: colorConfig?.hex }}
+                      className={cn(
+                        "font-semibold transition-all duration-200",
+                        isActive && "underline decoration-2"
+                      )}
+                      onMouseEnter={() => setActiveHighlightColor(segment.highlight!.colorId)}
+                      onMouseLeave={() => setActiveHighlightColor(null)}
+                    >
+                      {segment.text}
+                    </span>
+                  );
+                }
+                return <span key={index}>{segment.text}</span>;
+              })}
             </div>
           )}
 
@@ -952,29 +1128,6 @@ export function DecorationCitationEditor({
                     </div>
                   </div>
                   
-                  {/* Highlight color picker - always available */}
-                  <div className="pt-2 border-t">
-                    <div className="flex items-center gap-2">
-                      <Highlighter className="size-3 text-muted-foreground shrink-0" />
-                      <span className="text-[10px] text-muted-foreground shrink-0">Highlight:</span>
-                      <div className="flex flex-wrap gap-1">
-                        {HIGHLIGHT_COLORS.map((color) => (
-                          <button
-                            key={color.id}
-                            type="button"
-                            onMouseDown={(e) => e.preventDefault()}
-                            onClick={() => applyHighlightColor(color.id)}
-                            className={cn(
-                              "size-5 rounded-full border-2 transition-all hover:scale-110",
-                              color.bg,
-                              "border-transparent hover:border-primary/50"
-                            )}
-                            aria-label={`Highlight with ${color.label}`}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  </div>
                 </div>
               </div>
             </div>

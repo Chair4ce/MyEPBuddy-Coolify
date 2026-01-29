@@ -5,7 +5,7 @@ import type {
   DecorationReason, 
   DecorationStatus,
   Rank,
-  Accomplishment,
+  RefinedStatement,
 } from "@/types/database";
 
 // Ratee info for the selected member
@@ -30,15 +30,17 @@ export interface DecorationSnapshot {
 }
 
 // Available highlight colors for statement tracking
+// Glass-style backgrounds for statements (subtle), solid for citation highlights (readable)
 export const HIGHLIGHT_COLORS = [
-  { id: "yellow", label: "Yellow", bg: "bg-yellow-200", text: "text-yellow-900", border: "border-yellow-400" },
-  { id: "green", label: "Green", bg: "bg-green-200", text: "text-green-900", border: "border-green-400" },
-  { id: "blue", label: "Blue", bg: "bg-blue-200", text: "text-blue-900", border: "border-blue-400" },
-  { id: "pink", label: "Pink", bg: "bg-pink-200", text: "text-pink-900", border: "border-pink-400" },
-  { id: "purple", label: "Purple", bg: "bg-purple-200", text: "text-purple-900", border: "border-purple-400" },
-  { id: "orange", label: "Orange", bg: "bg-orange-200", text: "text-orange-900", border: "border-orange-400" },
-  { id: "cyan", label: "Cyan", bg: "bg-cyan-200", text: "text-cyan-900", border: "border-cyan-400" },
-  { id: "lime", label: "Lime", bg: "bg-lime-200", text: "text-lime-900", border: "border-lime-400" },
+  { id: "red", label: "Red", bgGlass: "bg-red-500/15", bgSolid: "bg-red-500", text: "text-red-700 dark:text-red-400", textSolid: "text-white", border: "border-red-500", borderLeft: "border-l-red-500", hex: "#ef4444" },
+  { id: "orange", label: "Orange", bgGlass: "bg-orange-500/15", bgSolid: "bg-orange-500", text: "text-orange-700 dark:text-orange-400", textSolid: "text-white", border: "border-orange-500", borderLeft: "border-l-orange-500", hex: "#f97316" },
+  { id: "amber", label: "Amber", bgGlass: "bg-amber-500/15", bgSolid: "bg-amber-500", text: "text-amber-700 dark:text-amber-500", textSolid: "text-black", border: "border-amber-500", borderLeft: "border-l-amber-500", hex: "#f59e0b" },
+  { id: "green", label: "Green", bgGlass: "bg-green-500/15", bgSolid: "bg-green-600", text: "text-green-700 dark:text-green-400", textSolid: "text-white", border: "border-green-500", borderLeft: "border-l-green-500", hex: "#16a34a" },
+  { id: "teal", label: "Teal", bgGlass: "bg-teal-500/15", bgSolid: "bg-teal-500", text: "text-teal-700 dark:text-teal-400", textSolid: "text-white", border: "border-teal-500", borderLeft: "border-l-teal-500", hex: "#14b8a6" },
+  { id: "blue", label: "Blue", bgGlass: "bg-blue-500/15", bgSolid: "bg-blue-500", text: "text-blue-700 dark:text-blue-400", textSolid: "text-white", border: "border-blue-500", borderLeft: "border-l-blue-500", hex: "#3b82f6" },
+  { id: "indigo", label: "Indigo", bgGlass: "bg-indigo-500/15", bgSolid: "bg-indigo-500", text: "text-indigo-700 dark:text-indigo-400", textSolid: "text-white", border: "border-indigo-500", borderLeft: "border-l-indigo-500", hex: "#6366f1" },
+  { id: "purple", label: "Purple", bgGlass: "bg-purple-500/15", bgSolid: "bg-purple-500", text: "text-purple-700 dark:text-purple-400", textSolid: "text-white", border: "border-purple-500", borderLeft: "border-l-purple-500", hex: "#a855f7" },
+  { id: "pink", label: "Pink", bgGlass: "bg-pink-500/15", bgSolid: "bg-pink-500", text: "text-pink-700 dark:text-pink-400", textSolid: "text-white", border: "border-pink-500", borderLeft: "border-l-pink-500", hex: "#ec4899" },
 ] as const;
 
 export type HighlightColorId = typeof HIGHLIGHT_COLORS[number]["id"];
@@ -53,6 +55,8 @@ export interface CitationHighlight {
   endIndex: number;
   colorId: HighlightColorId;
   statementId?: string; // Optional link to source statement
+  matchedText?: string; // The actual text that was matched (for re-finding after edits)
+  keyNumbers?: string[]; // Key numbers from the source statement for matching
 }
 
 interface DecorationShellState {
@@ -166,8 +170,8 @@ interface DecorationShellState {
   removeCitationHighlight: (id: string) => void;
   clearCitationHighlights: () => void;
   
-  // Get accomplishment texts for generation
-  getSelectedAccomplishmentTexts: (accomplishments: Accomplishment[]) => string[];
+  // Get selected statement texts for generation
+  getSelectedStatementTexts: (statements: RefinedStatement[]) => string[];
   
   // Initialize from shell
   initializeFromShell: (shell: DecorationShell) => void;
@@ -220,6 +224,7 @@ export const useDecorationShellStore = create<DecorationShellState>((set, get) =
         endDate: shell.end_date || "",
         citationText: shell.citation_text,
         selectedStatementIds: shell.selected_statement_ids || [],
+        statementColors: (shell.statement_colors || {}) as StatementColorMap,
         status: shell.status,
         isDirty: false,
       });
@@ -287,13 +292,14 @@ export const useDecorationShellStore = create<DecorationShellState>((set, get) =
     if (color === null) {
       // Remove color assignment
       const { [statementId]: _, ...rest } = state.statementColors;
-      return { statementColors: rest };
+      return { statementColors: rest, isDirty: true };
     }
     return { 
-      statementColors: { ...state.statementColors, [statementId]: color } 
+      statementColors: { ...state.statementColors, [statementId]: color },
+      isDirty: true,
     };
   }),
-  clearStatementColors: () => set({ statementColors: {} }),
+  clearStatementColors: () => set({ statementColors: {}, isDirty: true }),
   setActiveHighlightColor: (color) => set({ activeHighlightColor: color }),
   getStatementColor: (statementId) => {
     const { statementColors } = get();
@@ -312,21 +318,11 @@ export const useDecorationShellStore = create<DecorationShellState>((set, get) =
   })),
   clearCitationHighlights: () => set({ citationHighlights: [] }),
   
-  getSelectedAccomplishmentTexts: (accomplishments) => {
+  getSelectedStatementTexts: (statements) => {
     const { selectedStatementIds } = get();
-    return accomplishments
-      .filter(a => selectedStatementIds.includes(a.id))
-      .map(a => {
-        // Combine action verb, details, impact, and metrics into a coherent accomplishment text
-        let text = `${a.action_verb} ${a.details}`;
-        if (a.impact) {
-          text += ` ${a.impact}`;
-        }
-        if (a.metrics) {
-          text += ` ${a.metrics}`;
-        }
-        return text;
-      });
+    return statements
+      .filter(s => selectedStatementIds.includes(s.id))
+      .map(s => s.statement); // RefinedStatement has a single 'statement' field
   },
   
   initializeFromShell: (shell) => {
@@ -340,6 +336,7 @@ export const useDecorationShellStore = create<DecorationShellState>((set, get) =
       endDate: shell.end_date || "",
       citationText: shell.citation_text,
       selectedStatementIds: shell.selected_statement_ids || [],
+      statementColors: (shell.statement_colors || {}) as StatementColorMap,
       status: shell.status,
       isDirty: false,
     });
