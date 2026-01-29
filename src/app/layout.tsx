@@ -1,9 +1,10 @@
 import type { Metadata, Viewport } from "next";
 import { JetBrains_Mono } from "next/font/google";
 import { ThemeProvider } from "@/components/providers/theme-provider";
+import { AnalyticsProvider } from "@/components/providers/analytics-provider";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
-import { Analytics } from "@vercel/analytics/next"
+import { Analytics as VercelAnalytics } from "@vercel/analytics/next"
 
 const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
@@ -132,9 +133,11 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <Analytics />
-          {children}
-          <Toaster position="top-center" />
+          <AnalyticsProvider>
+            <VercelAnalytics />
+            {children}
+            <Toaster position="top-center" />
+          </AnalyticsProvider>
         </ThemeProvider>
       </body>
     </html>
