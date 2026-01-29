@@ -891,6 +891,57 @@ export interface OPBShellShare {
 }
 
 // ============================================
+// DECORATION SHELL TYPES
+// ============================================
+
+export type DecorationAwardType = 'afam' | 'afcm' | 'msm' | 'lom' | 'bsm';
+
+export type DecorationReason = 
+  | 'meritorious_service'
+  | 'outstanding_achievement'
+  | 'act_of_courage'
+  | 'retirement'
+  | 'separation'
+  | 'posthumous'
+  | 'combat_meritorious'
+  | 'combat_valor';
+
+export type DecorationStatus = 'draft' | 'finalized';
+
+export interface DecorationShell {
+  id: string;
+  user_id: string;
+  team_member_id: string | null;
+  created_by: string;
+  award_type: DecorationAwardType;
+  reason: DecorationReason;
+  duty_title: string;
+  unit: string;
+  start_date: string | null;
+  end_date: string | null;
+  citation_text: string;
+  selected_statement_ids: string[];
+  status: DecorationStatus;
+  created_at: string;
+  updated_at: string;
+  // Joined fields
+  owner_profile?: Profile;
+  owner_team_member?: ManagedMember;
+  creator_profile?: Profile;
+}
+
+export interface DecorationShellShare {
+  id: string;
+  shell_id: string;
+  owner_id: string;
+  share_type: 'user';
+  shared_with_id: string;
+  created_at: string;
+  // Joined fields
+  shared_with_profile?: Profile;
+}
+
+// ============================================
 // USER STYLE LEARNING TYPES
 // ============================================
 
@@ -1597,6 +1648,69 @@ export interface Database {
           id?: string;
           accomplishment_id: string;
           project_id: string;
+        };
+        Update: never;
+      };
+      decoration_shells: {
+        Row: {
+          id: string;
+          user_id: string;
+          team_member_id: string | null;
+          created_by: string;
+          award_type: DecorationAwardType;
+          reason: DecorationReason;
+          duty_title: string;
+          unit: string;
+          start_date: string | null;
+          end_date: string | null;
+          citation_text: string;
+          selected_statement_ids: string[];
+          status: DecorationStatus;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          team_member_id?: string | null;
+          created_by: string;
+          award_type: DecorationAwardType;
+          reason?: DecorationReason;
+          duty_title?: string;
+          unit?: string;
+          start_date?: string | null;
+          end_date?: string | null;
+          citation_text?: string;
+          selected_statement_ids?: string[];
+          status?: DecorationStatus;
+        };
+        Update: {
+          award_type?: DecorationAwardType;
+          reason?: DecorationReason;
+          duty_title?: string;
+          unit?: string;
+          start_date?: string | null;
+          end_date?: string | null;
+          citation_text?: string;
+          selected_statement_ids?: string[];
+          status?: DecorationStatus;
+        };
+      };
+      decoration_shell_shares: {
+        Row: {
+          id: string;
+          shell_id: string;
+          owner_id: string;
+          share_type: 'user';
+          shared_with_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          shell_id: string;
+          owner_id: string;
+          share_type: 'user';
+          shared_with_id: string;
         };
         Update: never;
       };

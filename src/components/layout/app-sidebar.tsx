@@ -35,6 +35,7 @@ import {
   Wand2,
   Heart,
   Award,
+  Medal,
   Loader2,
   PanelLeftClose,
   PanelLeft,
@@ -73,15 +74,21 @@ const navItems = [
     roles: ["member", "admin"],
   },
   {
-    title: "Generate EPB",
+    title: "EPBs",
     href: "/generate",
     icon: Sparkles,
     roles: ["member", "admin"],
   },
   {
-    title: "Generate Award",
+    title: "Awards",
     href: "/award",
     icon: Award,
+    roles: ["member", "admin"],
+  },
+  {
+    title: "Decorations",
+    href: "/decoration",
+    icon: Medal,
     roles: ["member", "admin"],
   },
   {
