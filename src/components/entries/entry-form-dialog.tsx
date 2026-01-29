@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Analytics } from "@/lib/posthog";
+import { Analytics } from "@/lib/analytics";
 import { useUserStore } from "@/stores/user-store";
 import { useAccomplishmentsStore } from "@/stores/accomplishments-store";
 import { Button } from "@/components/ui/button";

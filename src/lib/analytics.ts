@@ -1,68 +1,70 @@
-import posthog from "posthog-js";
+/**
+ * Self-hosted analytics client for MyEPBuddy
+ * All data stays in our Supabase database - no third-party services
+ */
 
-// PostHog initialization - call once on app load
-export function initPostHog() {
-  if (typeof window === "undefined") return;
-  if (posthog.__loaded) return; // Already initialized
-
-  const key = process.env.NEXT_PUBLIC_POSTHOG_KEY;
-  const host = process.env.NEXT_PUBLIC_POSTHOG_HOST || "https://us.i.posthog.com";
-
-  if (!key) {
-    console.warn("PostHog key not configured - analytics disabled");
-    return;
+// Generate a session ID that persists for the browser session
+function getSessionId(): string {
+  if (typeof window === "undefined") return "server";
+  
+  let sessionId = sessionStorage.getItem("analytics_session_id");
+  if (!sessionId) {
+    sessionId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    sessionStorage.setItem("analytics_session_id", sessionId);
   }
-
-  posthog.init(key, {
-    api_host: host,
-    person_profiles: "identified_only", // Only create profiles for identified users
-    capture_pageview: true, // Auto-capture page views
-    capture_pageleave: true, // Track when users leave pages
-    autocapture: true, // Auto-capture clicks, form submissions, etc.
-    persistence: "localStorage",
-    disable_session_recording: false, // Enable session replay
-  });
+  return sessionId;
 }
 
-// Identify user after login
-export function identifyUser(userId: string, traits?: Record<string, unknown>) {
+// Track an event
+async function trackEvent(eventName: string, properties?: Record<string, unknown>) {
   if (typeof window === "undefined") return;
-  posthog.identify(userId, traits);
+  
+  try {
+    await fetch("/api/analytics", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        event_name: eventName,
+        properties: properties || {},
+        session_id: getSessionId(),
+        page_path: window.location.pathname,
+        referrer: document.referrer || null,
+        screen_width: window.screen.width,
+        screen_height: window.screen.height,
+      }),
+      // Don't wait for response - fire and forget
+      keepalive: true,
+    });
+  } catch {
+    // Analytics should never break the app
+  }
 }
 
-// Reset on logout
-export function resetUser() {
-  if (typeof window === "undefined") return;
-  posthog.reset();
-}
-
-// Custom event tracking
-export function trackEvent(event: string, properties?: Record<string, unknown>) {
-  if (typeof window === "undefined") return;
-  posthog.capture(event, properties);
+// Track page view
+export function trackPageView(path?: string) {
+  trackEvent("$pageview", { path: path || window.location.pathname });
 }
 
 // ============================================
 // MYEPBUDDY-SPECIFIC EVENTS
 // ============================================
 
-// Onboarding & Activation
 export const Analytics = {
-  // First-run events
+  // Onboarding & Activation
   signUp: (method: "email" | "google" | "phone") => 
     trackEvent("user_signed_up", { method }),
   
   profileCompleted: (rank: string, afsc: string) => 
     trackEvent("profile_completed", { rank, afsc }),
 
-  // Core workflow
+  // Core workflow - THE KEY FUNNEL
   accomplishmentCreated: (mpa: string, hasMetrics: boolean) => 
     trackEvent("accomplishment_created", { mpa, has_metrics: hasMetrics }),
   
   accomplishmentEdited: (mpa: string) => 
     trackEvent("accomplishment_edited", { mpa }),
 
-  // Statement generation - THE KEY FUNNEL
+  // Statement generation
   generateStarted: (model: string, style: string, mpaCount: number) => 
     trackEvent("generate_started", { model, style, mpa_count: mpaCount }),
   
@@ -70,7 +72,7 @@ export const Analytics = {
     trackEvent("generate_completed", { model, duration_ms: durationMs, statement_count: statementCount }),
   
   generateFailed: (model: string, error: string) => 
-    trackEvent("generate_failed", { model, error }),
+    trackEvent("generate_failed", { model, error: error.slice(0, 50) }), // Truncate error
 
   // Statement actions
   statementCopied: (mpa: string) => 
@@ -103,7 +105,7 @@ export const Analytics = {
   awardCreated: (category: string, period: string) => 
     trackEvent("award_created", { category, period }),
 
-  // API Keys - important for BYOK model
+  // API Keys
   apiKeyAdded: (provider: string) => 
     trackEvent("api_key_added", { provider }),
   
@@ -114,9 +116,7 @@ export const Analytics = {
   featureViewed: (feature: string) => 
     trackEvent("feature_viewed", { feature }),
 
-  // Errors & friction
-  errorEncountered: (context: string, error: string) => 
-    trackEvent("error_encountered", { context, error }),
+  // Errors (sanitized)
+  errorEncountered: (context: string) => 
+    trackEvent("error_encountered", { context }),
 };
-
-export default posthog;
