@@ -26,7 +26,8 @@ interface GenerateDecorationRequest {
   // Award info
   awardType: DecorationAwardType;
   reason: DecorationReason;
-  fontSize: 10 | 12;
+  /** @deprecated MyDecs Reimagined uses character limits, not line limits */
+  fontSize?: 10 | 12;
   
   // Content
   accomplishments: string[];
@@ -87,8 +88,8 @@ export async function POST(request: Request) {
       startDate: body.startDate || "start date",
       endDate: body.endDate || "end date",
       accomplishments: body.accomplishments,
-      fontSize: body.fontSize || 12,
       gender: body.rateeGender,
+      maxCharacters: decorationConfig.maxCharacters,
     });
     
     // Generate citation
@@ -103,20 +104,22 @@ export async function POST(request: Request) {
     // Post-process to expand any remaining abbreviations
     const citation = expandAbbreviations(rawCitation);
     
-    // Count lines (approximate - assume ~80 chars per line at 12pt)
-    const charsPerLine = body.fontSize === 12 ? 80 : 100;
-    const estimatedLines = Math.ceil(citation.length / charsPerLine);
-    const maxLines = body.fontSize === 12 ? decorationConfig.maxLines12pt : decorationConfig.maxLines10pt;
+    // Character count check (MyDecs Reimagined uses 1350 char limit)
+    const characterCount = citation.length;
+    const maxCharacters = decorationConfig.maxCharacters;
+    
+    // Also calculate legacy line estimate for reference
+    const estimatedLines = Math.ceil(characterCount / 80);
     
     return NextResponse.json({
       citation,
       metadata: {
         awardType: body.awardType,
         awardName: decorationConfig.name,
-        estimatedLines,
-        maxLines,
-        fontSize: body.fontSize,
-        withinLimit: estimatedLines <= maxLines,
+        characterCount,
+        maxCharacters,
+        withinLimit: characterCount <= maxCharacters,
+        estimatedLines, // Legacy reference
         model: body.model,
       },
     });
