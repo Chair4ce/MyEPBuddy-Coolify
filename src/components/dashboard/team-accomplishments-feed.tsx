@@ -34,11 +34,20 @@ import {
   X,
   LayoutList,
   CalendarDays,
+  CalendarRange,
+  FileText,
+  Settings2,
+  Loader2,
+  FolderOpen,
+  Check,
 } from "lucide-react";
 import { ENTRY_MGAS, SUPERVISOR_RANKS, AWARD_QUARTERS, getQuarterDateRange, getFiscalQuarterDateRange, ENLISTED_RANKS, OFFICER_RANKS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import type { AwardQuarter } from "@/types/database";
 import { AccomplishmentDetailDialog } from "./accomplishment-detail-dialog";
+import { WARSettingsModal } from "./war-settings-modal";
+import { WARViewModal } from "./war-view-modal";
+import { WARHistoryModal } from "./war-history-modal";
 import { getAccomplishmentCommentCounts } from "@/app/actions/accomplishment-comments";
 import type { Accomplishment, Profile, ManagedMember, Rank } from "@/types/database";
 import {
@@ -97,9 +106,18 @@ export function TeamAccomplishmentsFeed({ cycleYear }: TeamAccomplishmentsFeedPr
   );
   const [rankFilterOpen, setRankFilterOpen] = useState(false);
   
-  // View mode: list or quarterly
-  const [viewMode, setViewMode] = useState<"list" | "quarterly">("list");
+  // View mode: list, quarterly, or weekly
+  const [viewMode, setViewMode] = useState<"list" | "quarterly" | "weekly">("list");
   const [useFiscalYear, setUseFiscalYear] = useState(false);
+  
+  // Weekly view state
+  const [warSettingsOpen, setWarSettingsOpen] = useState(false);
+  const [warViewOpen, setWarViewOpen] = useState(false);
+  const [warHistoryOpen, setWarHistoryOpen] = useState(false);
+  const [selectedWeek, setSelectedWeek] = useState<{ start: Date; end: Date; entries: FeedAccomplishment[] } | null>(null);
+  const [weeklyLoadedMonths, setWeeklyLoadedMonths] = useState(1); // Start with current month
+  const [isLoadingMoreWeeks, setIsLoadingMoreWeeks] = useState(false);
+  const [historyReportToView, setHistoryReportToView] = useState<any>(null);
 
   // Check if user can have subordinates based on rank
   const canHaveSubordinates =
@@ -682,6 +700,151 @@ export function TeamAccomplishmentsFeed({ cycleYear }: TeamAccomplishmentsFeedPr
     return groups;
   }, [filteredAccomplishments, useFiscalYear, cycleYear]);
 
+  // Group entries by week for weekly view
+  interface WeekGroup {
+    key: string; // ISO week key: "YYYY-WW"
+    weekNumber: number;
+    year: number;
+    startDate: Date;
+    endDate: Date;
+    label: string; // e.g., "Week of Jan 20-26"
+    entries: FeedAccomplishment[];
+  }
+
+  // Helper to get ISO week number and year
+  const getISOWeekInfo = (date: Date): { week: number; year: number } => {
+    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    const dayNum = d.getUTCDay() || 7;
+    d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    const week = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+    return { week, year: d.getUTCFullYear() };
+  };
+
+  // Get week start (Monday) and end (Sunday) for a date
+  const getWeekBounds = (date: Date): { start: Date; end: Date } => {
+    const d = new Date(date);
+    const day = d.getDay();
+    const diffToMonday = day === 0 ? -6 : 1 - day;
+    const monday = new Date(d);
+    monday.setDate(d.getDate() + diffToMonday);
+    monday.setHours(0, 0, 0, 0);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    sunday.setHours(23, 59, 59, 999);
+    return { start: monday, end: sunday };
+  };
+
+  // Calculate date range for weekly view based on loaded months
+  const weeklyDateRange = useMemo(() => {
+    const now = new Date();
+    const endDate = now; // Today
+    const startDate = new Date(now.getFullYear(), now.getMonth() - weeklyLoadedMonths + 1, 1);
+    return { start: startDate, end: endDate };
+  }, [weeklyLoadedMonths]);
+
+  // Filter entries for weekly view (only within the loaded date range)
+  const weeklyFilteredAccomplishments = useMemo(() => {
+    return filteredAccomplishments.filter((entry) => {
+      const entryDate = new Date(entry.date);
+      return entryDate >= weeklyDateRange.start && entryDate <= weeklyDateRange.end;
+    });
+  }, [filteredAccomplishments, weeklyDateRange]);
+
+  // Group entries by week
+  const weekGroups = useMemo((): WeekGroup[] => {
+    const groups: Map<string, WeekGroup> = new Map();
+    const now = new Date();
+    const currentWeekBounds = getWeekBounds(now);
+    
+    // Create week groups from the filtered entries
+    weeklyFilteredAccomplishments.forEach((entry) => {
+      const entryDate = new Date(entry.date);
+      const { week, year } = getISOWeekInfo(entryDate);
+      const weekKey = `${year}-W${String(week).padStart(2, "0")}`;
+      
+      if (!groups.has(weekKey)) {
+        const bounds = getWeekBounds(entryDate);
+        const startMonth = bounds.start.toLocaleDateString("en-US", { month: "short" });
+        const endMonth = bounds.end.toLocaleDateString("en-US", { month: "short" });
+        const startDay = bounds.start.getDate();
+        const endDay = bounds.end.getDate();
+        
+        // Format label: "Jan 20-26" or "Jan 27 - Feb 2" if spans months
+        const label = startMonth === endMonth
+          ? `${startMonth} ${startDay}-${endDay}`
+          : `${startMonth} ${startDay} - ${endMonth} ${endDay}`;
+        
+        groups.set(weekKey, {
+          key: weekKey,
+          weekNumber: week,
+          year,
+          startDate: bounds.start,
+          endDate: bounds.end,
+          label,
+          entries: [],
+        });
+      }
+      groups.get(weekKey)!.entries.push(entry);
+    });
+
+    // Also add the current week if it doesn't have entries (so users can see it)
+    const currentWeekInfo = getISOWeekInfo(now);
+    const currentWeekKey = `${currentWeekInfo.year}-W${String(currentWeekInfo.week).padStart(2, "0")}`;
+    if (!groups.has(currentWeekKey)) {
+      const startMonth = currentWeekBounds.start.toLocaleDateString("en-US", { month: "short" });
+      const endMonth = currentWeekBounds.end.toLocaleDateString("en-US", { month: "short" });
+      const startDay = currentWeekBounds.start.getDate();
+      const endDay = currentWeekBounds.end.getDate();
+      const label = startMonth === endMonth
+        ? `${startMonth} ${startDay}-${endDay}`
+        : `${startMonth} ${startDay} - ${endMonth} ${endDay}`;
+      
+      groups.set(currentWeekKey, {
+        key: currentWeekKey,
+        weekNumber: currentWeekInfo.week,
+        year: currentWeekInfo.year,
+        startDate: currentWeekBounds.start,
+        endDate: currentWeekBounds.end,
+        label,
+        entries: [],
+      });
+    }
+
+    // Sort groups by date (most recent first) and filter out future weeks
+    return Array.from(groups.values())
+      .filter((g) => g.startDate <= now) // Only past and current weeks
+      .sort((a, b) => b.startDate.getTime() - a.startDate.getTime());
+  }, [weeklyFilteredAccomplishments]);
+
+  // Check if there are more weeks to load
+  const hasMoreWeeksToLoad = useMemo(() => {
+    // Check if there are entries older than our current load range
+    const oldestLoadedDate = weeklyDateRange.start;
+    return filteredAccomplishments.some((entry) => new Date(entry.date) < oldestLoadedDate);
+  }, [filteredAccomplishments, weeklyDateRange]);
+
+  // Load more weeks handler
+  const handleLoadMoreWeeks = () => {
+    setIsLoadingMoreWeeks(true);
+    // Simulate a small delay for UX, then load another month
+    setTimeout(() => {
+      setWeeklyLoadedMonths((prev) => prev + 1);
+      setIsLoadingMoreWeeks(false);
+    }, 300);
+  };
+
+  // Handle WAR view click
+  const handleViewWar = (weekGroup: WeekGroup) => {
+    setHistoryReportToView(null); // Clear any history report reference
+    setSelectedWeek({
+      start: weekGroup.startDate,
+      end: weekGroup.endDate,
+      entries: weekGroup.entries,
+    });
+    setWarViewOpen(true);
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -941,7 +1104,7 @@ export function TeamAccomplishmentsFeed({ cycleYear }: TeamAccomplishmentsFeedPr
             <div className="flex-1" />
 
             {/* View Mode Tabs */}
-            <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "list" | "quarterly")}>
+            <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "list" | "quarterly" | "weekly")}>
               <TabsList className="h-8">
                 <TabsTrigger value="list" className="gap-1.5 px-2.5 text-xs h-7">
                   <LayoutList className="size-3.5" />
@@ -951,12 +1114,32 @@ export function TeamAccomplishmentsFeed({ cycleYear }: TeamAccomplishmentsFeedPr
                   <CalendarDays className="size-3.5" />
                   <span className="hidden sm:inline">Quarterly</span>
                 </TabsTrigger>
+                <TabsTrigger value="weekly" className="gap-1.5 px-2.5 text-xs h-7">
+                  <CalendarRange className="size-3.5" />
+                  <span className="hidden sm:inline">Weekly</span>
+                </TabsTrigger>
               </TabsList>
             </Tabs>
 
+          </div>
+
+          {/* Stats & View-Specific Actions Row */}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="secondary" className="gap-1.5 text-xs">
+                <Award className="size-3" />
+                {filteredAccomplishments.length}
+                {hasActiveFilters && ` of ${feedAccomplishments.length}`} Entries
+              </Badge>
+              <Badge variant="outline" className="gap-1.5 text-xs">
+                <Users className="size-3" />
+                {new Set(filteredAccomplishments.map((a) => a.is_managed_member ? a.managed_member_id : a.user_id)).size} Members
+              </Badge>
+            </div>
+
             {/* Fiscal Year Toggle - only show in quarterly view */}
             {viewMode === "quarterly" && (
-              <div className="flex items-center gap-2 h-8 px-2.5 rounded-md border bg-background text-xs">
+              <div className="flex items-center gap-2 h-7 px-2.5 rounded-md border bg-background text-xs">
                 <span className={cn(!useFiscalYear && "font-medium")}>Cal</span>
                 <Switch
                   checked={useFiscalYear}
@@ -967,19 +1150,30 @@ export function TeamAccomplishmentsFeed({ cycleYear }: TeamAccomplishmentsFeedPr
                 <span className={cn(useFiscalYear && "font-medium")}>FY</span>
               </div>
             )}
-          </div>
 
-          {/* Stats */}
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="secondary" className="gap-1.5 text-xs">
-              <Award className="size-3" />
-              {filteredAccomplishments.length}
-              {hasActiveFilters && ` of ${feedAccomplishments.length}`} Entries
-            </Badge>
-            <Badge variant="outline" className="gap-1.5 text-xs">
-              <Users className="size-3" />
-              {new Set(filteredAccomplishments.map((a) => a.is_managed_member ? a.managed_member_id : a.user_id)).size} Members
-            </Badge>
+            {/* WAR Actions - only show in weekly view */}
+            {viewMode === "weekly" && (
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 gap-1.5 text-xs"
+                  onClick={() => setWarHistoryOpen(true)}
+                >
+                  <FolderOpen className="size-3.5" />
+                  <span className="hidden sm:inline">History</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 gap-1.5 text-xs"
+                  onClick={() => setWarSettingsOpen(true)}
+                >
+                  <Settings2 className="size-3.5" />
+                  <span className="hidden sm:inline">Settings</span>
+                </Button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -997,6 +1191,148 @@ export function TeamAccomplishmentsFeed({ cycleYear }: TeamAccomplishmentsFeedPr
             >
               Clear filters
             </Button>
+          </div>
+        ) : viewMode === "weekly" ? (
+          /* Weekly View */
+          <div className="space-y-3">
+            {weekGroups.length === 0 ? (
+              <div className="text-center py-8 text-sm text-muted-foreground">
+                <CalendarRange className="size-8 mx-auto mb-2 opacity-50" />
+                <p>No entries found for this time period</p>
+              </div>
+            ) : (
+              <>
+                {weekGroups.map((weekGroup) => {
+                  const isCurrentWeek = (() => {
+                    const now = new Date();
+                    const currentWeekInfo = getISOWeekInfo(now);
+                    return weekGroup.year === currentWeekInfo.year && weekGroup.weekNumber === currentWeekInfo.week;
+                  })();
+                  
+                  return (
+                    <Card key={weekGroup.key} className={cn(isCurrentWeek && "border-primary/50")}>
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-3">
+                            <div className={cn(
+                              "flex items-center justify-center size-10 rounded-lg font-bold text-xs",
+                              weekGroup.entries.length > 0
+                                ? "bg-primary text-primary-foreground"
+                                : "bg-muted text-muted-foreground"
+                            )}>
+                              W{weekGroup.weekNumber}
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <p className="font-medium text-sm">Week of {weekGroup.label}</p>
+                                {isCurrentWeek && (
+                                  <Badge variant="secondary" className="text-xs">Current</Badge>
+                                )}
+                              </div>
+                              <p className="text-xs text-muted-foreground">
+                                {weekGroup.year}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge variant={weekGroup.entries.length > 0 ? "default" : "secondary"} className="text-xs">
+                              {weekGroup.entries.length} {weekGroup.entries.length === 1 ? "entry" : "entries"}
+                            </Badge>
+                            {weekGroup.entries.length > 0 && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 gap-1.5 text-xs"
+                                onClick={() => handleViewWar(weekGroup)}
+                              >
+                                <FileText className="size-3.5" />
+                                View WAR
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                        
+                        {weekGroup.entries.length > 0 && (
+                          <div className="border-t pt-3 space-y-2">
+                            {weekGroup.entries.slice(0, 5).map((acc) => {
+                              const mpaLabel = ENTRY_MGAS.find((m) => m.key === acc.mpa)?.label || acc.mpa;
+                              return (
+                                <div
+                                  key={acc.id}
+                                  className={cn(
+                                    "group p-2.5 rounded-lg border bg-card hover:bg-muted/50 transition-colors cursor-pointer",
+                                    acc.chain_depth === 1 && "border-l-2 border-l-primary/40"
+                                  )}
+                                  onClick={() => handleAccomplishmentClick(acc)}
+                                  role="button"
+                                  tabIndex={0}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter" || e.key === " ") {
+                                      e.preventDefault();
+                                      handleAccomplishmentClick(acc);
+                                    }
+                                  }}
+                                >
+                                  <div className="flex items-center gap-2.5">
+                                    <div className={cn(
+                                      "size-7 rounded-full flex items-center justify-center shrink-0 text-[10px] font-medium",
+                                      acc.chain_depth === 1 ? "bg-primary/20 text-primary" : "bg-primary/10 text-primary"
+                                    )}>
+                                      {acc.author_name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                                        <span className="font-medium text-xs">
+                                          {acc.author_rank && <span className="text-muted-foreground">{acc.author_rank} </span>}
+                                          {acc.author_name}
+                                        </span>
+                                        <Badge variant="outline" className="text-[10px] h-4 px-1.5">{mpaLabel}</Badge>
+                                      </div>
+                                      <p className="text-xs text-muted-foreground line-clamp-1">{acc.details}</p>
+                                    </div>
+                                    <ChevronRight className="size-4 text-muted-foreground/30 group-hover:text-muted-foreground transition-colors shrink-0" />
+                                  </div>
+                                </div>
+                              );
+                            })}
+                            {weekGroup.entries.length > 5 && (
+                              <p className="text-xs text-muted-foreground text-center py-1">
+                                + {weekGroup.entries.length - 5} more entries
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+                
+                {/* Load More Button */}
+                {hasMoreWeeksToLoad && (
+                  <div className="flex justify-center py-4">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleLoadMoreWeeks}
+                      disabled={isLoadingMoreWeeks}
+                      className="gap-2"
+                    >
+                      {isLoadingMoreWeeks ? (
+                        <>
+                          <Loader2 className="size-4 animate-spin" />
+                          Loading...
+                        </>
+                      ) : (
+                        <>
+                          <Calendar className="size-4" />
+                          Load More Weeks
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         ) : viewMode === "quarterly" ? (
           /* Quarterly View */
@@ -1237,6 +1573,41 @@ export function TeamAccomplishmentsFeed({ cycleYear }: TeamAccomplishmentsFeedPr
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         onAccomplishmentUpdated={updateAccomplishment}
+      />
+
+      {/* WAR Settings Modal */}
+      <WARSettingsModal
+        open={warSettingsOpen}
+        onOpenChange={setWarSettingsOpen}
+      />
+
+      {/* WAR View Modal */}
+      <WARViewModal
+        open={warViewOpen}
+        onOpenChange={setWarViewOpen}
+        weekStart={selectedWeek?.start || null}
+        weekEnd={selectedWeek?.end || null}
+        entries={selectedWeek?.entries || []}
+        existingReportId={historyReportToView?.id || null}
+        onReportSaved={() => {
+          // Refresh history if needed
+        }}
+      />
+
+      {/* WAR History Modal */}
+      <WARHistoryModal
+        open={warHistoryOpen}
+        onOpenChange={setWarHistoryOpen}
+        onViewReport={(report) => {
+          // Set the report to view and open the view modal
+          setHistoryReportToView(report);
+          setSelectedWeek({
+            start: new Date(report.week_start),
+            end: new Date(report.week_end),
+            entries: [], // History reports don't need entries, they're already saved
+          });
+          setWarViewOpen(true);
+        }}
       />
     </>
   );

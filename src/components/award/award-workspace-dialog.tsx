@@ -67,9 +67,16 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { AwardCategorySectionCard } from "@/components/award/award-category-section";
 import { AwardShellShareDialog } from "@/components/award/award-shell-share-dialog";
 import { BulletCanvasPreview } from "@/components/award/bullet-canvas-preview";
+import { Input } from "@/components/ui/input";
+import { Pencil } from "lucide-react";
 import type {
   Accomplishment,
   AwardLevel,
@@ -94,6 +101,8 @@ interface AwardShellInput {
   award_level: AwardLevel;
   award_category: AwardCategory;
   sentences_per_statement: 2 | 3;
+  title?: string | null;
+  is_team_award?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -167,6 +176,10 @@ export function AwardWorkspaceDialog({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [nomineeInfo, setNomineeInfo] = useState<NomineeInfo | null>(null);
   
+  // Award title state
+  const [awardTitle, setAwardTitle] = useState<string>("");
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  
   // Mobile orientation state
   const [isMobilePortrait, setIsMobilePortrait] = useState(false);
   const [dismissedLandscapeHint, setDismissedLandscapeHint] = useState(false);
@@ -222,6 +235,9 @@ export function AwardWorkspaceDialog({
           setAwardLevel(typedShellData.award_level);
           setAwardCategory(typedShellData.award_category);
           setSentencesPerStatement(typedShellData.sentences_per_statement);
+          
+          // Update title
+          setAwardTitle(typedShellData.title || "");
         }
       } catch (error) {
         console.error("Error loading shell data:", error);
@@ -307,6 +323,8 @@ export function AwardWorkspaceDialog({
   useEffect(() => {
     if (!open) {
       reset();
+      setAwardTitle("");
+      setIsEditingTitle(false);
       setDismissedLandscapeHint(false); // Reset hint for next time
     }
   }, [open, reset]);
@@ -331,6 +349,7 @@ export function AwardWorkspaceDialog({
           award_level: awardLevel,
           award_category: awardCategory,
           sentences_per_statement: sentencesPerStatement,
+          title: awardTitle.trim() || null,
         } as never)
         .eq("id", shellId);
 
@@ -377,7 +396,7 @@ export function AwardWorkspaceDialog({
     } finally {
       setIsSaving(false);
     }
-  }, [nomineeInfo, profile, currentShell, awardLevel, awardCategory, sentencesPerStatement, slotStates, sections, supabase, onSaved]);
+  }, [nomineeInfo, profile, currentShell, awardLevel, awardCategory, sentencesPerStatement, awardTitle, slotStates, sections, supabase, onSaved]);
 
   // Delete the award shell
   const handleDeleteShell = useCallback(async () => {
@@ -525,70 +544,89 @@ export function AwardWorkspaceDialog({
             </div>
           )}
           
-          <DialogHeader className="px-4 pt-4 pb-3 border-b shrink-0">
-            {/* Title row with close button */}
-            <div className="flex items-start justify-between gap-2 mb-3">
-              <div className="flex items-center gap-2 min-w-0">
-                <Award className="size-5 text-primary shrink-0" />
+          <DialogHeader className="px-4 pt-3 pb-3 border-b shrink-0">
+            {/* Header row: Icon + Title/Description + Action buttons */}
+            <div className="flex items-center justify-between gap-3">
+              {/* Left side: Icon and info */}
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="size-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                  <Award className="size-5 text-primary" />
+                </div>
                 <div className="min-w-0">
-                  <DialogTitle className="text-base font-semibold leading-tight">
-                    {nomineeDisplayName}&apos;s Award
+                  <DialogTitle className="text-sm font-semibold leading-tight truncate">
+                    {nomineeDisplayName}
                   </DialogTitle>
-                  <DialogDescription className="text-xs text-muted-foreground mt-0.5">
+                  <DialogDescription className="text-xs text-muted-foreground">
                     {shell.award_level} • {shell.award_category} • {shell.cycle_year}
                   </DialogDescription>
                 </div>
               </div>
-              <DialogClose asChild>
-                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0 -mr-1 -mt-1">
-                  <X className="size-4" />
-                  <span className="sr-only">Close</span>
-                </Button>
-              </DialogClose>
-            </div>
-            
-            {/* Action buttons row */}
-            <div className="flex items-center gap-2">
-              {canEdit && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleSaveShell}
-                  disabled={isSaving || isLoadingShell}
-                  className="h-8 px-3 flex-1"
-                >
-                  {isSaving ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <Save className="size-4" />
-                  )}
-                  <span className="ml-1.5 text-xs">Save</span>
-                </Button>
-              )}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowShareDialog(true)}
-                className="h-8 px-3 flex-1"
-              >
-                <Share2 className="size-4" />
-                <span className="ml-1.5 text-xs">Share</span>
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowPreviewDialog(true)}
-                disabled={totalStatementsWithContent === 0}
-                className="h-8 px-3 flex-1"
-              >
-                <Eye className="size-4" />
-                <span className="ml-1.5 text-xs">Preview</span>
-                {totalStatementsWithContent > 0 && (
-                  <Badge variant="secondary" className="ml-1 text-[10px]">
-                    {totalStatementsWithContent}
-                  </Badge>
+              
+              {/* Right side: Action buttons */}
+              <div className="flex items-center gap-1 shrink-0">
+                {canEdit && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleSaveShell}
+                        disabled={isSaving || isLoadingShell}
+                        className="h-8 w-8 p-0"
+                      >
+                        {isSaving ? (
+                          <Loader2 className="size-4 animate-spin" />
+                        ) : (
+                          <Save className="size-4" />
+                        )}
+                        <span className="sr-only">Save</span>
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Save changes</TooltipContent>
+                  </Tooltip>
                 )}
-              </Button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowShareDialog(true)}
+                      className="h-8 w-8 p-0"
+                    >
+                      <Share2 className="size-4" />
+                      <span className="sr-only">Share</span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Share</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowPreviewDialog(true)}
+                      disabled={totalStatementsWithContent === 0}
+                      className="h-8 w-8 p-0 relative"
+                    >
+                      <Eye className="size-4" />
+                      {totalStatementsWithContent > 0 && (
+                        <span className="absolute -top-0.5 -right-0.5 size-4 rounded-full bg-primary text-[10px] text-primary-foreground flex items-center justify-center font-medium">
+                          {totalStatementsWithContent}
+                        </span>
+                      )}
+                      <span className="sr-only">Preview</span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Preview ({totalStatementsWithContent} statements)</TooltipContent>
+                </Tooltip>
+                <div className="w-px h-5 bg-border mx-1" />
+                <DialogClose asChild>
+                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                    <X className="size-4" />
+                    <span className="sr-only">Close</span>
+                  </Button>
+                </DialogClose>
+              </div>
             </div>
           </DialogHeader>
 
@@ -607,6 +645,54 @@ export function AwardWorkspaceDialog({
             )}
             <div className="w-full items-center flex justify-center">   
             <div className="p-3 sm:p-6 space-y-3 sm:space-y-4 w-full max-w-5xl">
+              {/* Award Title - Always visible and editable */}
+              <div className="flex items-center gap-3 p-3 rounded-lg border bg-muted/30">
+                <div className="flex-1 min-w-0">
+                  {isEditingTitle && canEdit ? (
+                    <Input
+                      value={awardTitle}
+                      onChange={(e) => setAwardTitle(e.target.value)}
+                      placeholder={shell.is_team_award ? "Enter team/office name..." : "Enter award name..."}
+                      className="h-9 text-sm font-medium bg-background"
+                      maxLength={100}
+                      autoFocus
+                      onBlur={() => setIsEditingTitle(false)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === "Escape") {
+                          setIsEditingTitle(false);
+                        }
+                      }}
+                      aria-label="Award name"
+                    />
+                  ) : (
+                    <div 
+                      className={cn(
+                        "flex items-center gap-2 min-w-0",
+                        canEdit && "cursor-pointer group"
+                      )}
+                      onClick={() => canEdit && setIsEditingTitle(true)}
+                      role={canEdit ? "button" : undefined}
+                      tabIndex={canEdit ? 0 : undefined}
+                      onKeyDown={(e) => {
+                        if (canEdit && (e.key === "Enter" || e.key === " ")) {
+                          setIsEditingTitle(true);
+                        }
+                      }}
+                    >
+                      <span className={cn(
+                        "text-sm font-medium truncate",
+                        !awardTitle && "text-muted-foreground italic"
+                      )}>
+                        {awardTitle || (shell.is_team_award ? "Add team/office name..." : "Add award name...")}
+                      </span>
+                      {canEdit && (
+                        <Pencil className="size-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
               {/* Settings Collapsible */}
               {canEdit && (
                 <Collapsible open={showConfig} onOpenChange={setShowConfig}>

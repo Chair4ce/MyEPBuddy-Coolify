@@ -5,76 +5,53 @@ Transform MyEPBuddy from an EPB writing assistant into a comprehensive Air Force
 
 ---
 
-## 🎯 Next Up: Weekly Activity Report (WAR) Management
+## ✅ Implemented: Weekly Activity Report (WAR) Management
 
 ### Overview
-Enable supervisors to compile, generate, and share Weekly Activity Reports from team accomplishments.
+Supervisors can now compile, generate, and view Weekly Activity Reports from team accomplishments directly in the Activity Feed.
 
-### User Flow
+### Current Implementation (v1)
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        ACTIVITY FEED                            │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │ ☆ SSgt Smith completed AWS certification                │   │
-│  │ ★ TSgt Jones led 5-person TDY to Red Flag              │   │
-│  │ ☆ A1C Williams processed 200 travel vouchers           │   │
-│  │ ★ SrA Davis recognized as Team of the Quarter          │   │
-│  └─────────────────────────────────────────────────────────┘   │
-│                            │                                    │
-│                    [Filter: ★ Starred]                         │
-│                            ▼                                    │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │ ☑ TSgt Jones led 5-person TDY to Red Flag              │   │
-│  │ ☑ SrA Davis recognized as Team of the Quarter          │   │
-│  └─────────────────────────────────────────────────────────┘   │
-│                            │                                    │
-│                   [Generate WAR]                               │
-│                            ▼                                    │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │              WEEKLY ACTIVITY REPORT                      │   │
-│  │              Week of 27 Jan - 2 Feb 2026                │   │
-│  │                                                          │   │
-│  │  TRAINING & READINESS                                   │   │
-│  │  • TSgt Jones led 5-person TDY to Red Flag             │   │
-│  │                                                          │   │
-│  │  RECOGNITION                                             │   │
-│  │  • SrA Davis recognized as Team of the Quarter         │   │
-│  └─────────────────────────────────────────────────────────┘   │
-│                            │                                    │
-│                   [Share with Chain]                           │
-│                            ▼                                    │
-│              Flt/CC → Sq/CC → Gp/CC                            │
-└─────────────────────────────────────────────────────────────────┘
-```
+#### Weekly View in Activity Feed
+- [x] New "Weekly" tab in List/Quarterly toggle
+- [x] Entries grouped by ISO week (Monday-Sunday)
+- [x] Most recent week shown first
+- [x] Pagination with "Load More" (loads by month for efficiency)
+- [x] "View WAR" button on each week with entries
 
-### Features
+#### WAR Settings
+- [x] Customizable categories with drag-to-reorder
+- [x] Default categories: Key Accomplishments, Issues/Roadblocks, Upcoming Priorities
+- [x] Custom synthesis instructions for AI
+- [x] Unit/Office symbol header option
 
-#### Phase 1: Star/Favorite System
+#### WAR Generation
+- [x] AI-powered synthesis using LLM (user's key or fallback Gemini Flash)
+- [x] Automatic categorization of entries based on category descriptions
+- [x] Action-Impact bullet format following AF WAR standards
+- [x] Manual "Upcoming Priorities" text field (since entries are past accomplishments)
+- [x] Copy to clipboard functionality
+- [x] Regenerate option
+
+### Roadmap: Phase 2 Enhancements
+
+#### Star/Select System for Entry Curation
 - [ ] Add star toggle to accomplishment cards in activity feed
 - [ ] Store starred status per user (not global)
 - [ ] Filter view: "Show starred only"
-- [ ] Bulk star/unstar actions
+- [ ] Use starred entries (instead of all) when generating WAR
+- [ ] Multi-select entries with checkboxes for WAR generation
 
-#### Phase 2: WAR Generator
-- [ ] Multi-select accomplishments from filtered view
-- [ ] Select date range for WAR
-- [ ] Auto-categorize accomplishments:
-  - Mission Impact
-  - Training & Readiness
-  - Recognition & Awards
-  - Leadership & Mentorship
-  - Community Involvement
-  - Other
-- [ ] AI-assisted categorization (optional)
-- [ ] Generate formatted report (markdown/PDF)
-- [ ] Edit/reorder before finalizing
+#### Advanced WAR Features
+- [ ] Save/persist generated WARs to database
+- [ ] Edit synthesized bullets after generation
+- [ ] PDF export option
+- [ ] WAR history/archive view
 
 #### Phase 3: Sharing & Distribution
 - [ ] Share WAR with specific team members
 - [ ] Share up the supervision chain (1-click)
 - [ ] Email distribution option
-- [ ] WAR history/archive
 - [ ] Combine WARs (roll-up for higher echelons)
 
 ### Technical Considerations
@@ -149,9 +126,10 @@ GET    /api/war/inbox                    - WARs shared with me
 ### Completed ✅
 - **Decoration Citations** - Generate AFAM/AFCM/MSM citations from EPB statements
 - **Self-hosted Analytics** - Supabase-based analytics
+- **WAR Management v1** - Weekly view, AI-powered WAR generation, customizable categories
 
 ### In Progress
-- **WAR Management** (see above)
+- **WAR Management v2** - Star/select system for entry curation (see above)
 
 ### Near-Term (Q1 2026)
 - **1206 Generator Improvements** - Better formatting, more templates

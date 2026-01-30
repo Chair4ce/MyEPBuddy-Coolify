@@ -717,6 +717,27 @@ export default function AwardPage() {
             </DialogHeader>
 
             <div className="space-y-4 py-4">
+              {/* Award Title */}
+              <div className="space-y-2">
+                <Label htmlFor="award-title">
+                  Award Name {isTeamAward && <span className="text-muted-foreground font-normal">(required for team awards)</span>}
+                </Label>
+                <Input
+                  id="award-title"
+                  value={createAwardTitle}
+                  onChange={(e) => setCreateAwardTitle(e.target.value)}
+                  placeholder={isTeamAward ? "e.g., Flight Operations, CSS, Resource Advisors" : "e.g., FY25 Annual, Q1 CGO, Special Act..."}
+                  maxLength={100}
+                  aria-describedby="award-title-description"
+                />
+                <p id="award-title-description" className="text-[10px] text-muted-foreground">
+                  {isTeamAward 
+                    ? "This will be displayed as the award recipient in the list"
+                    : "Optional. Give this award package a memorable name"
+                  }
+                </p>
+              </div>
+
               {/* Team Award Toggle */}
               <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
                 <div className="flex items-center gap-2">
@@ -782,34 +803,15 @@ export default function AwardPage() {
 
               {/* Team Member Selection (when team award) */}
               {isTeamAward && (
-                <>
-                  {/* Team Award Title */}
-                  <div className="space-y-2">
-                    <Label htmlFor="team-award-title">
-                      Team/Office Name <span className="text-muted-foreground font-normal">(required)</span>
-                    </Label>
-                    <Input
-                      id="team-award-title"
-                      value={createAwardTitle}
-                      onChange={(e) => setCreateAwardTitle(e.target.value)}
-                      placeholder="e.g., Flight Operations, CSS, Resource Advisors"
-                      maxLength={100}
-                    />
-                    <p className="text-[10px] text-muted-foreground">
-                      This will be displayed as the award recipient in the list
-                    </p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Team Members</Label>
-                    <TeamMemberSelector
-                      subordinates={subordinates}
-                      managedMembers={managedMembers}
-                      selectedMemberIds={selectedTeamMemberIds}
-                      onSelectionChange={setSelectedTeamMemberIds}
-                    />
-                  </div>
-                </>
+                <div className="space-y-2">
+                  <Label>Team Members</Label>
+                  <TeamMemberSelector
+                    subordinates={subordinates}
+                    managedMembers={managedMembers}
+                    selectedMemberIds={selectedTeamMemberIds}
+                    onSelectionChange={setSelectedTeamMemberIds}
+                  />
+                </div>
               )}
 
               {/* Award Category with User Management */}
