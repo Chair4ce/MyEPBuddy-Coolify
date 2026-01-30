@@ -195,32 +195,24 @@ export default function LibraryPage() {
       // Load community statements from two sources:
       // 1. The community_statements table (legacy/curated)
       // 2. Statements shared to community via statement_shares
+      // Note: All users can see all community statements regardless of their AFSC
       
-      // Source 1: Legacy community_statements table
-      let legacyCommunity: CommunityStatement[] = [];
-      if (profile.afsc) {
-        const { data: communityData } = await supabase
-          .from("community_statements")
-          .select("*")
-          .eq("afsc", profile.afsc)
-          .eq("is_approved", true)
-          .order("upvotes", { ascending: false })
-          .limit(50);
+      // Source 1: Legacy community_statements table (all AFSCs)
+      const { data: communityData } = await supabase
+        .from("community_statements")
+        .select("*")
+        .eq("is_approved", true)
+        .order("upvotes", { ascending: false })
+        .limit(100);
 
-        legacyCommunity = (communityData as CommunityStatement[]) || [];
-      }
+      const legacyCommunity: CommunityStatement[] = (communityData as CommunityStatement[]) || [];
 
-      // Source 2: Statements shared to community via sharing system (filtered by AFSC)
-      let sharedCommunityData: SharedStatementView[] | null = null;
-      if (profile.afsc) {
-        const { data } = await supabase
-          .from("shared_statements_view")
-          .select("*")
-          .eq("share_type", "community")
-          .eq("afsc", profile.afsc)
-          .order("created_at", { ascending: false });
-        sharedCommunityData = data as SharedStatementView[];
-      }
+      // Source 2: Statements shared to community via sharing system (all AFSCs)
+      const { data: sharedCommunityData } = await supabase
+        .from("shared_statements_view")
+        .select("*")
+        .eq("share_type", "community")
+        .order("created_at", { ascending: false });
 
       // Convert shared community statements to CommunityStatement format
       const sharedCommunity: CommunityStatement[] = ((sharedCommunityData as SharedStatementView[]) || []).map((s) => ({
@@ -837,20 +829,16 @@ export default function LibraryPage() {
         <TabsContent value="community" className="w-full flex-1 min-h-0 mt-4 focus-visible:outline-none focus-visible:ring-0 data-[state=inactive]:hidden">
           <ScrollArea className="h-full pr-4 -mr-4">
             <div className="w-full space-y-3 sm:space-y-4 pb-4">
-              {!profile?.afsc ? (
+              {filteredCommunity.length === 0 ? (
                 <div className="w-full py-12 text-center text-muted-foreground text-sm sm:text-base rounded-lg border bg-card px-4">
-                  Set your AFSC in settings to see community statements for your career field.
-                </div>
-              ) : filteredCommunity.length === 0 ? (
-                <div className="w-full py-12 text-center text-muted-foreground text-sm sm:text-base rounded-lg border bg-card px-4">
-                  No crowdsourced statements for {profile.afsc} yet. Share your statements with the community to contribute!
+                  No community statements yet. Share your statements with the community to contribute!
                 </div>
               ) : (
                 <>
                   {/* Info banner */}
                   <div className="w-full flex items-start sm:items-center gap-2 p-2.5 sm:p-3 rounded-lg bg-muted/50 text-xs sm:text-sm text-muted-foreground">
                     <Trophy className="size-4 text-yellow-500 shrink-0 mt-0.5 sm:mt-0" />
-                    <span>Crowdsourced for {profile.afsc} — Each MPA has its own Top 20 used as examples when generating</span>
+                    <span>Crowdsourced statements from the community — Each MPA has its own Top 20 used as examples when generating</span>
                   </div>
 
                   {filteredCommunity.map((statement) => {
