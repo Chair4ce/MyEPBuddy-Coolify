@@ -329,7 +329,7 @@ export default function SignupPage() {
                     </div>
                     {ENLISTED_RANKS.map((r) => (
                       <SelectItem key={r.value} value={r.value}>
-                        {r.label}
+                        {r.value}
                       </SelectItem>
                     ))}
                     <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground border-t mt-1 pt-1">
@@ -337,7 +337,7 @@ export default function SignupPage() {
                     </div>
                     {OFFICER_RANKS.map((r) => (
                       <SelectItem key={r.value} value={r.value}>
-                        {r.label}
+                        {r.value}
                       </SelectItem>
                     ))}
                     <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground border-t mt-1 pt-1">
@@ -345,7 +345,7 @@ export default function SignupPage() {
                     </div>
                     {CIVILIAN_RANK.map((r) => (
                       <SelectItem key={r.value} value={r.value}>
-                        {r.label}
+                        {r.value}
                       </SelectItem>
                     ))}
                   </SelectContent>

@@ -248,19 +248,28 @@ export default function CompleteProfilePage() {
                   <SelectValue placeholder="Select your rank" />
                 </SelectTrigger>
                 <SelectContent>
+                  <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+                    Enlisted
+                  </div>
                   {ENLISTED_RANKS.map((r) => (
                     <SelectItem key={r.value} value={r.value}>
-                      {r.label}
+                      {r.value}
                     </SelectItem>
                   ))}
+                  <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground border-t mt-1 pt-1">
+                    Officer
+                  </div>
                   {OFFICER_RANKS.map((r) => (
                     <SelectItem key={r.value} value={r.value}>
-                      {r.label}
+                      {r.value}
                     </SelectItem>
                   ))}
+                  <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground border-t mt-1 pt-1">
+                    Civilian
+                  </div>
                   {CIVILIAN_RANK.map((r) => (
                     <SelectItem key={r.value} value={r.value}>
-                      {r.label}
+                      {r.value}
                     </SelectItem>
                   ))}
                 </SelectContent>

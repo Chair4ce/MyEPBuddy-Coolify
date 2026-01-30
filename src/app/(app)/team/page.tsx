@@ -1837,7 +1837,7 @@ export default function TeamPage() {
   return (
     <div className="flex w-full h-full min-h-0 overflow-hidden">
       {/* Main Content Area */}
-      <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-y-auto">
+      <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-y-auto items-center">
         <div className="w-full flex-1 min-h-0 flex flex-col space-y-4 sm:space-y-6 px-4 sm:px-6 max-w-7xl">
           {/* Assign Mode Banner */}
           {isAssignMode && selectedProjectId && (

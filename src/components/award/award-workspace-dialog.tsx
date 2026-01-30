@@ -605,8 +605,8 @@ export function AwardWorkspaceDialog({
                 <span className="text-xs">Rotate phone</span>
               </Button>
             )}
-            
-            <div className="p-3 sm:p-6 space-y-3 sm:space-y-4">
+            <div className="w-full items-center flex justify-center">   
+            <div className="p-3 sm:p-6 space-y-3 sm:space-y-4 w-full max-w-5xl">
               {/* Settings Collapsible */}
               {canEdit && (
                 <Collapsible open={showConfig} onOpenChange={setShowConfig}>
@@ -789,6 +789,7 @@ export function AwardWorkspaceDialog({
                   })}
                 </div>
               )}
+            </div>
             </div>
           </ScrollArea>
         </DialogContent>

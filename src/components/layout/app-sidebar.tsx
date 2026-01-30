@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -184,6 +184,9 @@ function NavItem({
   return content;
 }
 
+// Debounce delay for hover leave - prevents premature collapse during quick mouse movements
+const HOVER_LEAVE_DELAY = 150;
+
 export function AppSidebar({ profile }: AppSidebarProps) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -193,6 +196,10 @@ export function AppSidebar({ profile }: AppSidebarProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const userRole = profile?.role || "subordinate";
+  
+  // Refs for hover debouncing
+  const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const sidebarRef = useRef<HTMLElement>(null);
 
   // Load saved mode from localStorage on mount
   useEffect(() => {
@@ -224,6 +231,77 @@ export function AppSidebar({ profile }: AppSidebarProps) {
 
   const handleModeChange = useCallback((newMode: SidebarMode) => {
     setMode(newMode);
+  }, []);
+
+  // Cleanup timeout on unmount and track mouse position
+  useEffect(() => {
+    // Track mouse position globally for menu close detection
+    const trackMouse = (e: MouseEvent) => {
+      (window as Window & { lastMouseX?: number; lastMouseY?: number }).lastMouseX = e.clientX;
+      (window as Window & { lastMouseY?: number }).lastMouseY = e.clientY;
+    };
+    
+    window.addEventListener('mousemove', trackMouse, { passive: true });
+    
+    return () => {
+      window.removeEventListener('mousemove', trackMouse);
+      if (hoverTimeoutRef.current) {
+        clearTimeout(hoverTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Debounced hover handlers to prevent premature collapse
+  // This fixes issues in Edge browser where rapid mouse movements cause flicker
+  const handleMouseEnter = useCallback(() => {
+    // Clear any pending leave timeout
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+      hoverTimeoutRef.current = null;
+    }
+    setIsHovered(true);
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    // Don't collapse if dropdown menu is open - user may be moving to menu items
+    if (isMenuOpen) {
+      return;
+    }
+    
+    // Debounce the leave to handle rapid movements across the sidebar border
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+    }
+    hoverTimeoutRef.current = setTimeout(() => {
+      setIsHovered(false);
+      hoverTimeoutRef.current = null;
+    }, HOVER_LEAVE_DELAY);
+  }, [isMenuOpen]);
+
+  // Handle menu state changes - when menu closes, check if we should collapse
+  const handleMenuOpenChange = useCallback((open: boolean) => {
+    setIsMenuOpen(open);
+    
+    // When menu closes, check if mouse is still over sidebar
+    if (!open) {
+      // Small delay to allow mouse position check
+      setTimeout(() => {
+        const sidebar = sidebarRef.current;
+        if (sidebar) {
+          const rect = sidebar.getBoundingClientRect();
+          const mouseX = (window as Window & { lastMouseX?: number }).lastMouseX ?? 0;
+          const mouseY = (window as Window & { lastMouseY?: number }).lastMouseY ?? 0;
+          
+          // If mouse is outside sidebar bounds, collapse after delay
+          if (mouseX < rect.left || mouseX > rect.right || mouseY < rect.top || mouseY > rect.bottom) {
+            hoverTimeoutRef.current = setTimeout(() => {
+              setIsHovered(false);
+              hoverTimeoutRef.current = null;
+            }, HOVER_LEAVE_DELAY);
+          }
+        }
+      }, 50);
+    }
   }, []);
 
   // Determine if sidebar is visually collapsed
@@ -290,8 +368,9 @@ export function AppSidebar({ profile }: AppSidebarProps) {
 
       {/* Sidebar */}
       <aside
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
+        ref={sidebarRef}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
         className={cn(
           "fixed top-0 left-0 z-40 h-full bg-sidebar border-r border-sidebar-border transition-all duration-150 ease-out",
           // Mobile positioning
@@ -407,7 +486,7 @@ export function AppSidebar({ profile }: AppSidebarProps) {
 
           {/* Sidebar mode toggle at bottom */}
           <div className="border-t border-sidebar-border p-3">
-            <DropdownMenu modal={false} open={isMenuOpen} onOpenChange={setIsMenuOpen}>
+            <DropdownMenu modal={false} open={isMenuOpen} onOpenChange={handleMenuOpenChange}>
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
