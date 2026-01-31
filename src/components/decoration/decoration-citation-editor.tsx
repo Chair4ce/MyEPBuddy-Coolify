@@ -523,29 +523,36 @@ export function DecorationCitationEditor({
     const text = citationText.substring(start, end);
 
     if (text.trim().length > 0 && start !== end) {
+      // If selecting a different word, reset synonym state to allow fresh search
+      if (text.trim() !== selectedText.trim()) {
+        setSynonyms([]);
+        setStagedSynonym(null);
+        setOriginalWord("");
+        setSynonymsLocked(false);
+        setRevisionResults([]);
+      }
+      
       setSelectedText(text);
       setSelectionStart(start);
       setSelectionEnd(end);
       setShowSelectionPopup(true);
-      setRevisionResults([]);
     } else {
-      setShowSelectionPopup(false);
-    }
-  }, [citationText]);
-
-  // Close selection popup and reset all synonym state
-  const closeSelectionPopup = useCallback(() => {
-    // If we have a staged synonym, revert to original before closing
-    if (stagedSynonym && originalWord) {
-      // Find the staged word in the current text and revert it
-      const currentText = citationText;
-      const stagedStart = currentText.indexOf(stagedSynonym, Math.max(0, selectionStart - stagedSynonym.length - 5));
-      if (stagedStart !== -1) {
-        const newText = currentText.substring(0, stagedStart) + originalWord + currentText.substring(stagedStart + stagedSynonym.length);
-        setCitationText(newText);
+      // Clicking away without selection - close and reset everything
+      if (showSelectionPopup) {
+        // If we have a staged synonym, keep it (don't revert) but close the popup
+        setShowSelectionPopup(false);
+        setSelectedText("");
+        setRevisionResults([]);
+        setSynonyms([]);
+        setStagedSynonym(null);
+        setOriginalWord("");
+        setSynonymsLocked(false);
       }
     }
-    
+  }, [citationText, selectedText, showSelectionPopup]);
+
+  // Close selection popup and reset all synonym state (keeps current text as-is)
+  const closeSelectionPopup = useCallback(() => {
     setShowSelectionPopup(false);
     setSelectedText("");
     setRevisionResults([]);
@@ -553,7 +560,7 @@ export function DecorationCitationEditor({
     setStagedSynonym(null);
     setOriginalWord("");
     setSynonymsLocked(false);
-  }, [stagedSynonym, originalWord, citationText, selectionStart, setCitationText]);
+  }, []);
   
   // Fetch synonyms for a single word
   const handleFetchSynonyms = useCallback(async () => {
@@ -564,7 +571,6 @@ export function DecorationCitationEditor({
     
     // Store the original word when fetching synonyms
     setOriginalWord(selectedText.trim());
-    setSynonymsLocked(true); // Lock the popup open
     
     try {
       const response = await fetch("/api/synonyms", {
@@ -582,9 +588,11 @@ export function DecorationCitationEditor({
       
       const data = await response.json();
       setSynonyms(data.synonyms || []);
+      setSynonymsLocked(true); // Lock the popup open only after success
     } catch (error) {
       console.error("Synonym error:", error);
       toast.error("Failed to get synonyms");
+      setOriginalWord(""); // Reset on error
     } finally {
       setIsLoadingSynonyms(false);
     }
@@ -700,11 +708,7 @@ export function DecorationCitationEditor({
   // Handle textarea blur - delay closing to allow button clicks
   const handleTextareaBlur = useCallback(() => {
     setTimeout(() => {
-      // Don't close if synonyms are locked (user has fetched synonyms and is browsing)
-      if (synonymsLocked) {
-        return;
-      }
-      // Don't close if actively revising or if focus is inside the popup
+      // Don't close if focus is inside the popup
       if (document.activeElement?.closest(".selection-popup")) {
         return;
       }
@@ -713,9 +717,17 @@ export function DecorationCitationEditor({
       if (loadingElement) {
         return;
       }
-      closeSelectionPopup();
+      // When blurring, just close the popup without reverting
+      // Keep whatever word is currently staged in the text
+      setShowSelectionPopup(false);
+      setSelectedText("");
+      setRevisionResults([]);
+      setSynonyms([]);
+      setStagedSynonym(null);
+      setOriginalWord("");
+      setSynonymsLocked(false);
     }, 300);
-  }, [closeSelectionPopup, synonymsLocked]);
+  }, []);
 
   // Revise selected text
   const handleReviseSelection = useCallback(
