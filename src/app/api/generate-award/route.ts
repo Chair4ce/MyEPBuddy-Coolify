@@ -47,7 +47,6 @@ interface GenerateAwardRequest {
   customContext?: string;
   // Revision mode for existing statements
   existingStatement?: string;
-  revisionMode?: "add" | "replace";
   revisionIntensity?: number; // 0-100, controls how much the statement gets rewritten
 }
 
@@ -307,7 +306,6 @@ export async function POST(request: Request) {
       accomplishments,
       customContext,
       existingStatement,
-      revisionMode = "add",
       revisionIntensity = 50,
     } = body;
 
@@ -353,7 +351,9 @@ export async function POST(request: Request) {
     }
 
     // Validate based on mode
-    if (!isCustomContextMode && (!accomplishments || accomplishments.length === 0)) {
+    // In revision mode, additional context is optional - the LLM can revise based on existing statement alone
+    const hasSourceInput = isCustomContextMode || (accomplishments && accomplishments.length > 0);
+    if (!isRevisionMode && !hasSourceInput) {
       return NextResponse.json(
         { error: "Missing accomplishments or custom context" },
         { status: 400 }
@@ -391,6 +391,87 @@ export async function POST(request: Request) {
       : AWARD_1206_CATEGORIES;
 
     // ============================================================
+    // PURE REVISION MODE: Revise existing statement without additional context
+    // ============================================================
+    if (isRevisionMode && !hasSourceInput) {
+      for (const category of targetCategories) {
+        const pureRevisionPrompt = `REVISE the following AF Form 1206 narrative statement for the "${category.heading}" section.
+Provide ${versionsPerStatement} different revised versions so the user can choose the best one.
+
+EXISTING STATEMENT TO REVISE:
+${existingStatement}
+
+**REVISION INSTRUCTIONS:**
+- Rewrite the statement to improve clarity, impact, and flow
+- Enhance the language while preserving the core accomplishments and metrics
+- Apply the rewrite intensity specified below to determine how much to change
+
+**REWRITE INTENSITY:**
+${intensityGuidance}
+
+NOMINEE: ${nomineeRank} ${nomineeName} | AFSC: ${nomineeAfsc || "N/A"}
+AWARD LEVEL: ${awardLevel.toUpperCase()} | CATEGORY: ${awardCategory.toUpperCase()}
+AWARD PERIOD: ${awardPeriod}
+
+LEVEL-SPECIFIC GUIDANCE:
+${levelGuidance}
+${buildExamplesSection(awardExamples, category.key)}
+
+**LINE COUNT & CHARACTER BUDGET - CRITICAL:**
+Target: ${sentencesPerStatement} lines on AF Form 1206 (Times New Roman 12pt, 765.95px line width)
+${sentencesPerStatement === 2 
+  ? `CHARACTER TARGET: 220-260 characters total (~110-130 per line)
+This is a 2-LINE statement. Write CONCISELY.`
+  : `CHARACTER TARGET: 330-390 characters total (~110-130 per line)
+This is a 3-LINE statement. You have more room for impacts and metrics.`}
+
+CRITICAL 1206 REQUIREMENTS:
+1. EVERY statement MUST start with "- " (dash space) followed by the text
+2. **CHARACTER COUNT IS KEY** - aim for ${sentencesPerStatement === 2 ? "220-260" : "330-390"} total characters
+3. Typically ${sentencesPerStatement} sentences, but character count matters more
+4. Write in narrative-style (complete sentences/paragraphs)
+5. MAXIMIZE density: Chain impacts, quantify aggressively, add mission context
+6. Start with strong action verbs in active voice
+7. Connect to ${awardLevel}-level mission impact
+
+**PUNCTUATION - EXTREMELY IMPORTANT:**
+- NEVER use em-dashes (--) - this is STRICTLY FORBIDDEN
+- NEVER use semicolons (;) or slashes (/)
+- ONLY use commas (,) to connect clauses and chain impacts
+
+Generate EXACTLY 1 statement group with ${versionsPerStatement} alternative revised versions.
+AIM for ${sentencesPerStatement === 2 ? "220-260" : "330-390"} characters per statement.
+
+Format as JSON array (EACH statement must start with "- "):
+["- Version A", "- Version B", "- Version C"]`;
+
+        try {
+          const { text } = await generateText({
+            model: modelProvider,
+            system: systemPrompt,
+            prompt: pureRevisionPrompt,
+          });
+
+          const jsonMatch = text.match(/\[[\s\S]*\]/);
+          if (jsonMatch) {
+            const versions = JSON.parse(jsonMatch[0]) as string[];
+            results.push({
+              category: category.key,
+              statementGroups: [{
+                versions: versions.map(v => v.trim()),
+                sourceAccomplishmentIds: [],
+              }],
+            });
+          }
+        } catch (error) {
+          console.error(`Error generating pure revision for ${category.key}:`, error);
+        }
+      }
+
+      return NextResponse.json({ statements: results });
+    }
+
+    // ============================================================
     // CUSTOM CONTEXT MODE: Generate from raw text input
     // ============================================================
     if (isCustomContextMode) {
@@ -400,22 +481,14 @@ export async function POST(request: Request) {
 EXISTING STATEMENT TO REVISE:
 ${existingStatement}
 
-REVISION MODE: ${revisionMode === "add" ? "ADD METRICS" : "REPLACE METRICS"}
-${revisionMode === "add" 
-  ? `**ADDITIVE REVISION INSTRUCTIONS:**
-- The source context contains ADDITIONAL metrics/accomplishments to ADD to the existing statement
-- COMBINE metrics: If existing says "4 hours" and source says "4 hours", the result should be "8 hours"
-- FUSE the content: Keep the best elements of the existing statement while incorporating new metrics
-- Sum up quantities: hours, personnel, dollars, percentages should be TOTALED together
-- Preserve the existing narrative flow while enhancing with additional context
-- The goal is to create a MORE COMPLETE statement with COMBINED metrics`
-  : `**REPLACEMENT REVISION INSTRUCTIONS:**
-- The source context represents the TOTAL/CORRECT metrics for this accomplishment
-- REPLACE any conflicting metrics in the existing statement with the source data
-- The source is authoritative - use its numbers/metrics as the final truth
-- Keep the writing style and structure of the existing statement
-- Update facts/metrics but preserve the narrative quality`
-}
+**SMART REVISION INSTRUCTIONS:**
+- Revise the existing statement, incorporating any new context provided below
+- Use your judgment to intelligently handle metrics:
+  - If new metrics clearly add to existing ones (e.g., more volunteer hours), combine/sum them
+  - If new metrics seem to replace or correct existing ones, use the new values
+  - If the new context provides different accomplishments, weave them together cohesively
+- Preserve the narrative quality and writing style of the existing statement
+- Focus on making the statement more complete, accurate, and impactful
 
 **REWRITE INTENSITY:**
 ${intensityGuidance}` : '';
@@ -557,20 +630,14 @@ Format as JSON array (EACH statement must start with "- "):
 EXISTING STATEMENT TO REVISE:
 ${existingStatement}
 
-REVISION MODE: ${revisionMode === "add" ? "ADD METRICS" : "REPLACE METRICS"}
-${revisionMode === "add" 
-  ? `**ADDITIVE REVISION INSTRUCTIONS:**
-- The accomplishments below contain ADDITIONAL metrics to ADD to the existing statement
-- COMBINE metrics: Sum up hours, personnel counts, dollar amounts, etc.
-- Example: If existing says "volunteered 4 hours" and actions show "4 more hours", result should be "volunteered 8 hours"
-- FUSE the content: Keep the best elements of the existing statement while incorporating new metrics
-- The goal is to create a MORE COMPLETE statement with COMBINED/TOTALED metrics`
-  : `**REPLACEMENT REVISION INSTRUCTIONS:**
-- The accomplishments below represent the TOTAL/CORRECT metrics for this accomplishment
-- REPLACE any conflicting metrics in the existing statement with the source data
-- The source accomplishments are authoritative - use their numbers/metrics as the final truth
-- Keep the writing style and structure of the existing statement`
-}
+**SMART REVISION INSTRUCTIONS:**
+- Revise the existing statement, incorporating the accomplishments below
+- Use your judgment to intelligently handle metrics:
+  - If accomplishment metrics clearly add to existing ones (e.g., more volunteer hours), combine/sum them
+  - If accomplishment metrics seem to replace or correct existing ones, use the new values
+  - If the accomplishments provide different activities, weave them together cohesively
+- Preserve the narrative quality and writing style of the existing statement
+- Focus on making the statement more complete, accurate, and impactful
 
 **REWRITE INTENSITY:**
 ${intensityGuidance}` : '';
@@ -604,15 +671,11 @@ ${categoryAccomplishments
   )
   .join("")}
 
-${isRevisionMode && revisionMode === "add" ? `COMBINATION INSTRUCTIONS:
+COMBINATION INSTRUCTIONS:
 - Identify similar activities and merge them (e.g., "volunteered 4 hrs" + "volunteered 7 hrs" = "volunteered 11 hrs")
 - Sum up any numerical metrics that can be combined
 - Create a cohesive narrative that covers all the key accomplishments
-- Prioritize the most impactful elements if space is limited` : !isRevisionMode ? `COMBINATION INSTRUCTIONS:
-- Identify similar activities and merge them (e.g., "volunteered 4 hrs" + "volunteered 7 hrs" = "volunteered 11 hrs")
-- Sum up any numerical metrics that can be combined
-- Create a cohesive narrative that covers all the key accomplishments
-- Prioritize the most impactful elements if space is limited` : ''}
+- Prioritize the most impactful elements if space is limited
 ${buildExamplesSection(awardExamples, category.key)}
 
 **LINE COUNT & CHARACTER BUDGET - CRITICAL:**
@@ -672,18 +735,14 @@ Format as JSON array of arrays (EACH statement must start with "- "):
 EXISTING STATEMENT TO REVISE:
 ${existingStatement}
 
-REVISION MODE: ${revisionMode === "add" ? "ADD METRICS" : "REPLACE METRICS"}
-${revisionMode === "add" 
-  ? `**ADDITIVE REVISION INSTRUCTIONS:**
-- The accomplishment below contains ADDITIONAL metrics to ADD to the existing statement
-- COMBINE metrics: Sum up hours, personnel counts, dollar amounts, etc.
-- FUSE the content: Keep the best elements of the existing statement while incorporating new metrics
-- The goal is to create a MORE COMPLETE statement with COMBINED/TOTALED metrics`
-  : `**REPLACEMENT REVISION INSTRUCTIONS:**
-- The accomplishment below represents the TOTAL/CORRECT metrics for this accomplishment
-- REPLACE any conflicting metrics in the existing statement with the source data
-- Keep the writing style and structure of the existing statement`
-}
+**SMART REVISION INSTRUCTIONS:**
+- Revise the existing statement, incorporating the accomplishment below
+- Use your judgment to intelligently handle metrics:
+  - If accomplishment metrics clearly add to existing ones (e.g., more volunteer hours), combine/sum them
+  - If accomplishment metrics seem to replace or correct existing ones, use the new values
+  - If the accomplishment provides a different activity, weave it together cohesively
+- Preserve the narrative quality and writing style of the existing statement
+- Focus on making the statement more complete, accurate, and impactful
 
 **REWRITE INTENSITY:**
 ${intensityGuidance}` : '';

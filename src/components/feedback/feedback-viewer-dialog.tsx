@@ -32,6 +32,7 @@ import {
   Eye,
   ChevronDown,
   ChevronUp,
+  AlertTriangle,
 } from "lucide-react";
 
 interface FeedbackComment {
@@ -87,6 +88,87 @@ interface FeedbackViewerDialogProps {
   shellId: string;
   onBack?: () => void;
   onApplySuggestion?: (sectionKey: string, newText: string) => void;
+  getCurrentText?: (sectionKey: string) => string;
+}
+
+// Apply suggestion using LLM API for intelligent text matching
+async function applySuggestionWithLLM(
+  snapshotText: string,
+  currentText: string,
+  comment: FeedbackComment
+): Promise<{ 
+  success: boolean; 
+  newText: string; 
+  aborted?: boolean; 
+  reason?: string;
+  needsReview?: boolean;
+  reviewReason?: string;
+}> {
+  // Full rewrite - always safe, just replace everything
+  if (comment.is_full_rewrite && comment.rewrite_text) {
+    return { success: true, newText: comment.rewrite_text };
+  }
+
+  const highlightedText = comment.highlighted_text;
+  const suggestionType = comment.suggestion_type;
+
+  // No highlight info, can't apply
+  if (!highlightedText || (suggestionType !== "delete" && suggestionType !== "replace")) {
+    return { 
+      success: false, 
+      newText: currentText, 
+      aborted: true,
+      reason: "Missing highlight information or unsupported suggestion type" 
+    };
+  }
+
+  try {
+    const response = await fetch("/api/feedback/apply", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        currentText,
+        snapshotText,
+        suggestionType,
+        highlightedText,
+        replacementText: comment.replacement_text,
+        commentText: comment.comment_text,
+      }),
+    });
+
+    const result = await response.json();
+
+    if (result.success && result.newText) {
+      return { 
+        success: true, 
+        newText: result.newText,
+        needsReview: result.needsReview,
+        reviewReason: result.reviewReason
+      };
+    } else if (result.aborted) {
+      return { 
+        success: false, 
+        newText: currentText, 
+        aborted: true, 
+        reason: result.reason || "Could not apply the suggested change" 
+      };
+    } else {
+      return { 
+        success: false, 
+        newText: currentText, 
+        aborted: true, 
+        reason: result.error || "Failed to apply suggestion" 
+      };
+    }
+  } catch (error) {
+    console.error("Error calling apply feedback API:", error);
+    return { 
+      success: false, 
+      newText: currentText, 
+      aborted: true, 
+      reason: "Network error - please try again" 
+    };
+  }
 }
 
 export function FeedbackViewerDialog({
@@ -97,6 +179,7 @@ export function FeedbackViewerDialog({
   shellId,
   onBack,
   onApplySuggestion,
+  getCurrentText,
 }: FeedbackViewerDialogProps) {
   const [sessions, setSessions] = useState<FeedbackSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(sessionId);
@@ -105,6 +188,16 @@ export function FeedbackViewerDialog({
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState<string | null>(null);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
+  
+  // Review confirmation state - when AI makes changes beyond what was expected
+  const [reviewConfirmation, setReviewConfirmation] = useState<{
+    show: boolean;
+    currentText: string;
+    proposedText: string;
+    reviewReason: string;
+    sectionKey: string;
+    commentId: string;
+  } | null>(null);
 
   // Load sessions list
   useEffect(() => {
@@ -155,14 +248,12 @@ export function FeedbackViewerDialog({
         setComments(data.comments || []);
         setContentSnapshot(data.contentSnapshot || null);
         
-        // Auto-expand sections with pending comments
-        const sectionsWithPending = new Set<string>();
+        // Auto-expand all sections so user can review all feedback
+        const allSections = new Set<string>();
         (data.comments || []).forEach((c: FeedbackComment) => {
-          if (c.status === "pending") {
-            sectionsWithPending.add(c.section_key);
-          }
+          allSections.add(c.section_key);
         });
-        setExpandedSections(sectionsWithPending);
+        setExpandedSections(allSections);
       } catch (error) {
         console.error("Load comments error:", error);
         toast.error("Failed to load comments");
@@ -380,28 +471,42 @@ export function FeedbackViewerDialog({
                               <FeedbackCommentCard
                                 comment={comment}
                                 sectionText={sectionText}
+                                currentText={getCurrentText ? getCurrentText(sectionKey) : sectionText}
                                 isUpdating={isUpdating === comment.id}
                                 onMarkRead={() => handleUpdateStatus(comment.id, "accepted")}
                                 onIgnore={() => handleUpdateStatus(comment.id, "dismissed")}
-                                onApply={onApplySuggestion ? () => {
-                                  let newText = sectionText;
-                                  if (comment.is_full_rewrite && comment.rewrite_text) {
-                                    newText = comment.rewrite_text;
-                                  } else if (comment.suggestion_type === "delete" && 
-                                             comment.highlight_start !== undefined && 
-                                             comment.highlight_end !== undefined) {
-                                    newText = sectionText.slice(0, comment.highlight_start) + 
-                                              sectionText.slice(comment.highlight_end);
-                                  } else if (comment.suggestion_type === "replace" && 
-                                             comment.replacement_text &&
-                                             comment.highlight_start !== undefined && 
-                                             comment.highlight_end !== undefined) {
-                                    newText = sectionText.slice(0, comment.highlight_start) + 
-                                              comment.replacement_text + 
-                                              sectionText.slice(comment.highlight_end);
+                                onApply={onApplySuggestion ? async () => {
+                                  const currentTextVal = getCurrentText ? getCurrentText(sectionKey) : sectionText;
+                                  setIsUpdating(comment.id);
+                                  
+                                  try {
+                                    const result = await applySuggestionWithLLM(sectionText, currentTextVal, comment);
+                                    
+                                    if (result.success) {
+                                      // Check if the AI made changes that need user review
+                                      if (result.needsReview) {
+                                        setReviewConfirmation({
+                                          show: true,
+                                          currentText: currentTextVal,
+                                          proposedText: result.newText,
+                                          reviewReason: result.reviewReason || "The AI made changes that may differ from what was expected.",
+                                          sectionKey,
+                                          commentId: comment.id,
+                                        });
+                                      } else {
+                                        onApplySuggestion(sectionKey, result.newText);
+                                        await handleUpdateStatus(comment.id, "accepted");
+                                        toast.success("Suggestion applied successfully");
+                                      }
+                                    } else if (result.aborted) {
+                                      toast.error(result.reason || "Could not apply suggestion");
+                                    }
+                                  } catch (error) {
+                                    console.error("Error applying suggestion:", error);
+                                    toast.error("Failed to apply suggestion");
+                                  } finally {
+                                    setIsUpdating(null);
                                   }
-                                  onApplySuggestion(sectionKey, newText);
-                                  handleUpdateStatus(comment.id, "accepted");
                                 } : undefined}
                                 renderTextWithHighlight={renderTextWithHighlight}
                               />
@@ -417,7 +522,100 @@ export function FeedbackViewerDialog({
           </div>
         </ScrollArea>
       </DialogContent>
+
+      {/* Review Confirmation Dialog - shows when AI makes changes that need user approval */}
+      {reviewConfirmation?.show && (
+        <Dialog open={reviewConfirmation.show} onOpenChange={(open) => {
+          if (!open) setReviewConfirmation(null);
+        }}>
+          <DialogContent className="!max-w-5xl w-[90vw] max-h-[85vh] flex flex-col p-0 overflow-hidden">
+            <DialogHeader className="px-6 pt-6 pb-4 border-b shrink-0">
+              <DialogTitle className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
+                <AlertTriangle className="size-5" />
+                Review AI Changes
+              </DialogTitle>
+            </DialogHeader>
+            
+            <div className="flex-1 overflow-auto px-6 py-4 space-y-4">
+              <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg text-sm">
+                <p className="font-medium text-amber-800 dark:text-amber-200">
+                  The AI made changes that may differ from what was expected:
+                </p>
+                <p className="text-amber-700 dark:text-amber-300 mt-1">
+                  {reviewConfirmation.reviewReason}
+                </p>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-2">Current Text</p>
+                  <div className="text-sm bg-muted/50 p-4 rounded-lg border min-h-[100px] max-h-[200px] overflow-auto whitespace-pre-wrap">
+                    {reviewConfirmation.currentText}
+                  </div>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-2">Proposed Changes</p>
+                  <div className="text-sm bg-blue-50 dark:bg-blue-950/30 p-4 rounded-lg border border-blue-200 dark:border-blue-800 min-h-[100px] max-h-[200px] overflow-auto whitespace-pre-wrap">
+                    {reviewConfirmation.proposedText}
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex justify-end gap-2 px-6 py-4 border-t shrink-0 bg-background">
+              <Button
+                variant="outline"
+                onClick={() => setReviewConfirmation(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={async () => {
+                  if (onApplySuggestion && reviewConfirmation) {
+                    onApplySuggestion(reviewConfirmation.sectionKey, reviewConfirmation.proposedText);
+                    await handleUpdateStatus(reviewConfirmation.commentId, "accepted");
+                    toast.success("Changes applied");
+                    setReviewConfirmation(null);
+                  }
+                }}
+              >
+                <Check className="size-4 mr-1" />
+                Accept Changes
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </Dialog>
+  );
+}
+
+// Collapsible statement wrapper
+function CollapsibleStatement({ 
+  children, 
+  defaultOpen = true 
+}: { 
+  children: React.ReactNode; 
+  defaultOpen?: boolean;
+}) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+
+  return (
+    <div>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground mb-2"
+      >
+        {isOpen ? (
+          <ChevronUp className="size-3" />
+        ) : (
+          <ChevronDown className="size-3" />
+        )}
+        <Eye className="size-3" />
+        {isOpen ? "Hide statement" : "Show statement"}
+      </button>
+      {isOpen && children}
+    </div>
   );
 }
 
@@ -425,6 +623,7 @@ export function FeedbackViewerDialog({
 function FeedbackCommentCard({
   comment,
   sectionText,
+  currentText,
   isUpdating,
   onMarkRead,
   onIgnore,
@@ -433,10 +632,11 @@ function FeedbackCommentCard({
 }: {
   comment: FeedbackComment;
   sectionText: string;
+  currentText: string;
   isUpdating: boolean;
   onMarkRead: () => void;
   onIgnore: () => void;
-  onApply?: () => void;
+  onApply?: () => void | Promise<void>;
   renderTextWithHighlight: (
     text: string, 
     start?: number, 
@@ -448,24 +648,45 @@ function FeedbackCommentCard({
                        comment.suggestion_type === "delete" || 
                        comment.is_full_rewrite;
   const isPending = comment.status === "pending";
+  
+  // Text has changed indicator
+  const textHasChanged = currentText !== sectionText;
+  
+  // For LLM-based application, we don't need to pre-check validity
+  // The LLM will determine if the change can be applied
+  const canApply = useMemo(() => {
+    if (!isActionable || !onApply) return { safe: false, reason: "Not applicable" };
+    if (comment.is_full_rewrite) return { safe: true };
+    
+    const highlightedText = comment.highlighted_text;
+    if (!highlightedText) return { safe: false, reason: "Missing highlight info" };
+    
+    // With LLM-based application, we can attempt to apply even if text has changed
+    // The LLM will abort if it can't find a match
+    return { safe: true };
+  }, [isActionable, onApply, comment.is_full_rewrite, comment.highlighted_text]);
 
-  // Already handled - show minimal
-  if (!isPending) {
-    return (
-      <div className="opacity-50 space-y-3">
-        <div className="text-xs text-muted-foreground flex items-center gap-1">
+  return (
+    <div className={cn("space-y-4", !isPending && "opacity-60")}>
+      {/* Status indicator for already-handled comments */}
+      {!isPending && (
+        <div className="flex items-center gap-1 text-xs text-muted-foreground">
           <Check className="size-3" />
           {comment.status === "accepted" ? "Reviewed" : "Ignored"}
         </div>
-        {comment.comment_text && (
-          <p className="text-sm text-muted-foreground">{comment.comment_text}</p>
-        )}
-      </div>
-    );
-  }
+      )}
 
-  return (
-    <div className="space-y-4">
+      {/* Info notice if text has changed - LLM will attempt to apply intelligently */}
+      {isPending && isActionable && textHasChanged && (
+        <div className="flex items-start gap-2 p-2 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg text-xs text-blue-700 dark:text-blue-300">
+          <MessageSquare className="size-4 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-medium">Text has been edited since review</p>
+            <p className="text-blue-600 dark:text-blue-400">AI will attempt to apply this change intelligently. If the text cannot be found, you&apos;ll be notified.</p>
+          </div>
+        </div>
+      )}
+
       {/* Suggestion type indicator */}
       {isActionable && (
         <div className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -481,27 +702,29 @@ function FeedbackCommentCard({
 
       {/* Full section rewrite - side by side */}
       {comment.is_full_rewrite && comment.rewrite_text ? (
-        <div className="grid md:grid-cols-2 gap-4">
-          <div>
-            <p className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1">
-              <Eye className="size-3" /> Original Statement
-            </p>
-            <div className="text-sm bg-muted/50 p-3 rounded-lg border max-h-60 overflow-auto whitespace-pre-wrap">
-              {sectionText || comment.original_text || "No content"}
+        <CollapsibleStatement defaultOpen={isPending}>
+          <div className="grid md:grid-cols-2 gap-4">
+            <div>
+              <p className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1">
+                <Eye className="size-3" /> Original Statement
+              </p>
+              <div className="text-sm bg-muted/50 p-3 rounded-lg border max-h-60 overflow-auto whitespace-pre-wrap">
+                {sectionText || comment.original_text || "No content"}
+              </div>
+            </div>
+            <div>
+              <p className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1">
+                <FileEdit className="size-3" /> Suggested Rewrite
+              </p>
+              <div className="text-sm bg-blue-50 dark:bg-blue-950/30 p-3 rounded-lg border max-h-60 overflow-auto whitespace-pre-wrap">
+                {comment.rewrite_text}
+              </div>
             </div>
           </div>
-          <div>
-            <p className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1">
-              <FileEdit className="size-3" /> Suggested Rewrite
-            </p>
-            <div className="text-sm bg-blue-50 dark:bg-blue-950/30 p-3 rounded-lg border max-h-60 overflow-auto whitespace-pre-wrap">
-              {comment.rewrite_text}
-            </div>
-          </div>
-        </div>
+        </CollapsibleStatement>
       ) : (
-        /* Show the full statement with highlight */
-        <div>
+        /* Show the full statement with highlight - collapsible for reviewed comments */
+        <CollapsibleStatement defaultOpen={isPending}>
           <div className="text-sm bg-muted/50 p-3 rounded-lg border max-h-48 overflow-auto">
             {renderTextWithHighlight(
               sectionText || comment.original_text || "",
@@ -510,7 +733,7 @@ function FeedbackCommentCard({
               comment.suggestion_type
             )}
           </div>
-        </div>
+        </CollapsibleStatement>
       )}
 
       {/* Replacement text for replace suggestions */}
@@ -538,13 +761,38 @@ function FeedbackCommentCard({
         </div>
       )}
 
-      {/* Action buttons */}
-      <div className="flex gap-2 pt-2">
-        {isActionable && onApply ? (
-          <>
+      {/* Action buttons - only show for pending */}
+      {isPending && (
+        <div className="flex gap-2 pt-2">
+          {isActionable ? (
+            <>
+              <Button
+                size="sm"
+                onClick={onApply || onMarkRead}
+                disabled={isUpdating}
+                className="gap-1"
+              >
+                {isUpdating ? (
+                  <Loader2 className="size-3 animate-spin" />
+                ) : (
+                  <Check className="size-3" />
+                )}
+                Accept
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onIgnore}
+                disabled={isUpdating}
+              >
+                Ignore
+              </Button>
+            </>
+          ) : (
             <Button
+              variant="outline"
               size="sm"
-              onClick={onApply}
+              onClick={onMarkRead}
               disabled={isUpdating}
               className="gap-1"
             >
@@ -553,34 +801,11 @@ function FeedbackCommentCard({
               ) : (
                 <Check className="size-3" />
               )}
-              Accept
+              Mark as Read
             </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onIgnore}
-              disabled={isUpdating}
-            >
-              Ignore
-            </Button>
-          </>
-        ) : (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onMarkRead}
-            disabled={isUpdating}
-            className="gap-1"
-          >
-            {isUpdating ? (
-              <Loader2 className="size-3 animate-spin" />
-            ) : (
-              <Check className="size-3" />
-            )}
-            Mark as Read
-          </Button>
-        )}
-      </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

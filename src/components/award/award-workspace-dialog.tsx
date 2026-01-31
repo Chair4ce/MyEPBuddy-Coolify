@@ -74,10 +74,10 @@ import {
 } from "@/components/ui/tooltip";
 import { AwardCategorySectionCard } from "@/components/award/award-category-section";
 import { AwardShellShareDialog } from "@/components/award/award-shell-share-dialog";
-import { BulletCanvasPreview } from "@/components/award/bullet-canvas-preview";
 import { CreateReviewLinkDialog } from "@/components/review/create-review-link-dialog";
 import { FeedbackListDialog } from "@/components/feedback/feedback-list-dialog";
 import { FeedbackViewerDialog } from "@/components/feedback/feedback-viewer-dialog";
+import { FeedbackBadge } from "@/components/feedback/feedback-badge";
 import { MessageSquareText } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Pencil } from "lucide-react";
@@ -178,6 +178,7 @@ export function AwardWorkspaceDialog({
   const [showFeedbackListDialog, setShowFeedbackListDialog] = useState(false);
   const [showFeedbackViewerDialog, setShowFeedbackViewerDialog] = useState(false);
   const [selectedFeedbackSessionId, setSelectedFeedbackSessionId] = useState<string | null>(null);
+  const [feedbackBadgeRefreshKey, setFeedbackBadgeRefreshKey] = useState(0);
   const [copiedAll, setCopiedAll] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -439,9 +440,9 @@ export function AwardWorkspaceDialog({
     }
   }, [currentShell, supabase, onOpenChange, onSaved]);
 
-  // Combine all statements for preview
+  // Combine all statements for preview - formatted like AF Form 1206
   const allStatementsForPreview = useMemo(() => {
-    const result: { category: string; heading: string; statements: string[] }[] = [];
+    const lines: string[] = [];
 
     AWARD_1206_CATEGORIES.forEach((cat) => {
       const texts: string[] = [];
@@ -451,27 +452,66 @@ export function AwardWorkspaceDialog({
         }
       });
       if (texts.length > 0) {
-        result.push({
-          category: cat.key,
-          heading: cat.heading,
-          statements: texts,
+        lines.push(cat.heading);
+        // Add "- " prefix to each statement (only if not already present)
+        // Check for various dash types: hyphen (-), en-dash (–), em-dash (—)
+        texts.forEach((t) => {
+          const hasBulletPrefix = /^[-–—]\s/.test(t);
+          const prefixed = hasBulletPrefix ? t : `- ${t}`;
+          lines.push(prefixed);
         });
+        lines.push(""); // Blank line between categories
       }
     });
 
-    return result;
+    // Remove trailing blank line
+    if (lines.length > 0 && lines[lines.length - 1] === "") {
+      lines.pop();
+    }
+
+    return lines.join("\n");
   }, [slotStates]);
 
-  const handleCopyAll = async () => {
-    const text = allStatementsForPreview
-      .map((cat) => `${cat.heading}\n${cat.statements.join("\n")}`)
-      .join("\n\n");
+  // State for editable preview text
+  const [previewText, setPreviewText] = useState("");
 
-    await navigator.clipboard.writeText(text);
+  // Sync preview text when dialog opens or statements change
+  useEffect(() => {
+    if (showPreviewDialog) {
+      setPreviewText(allStatementsForPreview);
+    }
+  }, [showPreviewDialog, allStatementsForPreview]);
+
+  const handleCopyAll = async () => {
+    await navigator.clipboard.writeText(previewText);
     setCopiedAll(true);
     setTimeout(() => setCopiedAll(false), 2000);
-    toast.success("All statements copied to clipboard");
+    toast.success("Copied to clipboard");
   };
+
+  // Handle applying feedback suggestions
+  const handleApplySuggestion = useCallback(async (sectionKey: string, newText: string) => {
+    if (!currentShell) return;
+
+    // Find the slot key that matches this section category
+    // The sectionKey from feedback is just the category (e.g., "leadership")
+    const matchingSlotKey = Object.keys(slotStates).find(key => key.startsWith(`${sectionKey}:`));
+    
+    if (matchingSlotKey) {
+      const [category, slotIndexStr] = matchingSlotKey.split(":");
+      const slotIndex = parseInt(slotIndexStr);
+      
+      // Update the slot state with the new text
+      updateSlotState(category, slotIndex, { 
+        draftText: newText, 
+        isDirty: true 
+      });
+      
+      toast.success("Suggestion applied to statement");
+    } else {
+      toast.error("Could not find matching section to apply suggestion");
+    }
+  }, [currentShell, slotStates, updateSlotState]);
 
   // Count total statements with content
   const totalStatementsWithContent = useMemo(() => {
@@ -683,6 +723,13 @@ export function AwardWorkspaceDialog({
                     <TooltipContent>Save changes</TooltipContent>
                   </Tooltip>
                 )}
+                <FeedbackBadge
+                  shellType="award"
+                  shellId={currentShell?.id || ""}
+                  onClick={() => setShowFeedbackListDialog(true)}
+                  refreshKey={feedbackBadgeRefreshKey}
+                  className="h-8"
+                />
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
@@ -803,6 +850,17 @@ export function AwardWorkspaceDialog({
                     </div>
                   )}
                 </div>
+                {/* Final Review Button */}
+                {totalStatementsWithContent > 0 && (
+                  <Button
+                    onClick={() => setShowPreviewDialog(true)}
+                    size="sm"
+                    className="shrink-0"
+                  >
+                    <Eye className="size-4 mr-1.5" />
+                    Final Review
+                  </Button>
+                )}
               </div>
 
               {/* Settings Collapsible */}
@@ -993,49 +1051,58 @@ export function AwardWorkspaceDialog({
         </DialogContent>
       </Dialog>
 
-      {/* Preview Dialog */}
+      {/* Preview Dialog - Unified editable view like AF Form 1206 */}
       <Dialog open={showPreviewDialog} onOpenChange={setShowPreviewDialog}>
-        <DialogContent className="max-w-3xl max-h-[80vh]">
-          <DialogHeader>
+        <DialogContent style={{ maxWidth: '860px', width: '100%' }} className="max-h-[95vh] flex flex-col">
+          <DialogHeader className="shrink-0">
             <DialogTitle className="flex items-center gap-2">
               <Printer className="size-5" />
-              1206 Statement Preview
+              AF Form 1206 Preview
             </DialogTitle>
             <DialogDescription>
-              Review all statements before copying to your AF Form 1206
+              Make any final edits, then copy to your AF Form 1206
             </DialogDescription>
           </DialogHeader>
 
-          <ScrollArea className="max-h-[50vh] pr-4">
-            <div className="space-y-6">
-              {allStatementsForPreview.length === 0 ? (
+          <div className="flex-1 min-h-0 py-2 overflow-x-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
+            {previewText.trim() === "" ? (
+              <div className="flex items-center justify-center h-full">
                 <p className="text-center text-muted-foreground py-8">
                   No statements generated yet. Add content to the category
                   sections above.
                 </p>
-              ) : (
-                allStatementsForPreview.map((cat) => (
-                  <div key={cat.category} className="space-y-2">
-                    <h3 className="font-bold text-sm tracking-wide">
-                      {cat.heading}
-                    </h3>
-                    <div className="space-y-3 pl-2">
-                      {cat.statements.map((stmt, idx) => (
-                        <div
-                          key={idx}
-                          className="border-l-2 border-primary/30 pl-3"
-                        >
-                          <BulletCanvasPreview text={stmt} />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </ScrollArea>
+              </div>
+            ) : (
+              <div 
+                className="border border-input rounded-md bg-muted/30 p-2"
+                style={{ width: 'fit-content' }}
+              >
+                <textarea
+                  value={previewText}
+                  onChange={(e) => setPreviewText(e.target.value)}
+                  className="bg-transparent focus:outline-none resize-none block"
+                  style={{
+                    width: '765.95px',
+                    minWidth: '765.95px',
+                    maxWidth: '765.95px',
+                    minHeight: '500px',
+                    fontFamily: '"Times New Roman", Times, serif',
+                    fontSize: '12pt',
+                    lineHeight: '24px',
+                    padding: 0,
+                    margin: 0,
+                    whiteSpace: 'pre-wrap',
+                    wordWrap: 'break-word',
+                    overflowWrap: 'break-word',
+                  }}
+                  placeholder="Your statements will appear here..."
+                  aria-label="AF Form 1206 statements preview"
+                />
+              </div>
+            )}
+          </div>
 
-          <DialogFooter>
+          <DialogFooter className="shrink-0 gap-3">
             <Button
               variant="outline"
               onClick={() => setShowPreviewDialog(false)}
@@ -1044,17 +1111,17 @@ export function AwardWorkspaceDialog({
             </Button>
             <Button
               onClick={handleCopyAll}
-              disabled={allStatementsForPreview.length === 0}
+              disabled={previewText.trim() === ""}
             >
               {copiedAll ? (
                 <>
-                  <Check className="size-4 mr-1" />
+                  <Check className="size-4 mr-1.5" />
                   Copied!
                 </>
               ) : (
                 <>
-                  <Copy className="size-4 mr-1" />
-                  Copy All Statements
+                  <Copy className="size-4 mr-1.5" />
+                  Copy to Clipboard
                 </>
               )}
             </Button>
@@ -1122,13 +1189,25 @@ export function AwardWorkspaceDialog({
       {currentShell && (
         <FeedbackViewerDialog
           open={showFeedbackViewerDialog}
-          onOpenChange={setShowFeedbackViewerDialog}
+          onOpenChange={(open) => {
+            setShowFeedbackViewerDialog(open);
+            if (!open) {
+              setFeedbackBadgeRefreshKey(k => k + 1);
+            }
+          }}
           sessionId={selectedFeedbackSessionId}
           shellType="award"
           shellId={currentShell.id}
           onBack={() => {
             setShowFeedbackViewerDialog(false);
             setShowFeedbackListDialog(true);
+            setFeedbackBadgeRefreshKey(k => k + 1);
+          }}
+          onApplySuggestion={handleApplySuggestion}
+          getCurrentText={(sectionKey) => {
+            // Find the slot key that matches this section category
+            const matchingSlotKey = Object.keys(slotStates).find(key => key.startsWith(`${sectionKey}:`));
+            return matchingSlotKey ? slotStates[matchingSlotKey].draftText : "";
           }}
         />
       )}

@@ -417,7 +417,7 @@ export function GenericReviewPage({ token, shellType, shellTypeLabel }: GenericR
     const title = reviewData.title || `${shellTypeLabel} for ${reviewData.rateeRank || ""} ${reviewData.rateeName}`.trim();
     
     return (
-      <div className="min-h-screen flex flex-col">
+      <div className="h-screen flex flex-col overflow-hidden">
         {/* Header */}
         <header className="shrink-0 border-b bg-background px-4 py-3">
           <div className="max-w-7xl mx-auto flex items-center justify-between">
@@ -504,7 +504,7 @@ export function GenericReviewPage({ token, shellType, shellTypeLabel }: GenericR
           </div>
 
           {/* Comment sidebar */}
-          <div className="w-80 shrink-0 hidden lg:block">
+          <div className="w-80 shrink-0 hidden lg:block h-full overflow-hidden">
             <CommentSidebar
               comments={comments}
               isEditable={true}

@@ -73,6 +73,7 @@ import { DecorationShellShareDialog } from "@/components/decoration/decoration-s
 import { CreateReviewLinkDialog } from "@/components/review/create-review-link-dialog";
 import { FeedbackListDialog } from "@/components/feedback/feedback-list-dialog";
 import { FeedbackViewerDialog } from "@/components/feedback/feedback-viewer-dialog";
+import { FeedbackBadge } from "@/components/feedback/feedback-badge";
 import { MessageSquareText } from "lucide-react";
 import type {
   RefinedStatement,
@@ -144,6 +145,7 @@ export function DecorationWorkspaceDialog({
     endDate,
     setEndDate,
     citationText,
+    setCitationText,
     selectedStatementIds,
     statementColors,
     selectedRatee,
@@ -167,6 +169,7 @@ export function DecorationWorkspaceDialog({
   const [showFeedbackListDialog, setShowFeedbackListDialog] = useState(false);
   const [showFeedbackViewerDialog, setShowFeedbackViewerDialog] = useState(false);
   const [selectedFeedbackSessionId, setSelectedFeedbackSessionId] = useState<string | null>(null);
+  const [feedbackBadgeRefreshKey, setFeedbackBadgeRefreshKey] = useState(0);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [rateeInfo, setRateeInfo] = useState<RateeInfo | null>(null);
@@ -453,6 +456,19 @@ export function DecorationWorkspaceDialog({
     }
   }, [currentShell, supabase, onOpenChange, onSaved]);
 
+  // Handle applying feedback suggestions
+  const handleApplySuggestion = useCallback(async (sectionKey: string, newText: string) => {
+    if (!currentShell) return;
+
+    // Decorations only have one section: citation
+    if (sectionKey === "citation") {
+      setCitationText(newText);
+      toast.success("Suggestion applied to citation");
+    } else {
+      toast.error("Could not find matching section to apply suggestion");
+    }
+  }, [currentShell, setCitationText]);
+
   // Determine if user can edit this shell
   const canEdit = useMemo(() => {
     if (!profile || !shell) return false;
@@ -588,14 +604,20 @@ export function DecorationWorkspaceDialog({
                   )}
                 </Button>
               )}
+              <FeedbackBadge
+                shellType="decoration"
+                shellId={currentShell?.id || ""}
+                onClick={() => setShowFeedbackListDialog(true)}
+                refreshKey={feedbackBadgeRefreshKey}
+              />
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setShowReviewLinkDialog(true)}
-                className="h-8 px-3 flex-1"
+                className="h-8 px-3"
               >
                 <MessageSquareText className="size-4" />
-                <span className="ml-1.5 text-xs">Feedback</span>
+                <span className="ml-1.5 text-xs">Get Feedback</span>
               </Button>
               <Button
                 variant="outline"
@@ -889,13 +911,27 @@ export function DecorationWorkspaceDialog({
       {currentShell && (
         <FeedbackViewerDialog
           open={showFeedbackViewerDialog}
-          onOpenChange={setShowFeedbackViewerDialog}
+          onOpenChange={(open) => {
+            setShowFeedbackViewerDialog(open);
+            if (!open) {
+              setFeedbackBadgeRefreshKey(k => k + 1);
+            }
+          }}
           sessionId={selectedFeedbackSessionId}
           shellType="decoration"
           shellId={currentShell.id}
           onBack={() => {
             setShowFeedbackViewerDialog(false);
             setShowFeedbackListDialog(true);
+            setFeedbackBadgeRefreshKey(k => k + 1);
+          }}
+          onApplySuggestion={handleApplySuggestion}
+          getCurrentText={(sectionKey) => {
+            // Decorations only have citation section
+            if (sectionKey === "citation") {
+              return citationText;
+            }
+            return "";
           }}
         />
       )}

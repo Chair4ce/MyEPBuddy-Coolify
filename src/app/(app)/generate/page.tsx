@@ -82,6 +82,7 @@ export default function GeneratePage() {
   const [showFeedbackListDialog, setShowFeedbackListDialog] = useState(false);
   const [showFeedbackViewerDialog, setShowFeedbackViewerDialog] = useState(false);
   const [selectedFeedbackSessionId, setSelectedFeedbackSessionId] = useState<string | null>(null);
+  const [feedbackBadgeRefreshKey, setFeedbackBadgeRefreshKey] = useState(0);
   
   // Officer workspace mode: "opb" for personal OPB, "epb" for team EPBs
   const [officerWorkspaceMode, setOfficerWorkspaceMode] = useState<"opb" | "epb">("epb");
@@ -501,6 +502,7 @@ export default function GeneratePage() {
                 shellType="epb"
                 shellId={currentShell.id}
                 onClick={() => setShowFeedbackListDialog(true)}
+                refreshKey={feedbackBadgeRefreshKey}
               />
               <Button 
                 variant="outline" 
@@ -669,15 +671,28 @@ export default function GeneratePage() {
       {currentShell && (!userIsOfficer || officerWorkspaceMode === "epb") && (
         <FeedbackViewerDialog
           open={showFeedbackViewerDialog}
-          onOpenChange={setShowFeedbackViewerDialog}
+          onOpenChange={(open) => {
+            setShowFeedbackViewerDialog(open);
+            if (!open) {
+              // Refresh the badge count when dialog closes
+              setFeedbackBadgeRefreshKey(k => k + 1);
+            }
+          }}
           sessionId={selectedFeedbackSessionId}
           shellType="epb"
           shellId={currentShell.id}
           onBack={() => {
             setShowFeedbackViewerDialog(false);
             setShowFeedbackListDialog(true);
+            setFeedbackBadgeRefreshKey(k => k + 1);
           }}
           onApplySuggestion={handleApplySuggestion}
+          getCurrentText={(sectionKey) => {
+            if (sectionKey === "duty_description") {
+              return currentShell.duty_description || "";
+            }
+            return shellSections[sectionKey]?.statement_text || "";
+          }}
         />
       )}
 

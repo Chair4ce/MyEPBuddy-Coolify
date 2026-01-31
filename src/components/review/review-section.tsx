@@ -215,13 +215,10 @@ export function ReviewSection({
     if (suggestionType === "replace" && !replacementText.trim()) return;
 
     // Generate default comment if not provided for suggestion types
+    // For replace type, reason is optional so we leave it empty
     let finalCommentText = newCommentText.trim();
-    if (!finalCommentText) {
-      if (suggestionType === "delete") {
-        finalCommentText = "Suggested deletion";
-      } else if (suggestionType === "replace") {
-        finalCommentText = "Suggested replacement";
-      }
+    if (!finalCommentText && suggestionType === "delete") {
+      finalCommentText = "Suggested deletion";
     }
 
     onAddComment({
@@ -369,7 +366,7 @@ export function ReviewSection({
               <MessageSquarePlus className="size-4 text-muted-foreground mt-0.5 shrink-0" />
               <div className="flex-1 min-w-0">
                 <p className="text-xs text-muted-foreground mb-1">Selected text:</p>
-                <p className="text-xs italic bg-muted px-2 py-1 rounded line-clamp-2">
+                <p className="text-xs italic bg-muted px-2 py-1 rounded max-h-24 overflow-auto">
                   &ldquo;{selection.text}&rdquo;
                 </p>
               </div>

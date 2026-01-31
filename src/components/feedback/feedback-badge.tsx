@@ -10,6 +10,7 @@ interface FeedbackBadgeProps {
   shellId: string;
   onClick: () => void;
   className?: string;
+  refreshKey?: number; // Increment to force refresh
 }
 
 export function FeedbackBadge({
@@ -17,6 +18,7 @@ export function FeedbackBadge({
   shellId,
   onClick,
   className,
+  refreshKey = 0,
 }: FeedbackBadgeProps) {
   const [pendingCount, setPendingCount] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
@@ -44,7 +46,7 @@ export function FeedbackBadge({
     if (shellId) {
       loadCount();
     }
-  }, [shellType, shellId]);
+  }, [shellType, shellId, refreshKey]);
 
   if (totalCount === 0) {
     return null;

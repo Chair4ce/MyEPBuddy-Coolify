@@ -114,6 +114,11 @@ export function DecorationCitationEditor({
   const [synonyms, setSynonyms] = useState<string[]>([]);
   const [isLoadingSynonyms, setIsLoadingSynonyms] = useState(false);
   
+  // Staged synonym state - for preview/toggle before applying
+  const [stagedSynonym, setStagedSynonym] = useState<string | null>(null);
+  const [originalWord, setOriginalWord] = useState<string>(""); // The original highlighted word
+  const [synonymsLocked, setSynonymsLocked] = useState(false); // When true, popup stays open
+  
   // Track previous citation length to detect major changes
   const prevCitationLengthRef = useRef(citationText.length);
   
@@ -528,13 +533,27 @@ export function DecorationCitationEditor({
     }
   }, [citationText]);
 
-  // Close selection popup
+  // Close selection popup and reset all synonym state
   const closeSelectionPopup = useCallback(() => {
+    // If we have a staged synonym, revert to original before closing
+    if (stagedSynonym && originalWord) {
+      // Find the staged word in the current text and revert it
+      const currentText = citationText;
+      const stagedStart = currentText.indexOf(stagedSynonym, Math.max(0, selectionStart - stagedSynonym.length - 5));
+      if (stagedStart !== -1) {
+        const newText = currentText.substring(0, stagedStart) + originalWord + currentText.substring(stagedStart + stagedSynonym.length);
+        setCitationText(newText);
+      }
+    }
+    
     setShowSelectionPopup(false);
     setSelectedText("");
     setRevisionResults([]);
     setSynonyms([]);
-  }, []);
+    setStagedSynonym(null);
+    setOriginalWord("");
+    setSynonymsLocked(false);
+  }, [stagedSynonym, originalWord, citationText, selectionStart, setCitationText]);
   
   // Fetch synonyms for a single word
   const handleFetchSynonyms = useCallback(async () => {
@@ -542,6 +561,10 @@ export function DecorationCitationEditor({
     
     setIsLoadingSynonyms(true);
     setSynonyms([]);
+    
+    // Store the original word when fetching synonyms
+    setOriginalWord(selectedText.trim());
+    setSynonymsLocked(true); // Lock the popup open
     
     try {
       const response = await fetch("/api/synonyms", {
@@ -567,7 +590,63 @@ export function DecorationCitationEditor({
     }
   }, [selectedText, isSingleWord, citationText, selectedModel]);
   
-  // Apply a synonym replacement
+  // Stage a synonym (toggle preview without final apply)
+  const stageSynonym = useCallback(
+    (synonym: string) => {
+      // Get current word in the text (could be original or previously staged)
+      const currentWord = stagedSynonym || originalWord;
+      
+      if (synonym === currentWord) {
+        // Clicking the same word - unstage it (revert to original)
+        if (stagedSynonym) {
+          const newText = citationText.substring(0, selectionStart) + originalWord + citationText.substring(selectionStart + stagedSynonym.length);
+          setCitationText(newText);
+          setStagedSynonym(null);
+        }
+        return;
+      }
+      
+      // Replace current word with new synonym
+      const newText = citationText.substring(0, selectionStart) + synonym + citationText.substring(selectionStart + currentWord.length);
+      setCitationText(newText);
+      setStagedSynonym(synonym);
+    },
+    [citationText, selectionStart, stagedSynonym, originalWord, setCitationText]
+  );
+  
+  // Apply the staged synonym (finalize and close)
+  const applyStaged = useCallback(() => {
+    if (stagedSynonym) {
+      toast.success(`Replaced "${originalWord}" with "${stagedSynonym}"`);
+    }
+    // Clear state without reverting
+    setShowSelectionPopup(false);
+    setSelectedText("");
+    setRevisionResults([]);
+    setSynonyms([]);
+    setStagedSynonym(null);
+    setOriginalWord("");
+    setSynonymsLocked(false);
+  }, [stagedSynonym, originalWord]);
+  
+  // Cancel and revert to original word
+  const cancelSynonym = useCallback(() => {
+    if (stagedSynonym && originalWord) {
+      // Revert to original
+      const newText = citationText.substring(0, selectionStart) + originalWord + citationText.substring(selectionStart + stagedSynonym.length);
+      setCitationText(newText);
+    }
+    // Clear state
+    setShowSelectionPopup(false);
+    setSelectedText("");
+    setRevisionResults([]);
+    setSynonyms([]);
+    setStagedSynonym(null);
+    setOriginalWord("");
+    setSynonymsLocked(false);
+  }, [citationText, selectionStart, stagedSynonym, originalWord, setCitationText]);
+  
+  // Legacy apply for revisions (multi-word) - kept for backward compatibility
   const applySynonym = useCallback(
     (synonym: string) => {
       const newText =
@@ -621,6 +700,10 @@ export function DecorationCitationEditor({
   // Handle textarea blur - delay closing to allow button clicks
   const handleTextareaBlur = useCallback(() => {
     setTimeout(() => {
+      // Don't close if synonyms are locked (user has fetched synonyms and is browsing)
+      if (synonymsLocked) {
+        return;
+      }
       // Don't close if actively revising or if focus is inside the popup
       if (document.activeElement?.closest(".selection-popup")) {
         return;
@@ -632,7 +715,7 @@ export function DecorationCitationEditor({
       }
       closeSelectionPopup();
     }, 300);
-  }, [closeSelectionPopup]);
+  }, [closeSelectionPopup, synonymsLocked]);
 
   // Revise selected text
   const handleReviseSelection = useCallback(
@@ -1006,8 +1089,9 @@ export function DecorationCitationEditor({
                     <button
                       type="button"
                       onMouseDown={(e) => e.preventDefault()}
-                      onClick={closeSelectionPopup}
+                      onClick={synonymsLocked ? cancelSynonym : closeSelectionPopup}
                       className="text-muted-foreground hover:text-foreground transition-colors"
+                      aria-label="Close synonym suggestions"
                     >
                       <X className="size-4" />
                     </button>
@@ -1016,35 +1100,102 @@ export function DecorationCitationEditor({
                   {/* Single word: Show synonym button */}
                   {isSingleWord && (
                     <div className="space-y-2">
-                      <button
-                        type="button"
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={handleFetchSynonyms}
-                        disabled={isLoadingSynonyms}
-                        className="w-full h-8 px-3 rounded-md text-xs border border-primary/30 bg-primary/5 hover:bg-primary/10 text-primary inline-flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50"
-                      >
-                        {isLoadingSynonyms ? (
-                          <Loader2 className="size-3 animate-spin" />
-                        ) : (
-                          <BookA className="size-3" />
-                        )}
-                        {isLoadingSynonyms ? "Finding synonyms..." : "Find Synonyms"}
-                      </button>
+                      {/* Only show Find Synonyms button if synonyms haven't been fetched yet */}
+                      {!synonymsLocked && (
+                        <button
+                          type="button"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={handleFetchSynonyms}
+                          disabled={isLoadingSynonyms}
+                          className="w-full h-8 px-3 rounded-md text-xs border border-primary/30 bg-primary/5 hover:bg-primary/10 text-primary inline-flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50"
+                        >
+                          {isLoadingSynonyms ? (
+                            <Loader2 className="size-3 animate-spin" />
+                          ) : (
+                            <BookA className="size-3" />
+                          )}
+                          {isLoadingSynonyms ? "Finding synonyms..." : "Find Synonyms"}
+                        </button>
+                      )}
                       
-                      {/* Synonyms results */}
+                      {/* Synonyms results - toggle buttons */}
                       {synonyms.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 pt-2 border-t">
-                          {synonyms.map((synonym, index) => (
+                        <div className="space-y-3 pt-2 border-t">
+                          {/* Current word indicator */}
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-muted-foreground">
+                              Original: <span className="font-medium text-foreground">&ldquo;{originalWord}&rdquo;</span>
+                            </span>
+                            {stagedSynonym && (
+                              <span className="text-primary font-medium">
+                                → &ldquo;{stagedSynonym}&rdquo;
+                              </span>
+                            )}
+                          </div>
+                          
+                          {/* Synonym toggle buttons */}
+                          <div className="flex flex-wrap gap-1.5">
+                            {/* Original word button */}
                             <button
-                              key={index}
                               type="button"
                               onMouseDown={(e) => e.preventDefault()}
-                              onClick={() => applySynonym(synonym)}
-                              className="px-2 py-1 rounded text-xs border bg-background hover:bg-accent hover:border-primary/50 transition-colors"
+                              onClick={() => {
+                                if (stagedSynonym) {
+                                  stageSynonym(originalWord);
+                                }
+                              }}
+                              className={cn(
+                                "px-2 py-1 rounded text-xs border transition-colors",
+                                !stagedSynonym
+                                  ? "bg-primary text-primary-foreground border-primary"
+                                  : "bg-background hover:bg-accent hover:border-primary/50"
+                              )}
                             >
-                              {synonym}
+                              {originalWord}
                             </button>
-                          ))}
+                            
+                            {/* Synonym buttons */}
+                            {synonyms.map((synonym, index) => (
+                              <button
+                                key={index}
+                                type="button"
+                                onMouseDown={(e) => e.preventDefault()}
+                                onClick={() => stageSynonym(synonym)}
+                                className={cn(
+                                  "px-2 py-1 rounded text-xs border transition-colors",
+                                  stagedSynonym === synonym
+                                    ? "bg-primary text-primary-foreground border-primary"
+                                    : "bg-background hover:bg-accent hover:border-primary/50"
+                                )}
+                              >
+                                {synonym}
+                              </button>
+                            ))}
+                          </div>
+                          
+                          {/* Apply/Cancel buttons */}
+                          <div className="flex items-center gap-2 pt-2 border-t">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={cancelSynonym}
+                              className="h-7 text-xs flex-1"
+                            >
+                              Cancel
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="default"
+                              size="sm"
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={applyStaged}
+                              className="h-7 text-xs flex-1"
+                            >
+                              {stagedSynonym ? `Apply "${stagedSynonym}"` : "Keep Original"}
+                            </Button>
+                          </div>
                         </div>
                       )}
                     </div>

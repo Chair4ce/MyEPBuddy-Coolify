@@ -33,7 +33,7 @@ interface CommentCardProps {
   isActive?: boolean;
   isHovered?: boolean;
   startInEditMode?: boolean;
-  onUpdate?: (id: string, commentText: string, suggestion?: string) => void;
+  onUpdate?: (id: string, updates: { commentText?: string; replacementText?: string; rewriteText?: string }) => void;
   onDelete?: (id: string) => void;
   onAccept?: (id: string) => void;
   onDismiss?: (id: string) => void;
@@ -55,18 +55,66 @@ export function CommentCard({
   onHover,
 }: CommentCardProps) {
   const [isEditing, setIsEditing] = useState(startInEditMode);
-  const [editText, setEditText] = useState(comment.commentText);
+  
+  // Determine what text to edit based on suggestion type
+  const getEditableText = () => {
+    if (comment.isFullRewrite && comment.rewriteText) {
+      return comment.rewriteText;
+    }
+    return comment.commentText;
+  };
+  
+  const [editText, setEditText] = useState(getEditableText());
+  // Separate state for replacement text editing
+  const [editReplacementText, setEditReplacementText] = useState(comment.replacementText || "");
+  // Separate state for reason (commentText) when editing replace type
+  const [editReasonText, setEditReasonText] = useState(comment.commentText || "");
+  
+  // Determine what we're editing for the label
+  const getEditLabel = () => {
+    if (comment.isFullRewrite) {
+      return "rewrite";
+    }
+    return "comment";
+  };
 
   const handleSave = () => {
-    if (editText.trim() && onUpdate) {
-      onUpdate(comment.id, editText.trim());
+    if (onUpdate) {
+      // Update the appropriate field based on suggestion type
+      if (comment.suggestionType === "replace") {
+        // For replace type, update both replacement text and reason
+        if (editReplacementText.trim()) {
+          onUpdate(comment.id, { 
+            replacementText: editReplacementText.trim(),
+            commentText: editReasonText.trim() || undefined
+          });
+        }
+      } else if (comment.isFullRewrite) {
+        if (editText.trim()) {
+          onUpdate(comment.id, { rewriteText: editText.trim() });
+        }
+      } else {
+        if (editText.trim()) {
+          onUpdate(comment.id, { commentText: editText.trim() });
+        }
+      }
       setIsEditing(false);
     }
   };
 
   const handleCancel = () => {
-    setEditText(comment.commentText);
+    setEditText(getEditableText());
+    setEditReplacementText(comment.replacementText || "");
+    setEditReasonText(comment.commentText || "");
     setIsEditing(false);
+  };
+  
+  // Start editing - reset editText to current value
+  const handleStartEdit = () => {
+    setEditText(getEditableText());
+    setEditReplacementText(comment.replacementText || "");
+    setEditReasonText(comment.commentText || "");
+    setIsEditing(true);
   };
 
   return (
@@ -133,7 +181,7 @@ export function CommentCard({
       {comment.highlightedText && !comment.isFullRewrite && (
         <div className="mb-2 pb-2 border-b">
           <p className={cn(
-            "text-xs italic line-clamp-2",
+            "text-xs italic max-h-20 overflow-auto",
             comment.suggestionType === "delete" 
               ? "text-destructive line-through" 
               : "text-muted-foreground"
@@ -143,45 +191,98 @@ export function CommentCard({
         </div>
       )}
 
-      {/* Comment text */}
+      {/* Comment text / Edit mode */}
       {isEditing ? (
-        <div className="space-y-2">
-          <Textarea
-            value={editText}
-            onChange={(e) => setEditText(e.target.value)}
-            className="min-h-[60px] text-sm resize-none"
-            placeholder="Enter your feedback..."
-            autoFocus
-            aria-label="Edit comment"
-          />
+        <div className="space-y-3">
+          {comment.suggestionType === "replace" ? (
+            <>
+              {/* Replace with input */}
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">
+                  Replace with
+                </label>
+                <Textarea
+                  value={editReplacementText}
+                  onChange={(e) => setEditReplacementText(e.target.value)}
+                  className="min-h-[60px] text-sm resize-none"
+                  placeholder="Enter replacement text..."
+                  autoFocus
+                  aria-label="Replace with"
+                />
+              </div>
+              {/* Reason input */}
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">
+                  Reason <span className="font-normal">(optional)</span>
+                </label>
+                <Textarea
+                  value={editReasonText}
+                  onChange={(e) => setEditReasonText(e.target.value)}
+                  className="min-h-[40px] text-sm resize-none"
+                  placeholder="Why this replacement is suggested..."
+                  aria-label="Reason for replacement"
+                />
+              </div>
+            </>
+          ) : (
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">
+                Edit {getEditLabel()}
+              </label>
+              <Textarea
+                value={editText}
+                onChange={(e) => setEditText(e.target.value)}
+                className="min-h-[60px] text-sm resize-none"
+                placeholder={
+                  comment.isFullRewrite 
+                    ? "Enter rewritten text..." 
+                    : "Enter your feedback..."
+                }
+                autoFocus
+                aria-label={`Edit ${getEditLabel()}`}
+              />
+            </div>
+          )}
           <div className="flex gap-2 justify-end">
             <Button variant="ghost" size="sm" onClick={handleCancel}>
               Cancel
             </Button>
-            <Button size="sm" onClick={handleSave} disabled={!editText.trim()}>
+            <Button 
+              size="sm" 
+              onClick={handleSave} 
+              disabled={comment.suggestionType === "replace" ? !editReplacementText.trim() : !editText.trim()}
+            >
               Save
             </Button>
           </div>
         </div>
       ) : (
-        <p
-          className={cn(
-            "text-sm leading-relaxed",
-            comment.status === "dismissed" && "line-through"
-          )}
-        >
-          {comment.commentText}
-        </p>
+        // For replace type, don't show commentText here - it's shown at the bottom as reason
+        comment.suggestionType !== "replace" && (
+          <p
+            className={cn(
+              "text-sm leading-relaxed",
+              comment.status === "dismissed" && "line-through"
+            )}
+          >
+            {comment.commentText}
+          </p>
+        )
       )}
 
-      {/* Replacement suggestion (for replace type) */}
+      {/* Replacement text (for replace type) - shown as main content */}
       {comment.suggestionType === "replace" && comment.replacementText && !isEditing && (
+        <p className="text-sm bg-blue-500/10 text-blue-700 dark:text-blue-300 px-2 py-1.5 rounded">
+          {comment.replacementText}
+        </p>
+      )}
+      
+      {/* Reason for replacement (optional) - shown at bottom */}
+      {comment.suggestionType === "replace" && comment.commentText && !isEditing && (
         <div className="mt-2 pt-2 border-t">
-          <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
-            <span>Replace with:</span>
-          </div>
-          <p className="text-sm bg-blue-500/10 text-blue-700 dark:text-blue-300 px-2 py-1 rounded">
-            {comment.replacementText}
+          <p className="text-xs text-muted-foreground mb-1">Reason</p>
+          <p className="text-sm text-muted-foreground italic">
+            {comment.commentText}
           </p>
         </div>
       )}
@@ -190,16 +291,15 @@ export function CommentCard({
       {comment.isFullRewrite && comment.rewriteText && !isEditing && (
         <div className="mt-2 pt-2 border-t">
           <p className="text-xs text-muted-foreground mb-1">Suggested rewrite:</p>
-          <p className="text-sm bg-purple-500/10 text-purple-700 dark:text-purple-300 px-2 py-1.5 rounded line-clamp-3">
+          <p className="text-sm bg-purple-500/10 text-purple-700 dark:text-purple-300 px-2 py-1.5 rounded max-h-24 overflow-auto">
             {comment.rewriteText}
           </p>
         </div>
       )}
 
-      {/* Legacy suggestion if provided */}
+      {/* Legacy suggestion if provided - display without "Suggested replacement" label */}
       {comment.suggestion && !comment.replacementText && !comment.rewriteText && !isEditing && (
         <div className="mt-2 pt-2 border-t">
-          <p className="text-xs text-muted-foreground mb-1">Suggested replacement:</p>
           <p className="text-sm italic bg-muted/50 px-2 py-1 rounded">
             {comment.suggestion}
           </p>
@@ -256,7 +356,7 @@ export function CommentCard({
           className="mt-2 w-full text-xs"
           onClick={(e) => {
             e.stopPropagation();
-            setIsEditing(true);
+            handleStartEdit();
           }}
         >
           Edit

@@ -199,7 +199,7 @@ function StatementSlotCard({
   totalSlots: number;
   accomplishments: Accomplishment[];
   onRemove: () => void;
-  onGenerate: (revisionMode?: "add" | "replace", revisionIntensity?: number) => Promise<void>;
+  onGenerate: (revisionMode?: "add" | "replace", revisionIntensity?: number) => Promise<void>; // revisionMode deprecated - LLM handles metric merging
   isCollapsed: boolean;
   onToggleCollapse: () => void;
   model: string;
@@ -239,9 +239,6 @@ function StatementSlotCard({
   const [popupPosition, setPopupPosition] = useState({ top: 0, left: 0 });
   const [isRevising, setIsRevising] = useState(false);
   const [revisionResults, setRevisionResults] = useState<string[]>([]);
-  
-  // Revision mode: "add" fuses metrics together, "replace" uses source as total
-  const [revisionMode, setRevisionMode] = useState<"add" | "replace">("add");
   
   // Revision intensity: 0-100, controls how much the statement gets rewritten
   // 0 = minimal changes (keep most original wording)
@@ -320,9 +317,9 @@ function StatementSlotCard({
   const handleGenerate = async () => {
     onUpdate({ isGenerating: true });
     try {
-      // Pass revisionMode and intensity when there's existing content
+      // Pass intensity when there's existing content (LLM handles metric merging intelligently)
       await onGenerate(
-        hasContent ? revisionMode : undefined,
+        undefined,
         hasContent ? revisionIntensity : undefined
       );
       // After generation, the draftText will be updated
@@ -338,9 +335,12 @@ function StatementSlotCard({
   };
 
   // Check if can generate
-  const canGenerate = sourceType === "actions" 
+  // When revising (hasContent), allow generation without additional context
+  // When generating fresh, require source input
+  const hasAdditionalContext = sourceType === "actions" 
     ? selectedActionIds.length > 0 
     : customContext.trim().length > 0;
+  const canGenerate = hasContent || hasAdditionalContext;
 
   // Handle text selection for synonym/revision popup
   const handleTextSelect = () => {
@@ -564,7 +564,7 @@ function StatementSlotCard({
               />
               </div>
               
-              {/* Per-line compact/normalize toggles - based on visual line wrapping */}
+              {/* Per-line state indicators - shows current state, click to toggle */}
               {visualLines.length > 0 && (
               <div 
                 className="flex flex-col pt-2"
@@ -572,24 +572,24 @@ function StatementSlotCard({
               >
                 {visualLines.map((segment, i) => {
                   const lineExists = segment.text.trim().length > 0;
-                  const compressed = lineExists && isLineCompressed(i);
+                  const isCompact = lineExists && isLineCompressed(i);
                   return (
                     <button
                       key={i}
                       onClick={() => handleToggleLine(i)}
                       disabled={!lineExists}
                       className={cn(
-                        "text-[10px] px-1.5 rounded border transition-colors whitespace-nowrap",
+                        "text-[10px] rounded border transition-colors whitespace-nowrap text-center",
                         !lineExists
                           ? "opacity-30 cursor-not-allowed bg-muted/30 text-muted-foreground border-border"
-                          : compressed
-                            ? "bg-green-50 text-green-700 border-green-200 hover:bg-green-100 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800"
+                          : isCompact
+                            ? "bg-primary/10 text-primary border-primary/30 hover:bg-primary/20 dark:bg-primary/20 dark:text-primary dark:border-primary/40"
                             : "bg-muted/50 text-muted-foreground border-border hover:bg-muted hover:text-foreground"
                       )}
-                      style={{ height: '24px', lineHeight: '22px' }}
-                      title={!lineExists ? `Line ${i + 1} is empty` : compressed ? `Click to normalize line ${i + 1}` : `Click to compact line ${i + 1}`}
+                      style={{ height: '24px', lineHeight: '22px', width: '76px' }}
+                      title={!lineExists ? `Line ${i + 1} is empty` : isCompact ? `Currently compact - click to normalize` : `Currently normal - click to compact`}
                     >
-                      L{i + 1}: {compressed ? "Normal" : "Compact"}
+                      L{i + 1}: {isCompact ? "Compact" : "Normal"}
                     </button>
                   );
                 })}
@@ -726,43 +726,11 @@ function StatementSlotCard({
           className="mt-4 p-4 rounded-lg bg-muted/30 border animate-in fade-in-0 slide-in-from-top-2 duration-300"
         >
           <div className="space-y-4">
-            {/* Revision Mode Toggle - only when there's existing content */}
+            {/* Revision Options - only when there's existing content */}
             {hasContent && (
               <div className="space-y-2">
-                <Label className="text-xs font-medium text-muted-foreground">Revision Mode:</Label>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setRevisionMode("add")}
-                    className={cn(
-                      "flex-1 px-3 py-2 rounded-md text-xs font-medium border transition-all duration-200",
-                      revisionMode === "add"
-                        ? "bg-primary text-primary-foreground border-primary"
-                        : "bg-background text-muted-foreground border-input hover:bg-accent hover:text-accent-foreground"
-                    )}
-                  >
-                    <div className="flex flex-col items-center gap-0.5">
-                      <span className="font-semibold">Add Metrics</span>
-                      <span className="text-[10px] opacity-80">Fuse source data with existing</span>
-                    </div>
-                  </button>
-                  <button
-                    onClick={() => setRevisionMode("replace")}
-                    className={cn(
-                      "flex-1 px-3 py-2 rounded-md text-xs font-medium border transition-all duration-200",
-                      revisionMode === "replace"
-                        ? "bg-primary text-primary-foreground border-primary"
-                        : "bg-background text-muted-foreground border-input hover:bg-accent hover:text-accent-foreground"
-                    )}
-                  >
-                    <div className="flex flex-col items-center gap-0.5">
-                      <span className="font-semibold">Replace Metrics</span>
-                      <span className="text-[10px] opacity-80">Source data is the total</span>
-                    </div>
-                  </button>
-                </div>
-                
                 {/* Revision Intensity Slider */}
-                <div className="pt-3">
+                <div>
                   <div className="flex items-center justify-between mb-2">
                     <Label className="text-xs font-medium text-muted-foreground">Rewrite Intensity:</Label>
                     <span className="text-xs font-medium tabular-nums">
@@ -824,7 +792,7 @@ function StatementSlotCard({
             {/* Source Toggle */}
             <div className="space-y-2">
               <Label className="text-xs font-medium text-muted-foreground">
-                {hasContent ? "Additional context from:" : "Generate from:"}
+                {hasContent ? "Additional context (optional):" : "Generate from:"}
               </Label>
               <SourceToggle
                 sourceType={sourceType}
@@ -983,7 +951,7 @@ export function AwardCategorySectionCard({
   const generateStatement = useCallback(async (
     slotIndex: number, 
     slotState: SectionSlotState,
-    revisionMode?: "add" | "replace",
+    _revisionMode?: "add" | "replace", // Deprecated - LLM handles metric merging intelligently
     revisionIntensity?: number
   ) => {
     onUpdateSlotState(categoryKey, slotIndex, { isGenerating: true });
@@ -1008,10 +976,9 @@ export function AwardCategorySectionCard({
           versionsPerStatement: 1,
           sentencesPerStatement: linesForSlot,
           categoriesToGenerate: [categoryKey],
-          // Revision mode and existing content for smart merging
+          // Existing content for smart revision (LLM handles metric merging intelligently)
           ...(hasExistingContent && {
             existingStatement: existingContent,
-            revisionMode: revisionMode || "add",
             revisionIntensity: revisionIntensity ?? 50,
           }),
           ...(slotState.sourceType === "custom" 
