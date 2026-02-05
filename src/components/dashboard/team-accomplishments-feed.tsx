@@ -856,38 +856,46 @@ export function TeamAccomplishmentsFeed({ cycleYear }: TeamAccomplishmentsFeedPr
   // No subordinates and rank doesn't allow supervision
   if (!canHaveSubordinates) {
     return (
-      <Card className="border-dashed">
-        <CardContent className="py-10 text-center">
-          <UserCheck className="size-12 mx-auto text-muted-foreground mb-4" />
-          <h3 className="font-semibold text-lg mb-2">Your Personal Feed</h3>
-          <p className="text-sm text-muted-foreground max-w-md mx-auto">
-            As a junior enlisted member (E-1 through E-4), you&apos;ll see your own accomplishments here.
-            NCOs (SSgt+) and Officers can view accomplishments from their subordinates.
-          </p>
-        </CardContent>
-      </Card>
+      <div className="py-8 text-center">
+        <div className="inline-flex items-center justify-center size-16 rounded-full bg-muted mb-4">
+          <UserCheck className="size-8 text-muted-foreground" />
+        </div>
+        <h3 className="font-semibold text-lg mb-2">Personal Tracking Mode</h3>
+        <p className="text-sm text-muted-foreground max-w-md mx-auto">
+          As a junior enlisted member, this space is for your personal accomplishments.
+          Once you promote to SSgt or higher, you&apos;ll be able to track your team&apos;s accomplishments here.
+        </p>
+      </div>
     );
   }
 
   // Has supervisor rank but no subordinates yet
   if (!hasSubordinates) {
     return (
-      <Card className="border-dashed">
-        <CardContent className="py-10 text-center">
-          <Users className="size-12 mx-auto text-muted-foreground mb-4" />
-          <h3 className="font-semibold text-lg mb-2">No Team Members Yet</h3>
-          <p className="text-sm text-muted-foreground max-w-md mx-auto mb-4">
-            Add subordinates to your team to see their accomplishments in this feed.
-            You can add real users or create managed member placeholders.
-          </p>
-          <Button variant="outline" asChild>
+      <div className="py-8 text-center">
+        <div className="inline-flex items-center justify-center size-16 rounded-full bg-primary/10 mb-4">
+          <Users className="size-8 text-primary" />
+        </div>
+        <h3 className="font-semibold text-lg mb-2">Build Your Team</h3>
+        <p className="text-sm text-muted-foreground max-w-md mx-auto mb-6">
+          Start tracking your team&apos;s accomplishments by adding subordinates,
+          or request to link with your supervisor to join their chain of command.
+        </p>
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+          <Button asChild>
             <a href="/team">
               <Users className="size-4 mr-2" />
-              Go to Team Page
+              Add Team Members
             </a>
           </Button>
-        </CardContent>
-      </Card>
+          <Button variant="outline" asChild>
+            <a href="/team?tab=chain">
+              <UserCheck className="size-4 mr-2" />
+              Link to Supervisor
+            </a>
+          </Button>
+        </div>
+      </div>
     );
   }
 

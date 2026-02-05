@@ -25,7 +25,8 @@ import { CheckCircle2, Calendar, Users, Award, Loader2 } from "lucide-react";
 import { ENLISTED_RANKS, OFFICER_RANKS, CIVILIAN_RANK } from "@/lib/constants";
 import type { Rank, Profile } from "@/types/database";
 
-const STORAGE_KEY = "rank_modal_dismissed";
+// Storage key is per-user to avoid cross-account dismissal issues
+const getStorageKey = (userId: string) => `rank_modal_dismissed_${userId}`;
 
 export function RankCompletionModal() {
   const { profile, setProfile } = useUserStore();
@@ -41,8 +42,9 @@ export function RankCompletionModal() {
     // Don't show if user already has a rank
     if (profile.rank) return;
 
-    // Don't show if user has dismissed it before
-    const dismissed = localStorage.getItem(STORAGE_KEY);
+    // Don't show if user has dismissed it before (per-user check)
+    const storageKey = getStorageKey(profile.id);
+    const dismissed = localStorage.getItem(storageKey);
     if (dismissed === "true") return;
 
     // Show modal after a short delay for better UX
@@ -75,7 +77,7 @@ export function RankCompletionModal() {
       setProfile(data as Profile);
       toast.success("Rank saved! EPB features are now enabled.");
       setIsOpen(false);
-      localStorage.setItem(STORAGE_KEY, "true");
+      localStorage.setItem(getStorageKey(profile.id), "true");
     } catch {
       toast.error("Failed to save rank");
     } finally {
@@ -85,7 +87,9 @@ export function RankCompletionModal() {
 
   function handleDismiss() {
     setIsOpen(false);
-    localStorage.setItem(STORAGE_KEY, "true");
+    if (profile) {
+      localStorage.setItem(getStorageKey(profile.id), "true");
+    }
   }
 
   return (
