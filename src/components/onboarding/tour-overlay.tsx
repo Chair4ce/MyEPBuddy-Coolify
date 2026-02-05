@@ -198,6 +198,7 @@ export function TourOverlay() {
             const initialText = targetElement.textContent?.trim() || "";
             
             mutationObserver = new MutationObserver(() => {
+              if (!targetElement) return;
               const trigger = targetElement.querySelector("[data-state]") || targetElement;
               const currentState = trigger.getAttribute("data-state");
               const currentText = targetElement.textContent?.trim() || "";

@@ -53,13 +53,14 @@ export function TourProvider() {
 
   // Determine if we should show the welcome modal
   // Show if: user is logged in, on dashboard, hasn't seen welcome, and no active tour
-  const shouldShowWelcome =
+  const shouldShowWelcome = Boolean(
     !isLoading &&
     profile &&
     pathname === "/dashboard" &&
     !hasSeenWelcome &&
     !activeTour &&
-    !hasTeamMembers; // Only show if they don't have team members yet
+    !hasTeamMembers // Only show if they don't have team members yet
+  );
 
   return (
     <>
