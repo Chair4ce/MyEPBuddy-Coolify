@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "@/components/ui/sonner";
+import { Analytics } from "@/lib/analytics";
 import { Loader2, UserPlus, User, Link2, AlertCircle } from "lucide-react";
 import type { Rank, ManagedMember, Profile } from "@/types/database";
 import { ENLISTED_RANKS, OFFICER_RANKS, CIVILIAN_RANK, SUPERVISOR_RANKS, isOfficer, isEnlisted } from "@/lib/constants";
@@ -358,6 +359,8 @@ export function AddManagedMemberDialog({
         });
       }
 
+      Analytics.managedMemberAdded();
+      Analytics.teamMemberAdded("managed");
       resetForm();
       onOpenChange(false);
     } catch (error) {

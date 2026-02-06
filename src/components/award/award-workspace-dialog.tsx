@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useUserStore } from "@/stores/user-store";
 import { useAwardShellStore } from "@/stores/award-shell-store";
+import { Analytics } from "@/lib/analytics";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -397,6 +398,7 @@ export function AwardWorkspaceDialog({
         }
       }
 
+      Analytics.awardSaved("manual");
       toast.success("Award package saved successfully");
       onSaved?.();
     } catch (error) {
@@ -428,6 +430,7 @@ export function AwardWorkspaceDialog({
 
       if (error) throw error;
 
+      Analytics.awardDeleted();
       toast.success("Award package deleted");
       setShowDeleteConfirm(false);
       onOpenChange(false);
@@ -484,6 +487,7 @@ export function AwardWorkspaceDialog({
 
   const handleCopyAll = async () => {
     await navigator.clipboard.writeText(previewText);
+    Analytics.awardPreviewCopied();
     setCopiedAll(true);
     setTimeout(() => setCopiedAll(false), 2000);
     toast.success("Copied to clipboard");

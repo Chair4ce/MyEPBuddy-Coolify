@@ -12,6 +12,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/components/ui/sonner";
+import { Analytics } from "@/lib/analytics";
 import { Loader2, Key, Shield, ExternalLink, Check, Trash2, ShieldAlert } from "lucide-react";
 import {
   AlertDialog,
@@ -225,6 +226,7 @@ export default function APIKeysPage() {
     const result = await saveApiKey(keyName, keyValue);
     if (result.success) {
       setKeyStatus((prev) => ({ ...prev, [keyName]: true }));
+      Analytics.apiKeyAdded(keyName);
       toast.success("API key saved successfully");
     } else {
       toast.error(result.error || "Failed to save API key");
@@ -235,6 +237,7 @@ export default function APIKeysPage() {
     const result = await deleteApiKey(keyName);
     if (result.success) {
       setKeyStatus((prev) => ({ ...prev, [keyName]: false }));
+      Analytics.apiKeyRemoved(keyName);
       toast.success("API key deleted");
     } else {
       toast.error(result.error || "Failed to delete API key");

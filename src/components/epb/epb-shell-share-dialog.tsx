@@ -15,6 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/sonner";
+import { Analytics } from "@/lib/analytics";
 import { cn } from "@/lib/utils";
 import {
   Share2,
@@ -261,6 +262,7 @@ export function EPBShellShareDialog({
       setExistingShares((prev) => [...prev, data as EPBShellShare & { shared_with_profile?: Profile }]);
       setSearchResults((prev) => prev.filter((p) => p.id !== userId));
       setSearchQuery("");
+      Analytics.epbShared();
       toast.success("Shell shared successfully");
     } catch (error) {
       console.error("Failed to share:", error);
@@ -282,6 +284,7 @@ export function EPBShellShareDialog({
       if (error) throw error;
 
       setExistingShares((prev) => prev.filter((s) => s.id !== shareId));
+      Analytics.epbShareRemoved();
       toast.success("Share removed");
     } catch (error) {
       console.error("Failed to remove share:", error);

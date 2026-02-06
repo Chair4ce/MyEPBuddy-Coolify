@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/input-otp";
 import { toast } from "@/components/ui/sonner";
 import { Loader2, ArrowLeft, Smartphone } from "lucide-react";
+import { Analytics } from "@/lib/analytics";
 import { AppLogo } from "@/components/layout/app-logo";
 
 // Format phone number for masked display: +1 (***) ***-XXXX
@@ -156,10 +157,12 @@ export default function PhoneLoginPage() {
 
         if (!profile?.email) {
           // New phone user, needs to complete profile
+          Analytics.signUp("phone");
           toast.success("Phone verified! Please complete your profile.");
           router.push("/complete-profile");
         } else {
           // Existing user
+          Analytics.login("phone");
           toast.success("Signed in successfully!");
           router.push("/dashboard");
         }

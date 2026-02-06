@@ -18,6 +18,7 @@ import {
 import { toast } from "@/components/ui/sonner";
 import { Loader2, ExternalLink, Copy, Check, Smartphone, AlertTriangle } from "lucide-react";
 import { parseAuthError } from "@/lib/auth-errors";
+import { Analytics } from "@/lib/analytics";
 import { AppLogo } from "@/components/layout/app-logo";
 
 // Detect if running in a restricted browser context (in-app browsers, PWAs)
@@ -100,6 +101,7 @@ function LoginPageContent() {
         return;
       }
 
+      Analytics.login("email");
       toast.success("Welcome back!");
       router.push("/dashboard");
       router.refresh();
@@ -132,6 +134,8 @@ function LoginPageContent() {
       if (error) {
         toast.error(error.message);
         setIsGoogleLoading(false);
+      } else {
+        Analytics.login("google");
       }
     } catch {
       toast.error("An unexpected error occurred");

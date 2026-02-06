@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useUserStore } from "@/stores/user-store";
 import { useDecorationShellStore } from "@/stores/decoration-shell-store";
+import { Analytics } from "@/lib/analytics";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -353,6 +354,7 @@ export function DecorationWorkspaceDialog({
 
       if (error) throw error;
 
+      Analytics.decorationSaved("manual");
       setIsDirty(false);
       toast.success("Decoration saved successfully");
       onSaved?.();
@@ -441,6 +443,7 @@ export function DecorationWorkspaceDialog({
 
       if (error) throw error;
 
+      Analytics.decorationDeleted();
       toast.success("Decoration deleted");
       setShowDeleteConfirm(false);
       onOpenChange(false);

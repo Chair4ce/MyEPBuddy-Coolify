@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/card";
 import { toast } from "@/components/ui/sonner";
 import { Loader2, CheckCircle2, Eye, EyeOff } from "lucide-react";
+import { Analytics } from "@/lib/analytics";
 import { AppLogo } from "@/components/layout/app-logo";
 
 export default function ResetPasswordPage() {
@@ -71,6 +72,7 @@ export default function ResetPasswordPage() {
         return;
       }
 
+      Analytics.passwordResetCompleted();
       setIsSuccess(true);
       toast.success("Password updated successfully!");
 

@@ -308,6 +308,7 @@ export function EntryFormDialog({
           } else {
             updateStore(editEntry.id, result.data);
           }
+          Analytics.accomplishmentEdited(form.mpa);
           toast.success("Entry updated");
           // Only trigger background assessment if not pre-assessed and user is enlisted
           if (!hasPreAssessment && isEnlisted(profile?.rank as Rank)) {

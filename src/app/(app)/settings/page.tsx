@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { toast } from "@/components/ui/sonner";
+import { Analytics } from "@/lib/analytics";
 import { AvatarCropDialog } from "@/components/settings/avatar-crop-dialog";
 import { 
   ENLISTED_RANKS,
@@ -180,6 +181,7 @@ export default function SettingsPage() {
       }
 
       setProfile(data as Profile);
+      Analytics.avatarUploaded();
       toast.success("Profile photo updated");
       setCropDialogOpen(false);
       
@@ -234,6 +236,7 @@ export default function SettingsPage() {
       }
 
       setProfile(data as Profile);
+      Analytics.avatarRemoved();
       toast.success("Profile photo removed");
     } catch {
       toast.error("Failed to remove photo");
@@ -337,6 +340,7 @@ export default function SettingsPage() {
       }
 
       setProfile(data as Profile);
+      Analytics.profileUpdated();
       toast.success("Profile updated successfully");
     } catch {
       toast.error("Failed to update profile");
@@ -452,6 +456,7 @@ export default function SettingsPage() {
         return;
       }
 
+      Analytics.accountLinked("google");
       // OAuth flow redirects, so loading state persists
       toast.success("Redirecting to Google...");
     } catch {
@@ -494,6 +499,7 @@ export default function SettingsPage() {
       }
 
       setHasGoogleLinked(false);
+      Analytics.accountUnlinked("google");
       toast.success("Google account unlinked successfully");
     } catch {
       toast.error("Failed to unlink Google account");

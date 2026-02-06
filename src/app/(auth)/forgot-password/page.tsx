@@ -18,6 +18,7 @@ import {
 import { toast } from "@/components/ui/sonner";
 import { Loader2, ArrowLeft, Mail, AlertTriangle } from "lucide-react";
 import { parseAuthError } from "@/lib/auth-errors";
+import { Analytics } from "@/lib/analytics";
 import { AppLogo } from "@/components/layout/app-logo";
 
 function ForgotPasswordContent() {
@@ -62,6 +63,7 @@ function ForgotPasswordContent() {
         return;
       }
 
+      Analytics.passwordResetRequested();
       setEmailSent(true);
       toast.success("Password reset email sent! Check your inbox.");
     } catch {

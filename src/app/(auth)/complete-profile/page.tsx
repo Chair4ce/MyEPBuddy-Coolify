@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "@/components/ui/sonner";
 import { Loader2 } from "lucide-react";
+import { Analytics } from "@/lib/analytics";
 import { AppLogo } from "@/components/layout/app-logo";
 import { ENLISTED_RANKS, OFFICER_RANKS, CIVILIAN_RANK } from "@/lib/constants";
 import type { Rank } from "@/types/database";
@@ -171,6 +172,7 @@ export default function CompleteProfilePage() {
         return;
       }
 
+      Analytics.profileCompleted(rank as string, afsc);
       toast.success("Profile completed!");
       router.push("/dashboard");
       router.refresh();

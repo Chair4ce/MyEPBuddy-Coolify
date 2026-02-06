@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useUserStore } from "@/stores/user-store";
 import { useDecorationShellStore } from "@/stores/decoration-shell-store";
+import { Analytics } from "@/lib/analytics";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -316,6 +317,7 @@ export default function DecorationPage() {
 
       if (createError) throw createError;
 
+      Analytics.decorationCreated(createAwardType, createReason);
       toast.success("Decoration draft created");
       setShowCreateDialog(false);
 

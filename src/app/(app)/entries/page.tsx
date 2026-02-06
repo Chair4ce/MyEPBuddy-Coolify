@@ -36,6 +36,7 @@ import {
 import { EntryFormDialog } from "@/components/entries/entry-form-dialog";
 import { TagFilterPopover } from "@/components/entries/tag-filter-popover";
 import { toast } from "@/components/ui/sonner";
+import { Analytics } from "@/lib/analytics";
 import { deleteAccomplishment } from "@/app/actions/accomplishments";
 import { Plus, Pencil, Trash2, Filter, FileText, LayoutList, CalendarDays, Calendar } from "lucide-react";
 import { ENTRY_MGAS, AWARD_QUARTERS, getQuarterDateRange, getFiscalQuarterDateRange, getActiveCycleYear, isEnlisted } from "@/lib/constants";
@@ -270,6 +271,7 @@ function EntriesContent() {
     }
 
     removeAccomplishment(id);
+    Analytics.accomplishmentDeleted("unknown");
     toast.success("Entry deleted");
     setDeleteId(null);
   }

@@ -17,6 +17,7 @@ import {
 // Collapsible removed - caused ref loop issues with asChild pattern
 // Popover removed - caused ref loop issues with asChild pattern
 import { toast } from "@/components/ui/sonner";
+import { Analytics } from "@/lib/analytics";
 import { cn, getCharacterCountColor } from "@/lib/utils";
 import { STANDARD_MGAS, MAX_STATEMENT_CHARACTERS, MAX_HLR_CHARACTERS } from "@/lib/constants";
 import {
@@ -523,6 +524,7 @@ export function MPASectionCard({
   // Copy to clipboard
   const handleCopy = async () => {
     await navigator.clipboard.writeText(localText);
+    Analytics.statementCopied(section.mpa);
     setCopied(true);
     toast.success("Copied to clipboard");
     setTimeout(() => setCopied(false), 2000);
@@ -558,6 +560,7 @@ export function MPASectionCard({
     setIsCreatingSnapshot(true);
     try {
       await onCreateSnapshot(state.draftText);
+      Analytics.statementSnapshotCreated(section.mpa);
       toast.success("Snapshot saved");
     } catch (error) {
       console.error(error);
@@ -569,6 +572,7 @@ export function MPASectionCard({
 
   // Restore from snapshot
   const handleRestoreSnapshot = (snapshot: EPBShellSnapshot) => {
+    Analytics.statementSnapshotRestored(section.mpa);
     updateSectionState(section.mpa, {
       draftText: snapshot.statement_text,
       isDirty: true,
@@ -708,6 +712,7 @@ export function MPASectionCard({
 
   // Reset to saved version
   const handleReset = () => {
+    Analytics.statementReset(section.mpa);
     updateSectionState(section.mpa, {
       draftText: section.statement_text,
       isDirty: false,
@@ -750,6 +755,7 @@ export function MPASectionCard({
   
   // Use a generated statement (replace current statement)
   const handleUseStatement = (statement: string) => {
+    Analytics.statementGenerated(section.mpa, state.sourceType || "actions");
     setLocalText(statement);
     updateSectionState(section.mpa, {
       draftText: statement,
@@ -779,6 +785,7 @@ export function MPASectionCard({
       toast.error("No text to revise");
       return;
     }
+    Analytics.statementRevisionStarted(section.mpa);
     setIsRevising(true);
     setGeneratedRevisions([]);
     try {
@@ -805,6 +812,7 @@ export function MPASectionCard({
   
   // Use a generated revision (replace current statement)
   const handleUseRevision = (revision: string, versionIndex: number) => {
+    Analytics.statementRevisionApplied(section.mpa);
     setLocalText(revision);
     updateSectionState(section.mpa, {
       draftText: revision,

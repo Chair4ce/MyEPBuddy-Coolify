@@ -72,6 +72,16 @@ function sanitizeProperties(props: Record<string, unknown>): Record<string, unkn
     "error", "to_library",
     // Counts and booleans only
     "count", "success", "enabled", "visible",
+    // EPB workflow
+    "ratee_type", "is_complete", "source_mpa", "target_mpa", "source_type",
+    // Award & Decoration
+    "award_type", "reason", "save_type",
+    // Team & Managed Accounts
+    "member_type",
+    // Library
+    "statement_type", "is_favorite", "rating",
+    // Page view path
+    "path",
   ]);
   
   for (const [key, value] of Object.entries(props)) {

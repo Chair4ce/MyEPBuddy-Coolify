@@ -53,6 +53,7 @@ import {
   Clock,
 } from "lucide-react";
 import { toast } from "sonner";
+import { Analytics } from "@/lib/analytics";
 import type { Rank } from "@/types/database";
 import { MPA_ABBREVIATIONS } from "@/lib/constants";
 
@@ -310,11 +311,14 @@ export function PendingLinksCard() {
       // If supervisor already accepted, auto-complete
       if (link.supervisor_accepted) {
         await (supabase as unknown as RpcClient).rpc("complete_pending_link", { link_id: link.id });
+        Analytics.managedAccountDataSynced();
+        Analytics.managedAccountLinkCompleted();
         toast.success("All set!", {
           description: `Synced ${result.entries_synced} entries and ${result.statements_synced} statements.`,
         });
         setPendingLinks((prev) => prev.filter((l) => l.id !== link.id));
       } else {
+        Analytics.managedAccountDataSynced();
         toast.success("Data synced!", {
           description: `Synced ${result.entries_synced} entries and ${result.statements_synced} statements.`,
         });
@@ -347,11 +351,14 @@ export function PendingLinksCard() {
       // If no data to sync, auto-complete the link
       if (!hasData) {
         await (supabase as unknown as RpcClient).rpc("complete_pending_link", { link_id: link.id });
+        Analytics.managedAccountSupervisorAccepted();
+        Analytics.managedAccountLinkCompleted();
         toast.success("Supervisor linked!", {
           description: `${result.supervisor_name} is now your supervisor.`,
         });
         setPendingLinks((prev) => prev.filter((l) => l.id !== link.id));
       } else {
+        Analytics.managedAccountSupervisorAccepted();
         toast.success("Supervisor accepted!", {
           description: `${result.supervisor_name} is now your supervisor. You can now sync their entries.`,
         });
@@ -378,6 +385,7 @@ export function PendingLinksCard() {
       console.error("Error dismissing link:", error);
       toast.error("Failed to dismiss", { description: error.message });
     } else {
+      Analytics.managedAccountLinkDismissed();
       toast.info("Link dismissed");
       setPendingLinks((prev) => prev.filter((l) => l.id !== link.id));
     }
@@ -413,6 +421,7 @@ export function PendingLinksCard() {
     });
 
     if (!error) {
+      Analytics.managedAccountLinkCompleted();
       setPendingLinks((prev) => prev.filter((l) => l.id !== link.id));
       toast.success("Onboarding complete!");
     }

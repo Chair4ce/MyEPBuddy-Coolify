@@ -35,6 +35,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/components/ui/sonner";
+import { Analytics } from "@/lib/analytics";
 import { cn, getCharacterCountColor } from "@/lib/utils";
 import { MAX_STATEMENT_CHARACTERS, STANDARD_MGAS, RANKS, AWARD_1206_CATEGORIES, getActiveCycleYear } from "@/lib/constants";
 import { Loader2, UserCheck, Users, Globe, CheckCircle2, Trophy, Sparkles, FileText, Award, Layers, ClipboardPaste, Wand2, ArrowLeft } from "lucide-react";
@@ -490,6 +491,7 @@ export function AddStatementDialog({
         if (shareError) throw shareError;
       }
 
+      Analytics.libraryStatementAdded(statementType, selectedMpas[0] || "unknown");
       toast.success("Statement added to your library!");
       resetForm();
       onStatementAdded?.();

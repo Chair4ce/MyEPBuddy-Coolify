@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "@/components/ui/sonner";
+import { Analytics } from "@/lib/analytics";
 import { cn } from "@/lib/utils";
 import {
   Users,
@@ -203,6 +204,9 @@ export function ShareStatementDialog({
         if (error) throw error;
       }
 
+      // Track share types used
+      if (shareWithTeam) Analytics.statementShared("team");
+      if (shareWithCommunity) Analytics.statementShared("community");
       toast.success("Sharing settings updated");
       onSharesUpdated?.();
       onOpenChange(false);

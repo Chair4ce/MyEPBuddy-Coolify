@@ -25,6 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "@/components/ui/sonner";
+import { Analytics } from "@/lib/analytics";
 import { cn, getCharacterCountColor } from "@/lib/utils";
 import { MAX_STATEMENT_CHARACTERS, STANDARD_MGAS, RANKS, AWARD_1206_CATEGORIES } from "@/lib/constants";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -330,12 +331,14 @@ export default function LibraryPage() {
       prev.map((s) => (s.id === statement.id ? { ...s, is_favorite: newValue } : s))
     );
 
+    Analytics.libraryFavoriteToggled(newValue);
     toast.success(newValue ? "Added to favorites" : "Removed from favorites");
   }
 
   async function deleteStatement(id: string) {
     await supabase.from("refined_statements").delete().eq("id", id);
     setMyStatements((prev) => prev.filter((s) => s.id !== id));
+    Analytics.libraryStatementDeleted("epb");
     toast.success("Statement deleted");
   }
 
@@ -402,6 +405,7 @@ export default function LibraryPage() {
         } as RefinedStatement : s))
       );
 
+      Analytics.libraryStatementEdited(editingStatement.statement_type || "epb");
       toast.success("Statement updated");
       setEditingStatement(null);
 
@@ -451,6 +455,7 @@ export default function LibraryPage() {
 
       if (error) throw error;
 
+      Analytics.sharedStatementCopied("shared");
       toast.success("Statement saved to your library!");
       setCopyingStatement(null);
       loadStatements();
@@ -503,6 +508,7 @@ export default function LibraryPage() {
           })
         );
 
+        Analytics.communityStatementRated(rating);
         toast.success("Rating updated");
       } else {
         // New rating

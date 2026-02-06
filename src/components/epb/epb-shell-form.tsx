@@ -346,6 +346,8 @@ export function EPBShellForm({
 
     const newValue = !section.is_complete;
     
+    Analytics.statementCompletionToggled(mpa, newValue);
+    
     // Optimistically update local state
     updateSection(mpa, { is_complete: newValue });
 
@@ -505,6 +507,7 @@ export function EPBShellForm({
         handleSaveSection(targetMpa, newTargetStatement),
       ]);
 
+      Analytics.sentenceReplaced(sourceMpa, targetMpa);
       toast.success("Sentence moved successfully");
     } catch (error) {
       console.error("Sentence replace error:", error);
@@ -589,6 +592,7 @@ export function EPBShellForm({
         handleSaveSection(targetMpa, newTargetStatement),
       ]);
 
+      Analytics.sentenceSwapped(sourceMpa, targetMpa);
       toast.success("Sentences swapped successfully");
     } catch (error) {
       console.error("Sentence swap error:", error);
@@ -1295,6 +1299,9 @@ export function EPBShellForm({
       if (error) throw error;
 
       setCurrentShell(data as EPBShell);
+      Analytics.epbShellCreated(
+        selectedRatee.isManagedMember ? "managed_member" : selectedRatee.id === profile.id ? "self" : "subordinate"
+      );
       toast.success(`${targetCycleYear} EPB Shell created successfully!`);
     } catch (error: unknown) {
       console.error("Failed to create shell:", error);
@@ -1899,6 +1906,7 @@ export function EPBShellForm({
   const handleAssessEPB = useCallback(async () => {
     if (!currentShell || !selectedRatee) return;
     
+    Analytics.epbAssessmentStarted();
     setShowAssessmentDialog(true);
     setIsAssessing(true);
     setAssessmentResult(null);

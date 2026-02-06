@@ -15,6 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/sonner";
+import { Analytics } from "@/lib/analytics";
 import { cn } from "@/lib/utils";
 import {
   Share2,
@@ -270,6 +271,7 @@ export function DecorationShellShareDialog({
 
       setSearchQuery("");
       setSearchResults([]);
+      Analytics.decorationShared();
       toast.success("Shared successfully");
     } catch (error) {
       console.error("Share error:", error);
@@ -291,6 +293,7 @@ export function DecorationShellShareDialog({
       if (error) throw error;
 
       setExistingShares((prev) => prev.filter((s) => s.id !== shareId));
+      Analytics.decorationShareRemoved();
       toast.success("Access removed");
     } catch (error) {
       console.error("Remove share error:", error);

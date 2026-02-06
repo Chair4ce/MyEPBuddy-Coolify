@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/sonner";
 import { createClient } from "@/lib/supabase/client";
+import { Analytics } from "@/lib/analytics";
 import { STANDARD_MGAS, ENTRY_MGAS } from "@/lib/constants";
 import {
   Archive,
@@ -115,6 +116,7 @@ export function ArchiveEPBDialog({
         throw new Error(result?.error_message || "Archive failed");
       }
 
+      Analytics.epbArchived(result.statements_saved);
       setStatementsSaved(result.statements_saved);
       setStep("success");
 

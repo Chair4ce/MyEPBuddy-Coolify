@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { getFullName } from "@/lib/utils";
 import { useUserStore } from "@/stores/user-store";
 import { useAwardShellStore } from "@/stores/award-shell-store";
+import { Analytics } from "@/lib/analytics";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -567,6 +568,7 @@ export default function AwardPage() {
         }
       }
 
+      Analytics.awardCreated(createAwardCategory, createPeriodType);
       toast.success(isTeamAward 
         ? `Team award package created with ${selectedTeamMemberIds.length} members` 
         : "Award package created successfully"

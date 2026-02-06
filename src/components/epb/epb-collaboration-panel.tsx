@@ -19,6 +19,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "@/components/ui/sonner";
+import { Analytics } from "@/lib/analytics";
 import {
   Users,
   UserPlus,
@@ -80,6 +81,7 @@ export function EPBCollaborationPanel({
     setIsCreating(false);
     
     if (code) {
+      Analytics.epbCollaborationStarted();
       toast.success("Live session started!", {
         description: `Share code: ${code}`,
       });
@@ -93,6 +95,7 @@ export function EPBCollaborationPanel({
     setShowActiveSessionDialog(false);
 
     if (success) {
+      Analytics.epbCollaborationJoined("active_prompt");
       toast.success("Joined live session!");
     } else {
       toast.error("Failed to join session");
@@ -110,6 +113,7 @@ export function EPBCollaborationPanel({
     setIsJoining(false);
 
     if (success) {
+      Analytics.epbCollaborationJoined("code");
       setIsJoinDialogOpen(false);
       setJoinCode("");
       toast.success("Joined live session!");
@@ -141,6 +145,7 @@ export function EPBCollaborationPanel({
 
   const handleEnd = async () => {
     await onEndSession();
+    Analytics.epbCollaborationEnded();
     setIsPopoverOpen(false);
     toast.info("Live session ended");
   };

@@ -116,6 +116,7 @@ import { SetExpectationsDialog } from "@/components/team/set-expectations-dialog
 import { AwardPackagesManager } from "@/components/team/award-packages-manager";
 import { useProjectsStore } from "@/stores/projects-store";
 import { toast } from "@/components/ui/sonner";
+import { Analytics } from "@/lib/analytics";
 import { 
   MPA_ABBREVIATIONS, 
   STANDARD_MGAS, 
@@ -947,6 +948,7 @@ export default function TeamPage() {
           throw error;
         }
       } else {
+        Analytics.supervisionRequested(inviteType === "supervise" ? "up" : "down");
         toast.success("Request sent successfully!");
         setShowInviteDialog(false);
         setInviteEmail("");
@@ -1014,8 +1016,10 @@ export default function TeamPage() {
           return;
         }
 
+        Analytics.supervisionRequestAccepted();
         toast.success("Request accepted! Team relationship created.");
       } else {
+        Analytics.supervisionRequestDeclined();
         toast.success("Request declined.");
       }
 
@@ -1063,6 +1067,7 @@ export default function TeamPage() {
           .eq("subordinate_id", memberId);
       }
 
+      Analytics.teamMemberRemoved("real");
       toast.success("Team member removed");
       loadTeamData();
       
@@ -1085,6 +1090,7 @@ export default function TeamPage() {
         .eq("id", memberId);
 
       removeManagedMember(memberId);
+      Analytics.teamMemberRemoved("managed");
       toast.success("Team member removed");
     } catch (error) {
       toast.error("Failed to remove team member");

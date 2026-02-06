@@ -15,6 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/sonner";
+import { Analytics } from "@/lib/analytics";
 import { cn } from "@/lib/utils";
 import {
   Share2,
@@ -241,6 +242,7 @@ export function AwardShellShareDialog({
 
       if (error) throw error;
       
+      Analytics.awardShared();
       toast.success("Award shell shared successfully");
       setSearchQuery("");
       setSearchResults([]);
@@ -276,6 +278,7 @@ export function AwardShellShareDialog({
 
       if (error) throw error;
       
+      Analytics.awardShareRemoved();
       toast.success("Access removed");
       setExistingShares((prev) => prev.filter((s) => s.id !== shareId));
     } catch (error) {
