@@ -27,7 +27,7 @@ export type OfficerRank =
 export type Rank = EnlistedRank | OfficerRank | "Civilian";
 
 export type UserRole = "member" | "admin";
-export type WritingStyle = "personal" | "community" | "hybrid";
+export type WritingStyle = "personal" | "community" | "chain_of_command";
 
 export interface Profile {
   id: string;
@@ -453,6 +453,11 @@ export interface UserLLMSettings {
   // OPB-specific settings (Officer Performance Brief)
   opb_system_prompt: string | null;
   opb_style_guidelines: string | null;
+  // Decoration-specific settings (citations - no abbreviations/acronyms, everything spelled out)
+  decoration_system_prompt: string | null;
+  decoration_style_guidelines: string | null;
+  // Duty description prompt (present tense, scope/responsibility - separate from performance statements)
+  duty_description_prompt: string | null;
   created_at: string;
   updated_at: string;
 }

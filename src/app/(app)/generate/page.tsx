@@ -39,7 +39,7 @@ import {
   Users,
   User,
   UserPlus,
-  Star,
+  Shield,
   Settings2,
   ChevronDown,
   ChevronUp,
@@ -71,6 +71,7 @@ export default function GeneratePage() {
   const [selectedModel, setSelectedModel] = useState<string>("gemini-2.0-flash");
   const [hasUserKey, setHasUserKey] = useState(false);
   const [writingStyle, setWritingStyle] = useState<WritingStyle>("personal");
+  const [hasChain, setHasChain] = useState(false); // Whether user has a supervisor chain
   const [communityMpaFilter, setCommunityMpaFilter] = useState<string>("all");
   const [communityAfscFilter, setCommunityAfscFilter] = useState<string>("my-afsc");
   const [availableAfscs, setAvailableAfscs] = useState<string[]>([]);
@@ -203,9 +204,39 @@ export default function GeneratePage() {
   // Load user's writing style preference
   useEffect(() => {
     if (profile?.writing_style) {
-      setWritingStyle(profile.writing_style as WritingStyle);
+      const saved = profile.writing_style as WritingStyle;
+      // If user had chain_of_command saved but no chain exists, fall back to personal
+      if (saved === "chain_of_command" && !hasChain) {
+        setWritingStyle("personal");
+      } else {
+        setWritingStyle(saved);
+      }
     }
-  }, [profile]);
+  }, [profile, hasChain]);
+
+  // Check if user has a supervision chain (any supervisor above them)
+  useEffect(() => {
+    if (!profile) return;
+
+    async function checkChain() {
+      // Check if this user is a subordinate in any team (has at least one supervisor)
+      const { data, error } = await supabase
+        .from("teams")
+        .select("id")
+        .eq("subordinate_id", profile!.id)
+        .limit(1);
+
+      if (!error && data && data.length > 0) {
+        setHasChain(true);
+      } else {
+        setHasChain(false);
+        // If they had chain_of_command selected, fall back
+        setWritingStyle(prev => prev === "chain_of_command" ? "personal" : prev);
+      }
+    }
+
+    checkChain();
+  }, [profile, supabase]);
 
   // Load selectedRatee from localStorage on mount
   useEffect(() => {
@@ -794,7 +825,7 @@ export default function GeneratePage() {
                     <CardTitle className="text-base">AI Configuration</CardTitle>
                     {!configOpen && (
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        {selectedModelInfo?.name} • {writingStyle} style
+                        {selectedModelInfo?.name} • {writingStyle === "chain_of_command" ? "chain of command" : writingStyle} style
                       </p>
                     )}
                   </div>
@@ -852,12 +883,14 @@ export default function GeneratePage() {
                           <span>Community Style</span>
                         </div>
                       </SelectItem>
-                      <SelectItem value="hybrid">
-                        <div className="flex items-center gap-2">
-                          <Star className="size-4" />
-                          <span>Hybrid (Both)</span>
-                        </div>
-                      </SelectItem>
+                      {hasChain && (
+                        <SelectItem value="chain_of_command">
+                          <div className="flex items-center gap-2">
+                            <Shield className="size-4" />
+                            <span>Chain of Command</span>
+                          </div>
+                        </SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
@@ -885,16 +918,16 @@ export default function GeneratePage() {
                     <span><strong>Community Style:</strong> Uses top-rated crowdsourced statements from your AFSC ({selectedRatee?.afsc || profile?.afsc}).</span>
                   </p>
                 )}
-                {writingStyle === "hybrid" && (
+                {writingStyle === "chain_of_command" && (
                   <p className="flex items-start gap-1.5">
-                    <Star className="size-4 shrink-0 mt-0.5" />
-                    <span><strong>Hybrid:</strong> Combines your personal style with crowdsourced community examples.</span>
+                    <Shield className="size-4 shrink-0 mt-0.5" />
+                    <span><strong>Chain of Command:</strong> Generates statements matching the writing style of the highest-ranking member in your supervision chain. Reduces corrections during the routing process.</span>
                   </p>
                 )}
               </div>
 
-              {/* Community Filters - only show when using community or hybrid style */}
-              {(writingStyle === "community" || writingStyle === "hybrid") && (
+              {/* Community Filters - only show when using community style */}
+              {writingStyle === "community" && (
                 <div className="space-y-4 p-3 rounded-lg border bg-muted/30">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {/* AFSC Filter */}
@@ -983,6 +1016,7 @@ export default function GeneratePage() {
         <EPBShellForm
           cycleYear={cycleYear}
           model={selectedModel}
+          writingStyle={writingStyle}
           onOpenAccomplishments={handleOpenAccomplishments}
         />
       )}

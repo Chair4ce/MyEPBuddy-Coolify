@@ -76,7 +76,7 @@ import {
 import type { UserLLMSettings, Acronym, Abbreviation, RankVerbProgression, AwardSentencesPerCategory, MPADescriptions, Rank } from "@/types/database";
 import { RANKS, STANDARD_MGAS, AWARD_1206_CATEGORIES, DEFAULT_AWARD_SENTENCES, DEFAULT_MPA_DESCRIPTIONS, ENTRY_MGAS, getStaticCloseoutDate, getActiveCycleYear, isOfficer, ENLISTED_RANKS, OFFICER_RANKS, CIVILIAN_RANK, DEFAULT_OPB_SYSTEM_PROMPT, DEFAULT_OPB_STYLE_GUIDELINES } from "@/lib/constants";
 import Link from "next/link";
-import { Award } from "lucide-react";
+import { Award, Medal } from "lucide-react";
 
 const DEFAULT_SYSTEM_PROMPT = `You are an expert Air Force Enlisted Performance Brief (EPB) writing assistant with deep knowledge of Air Force operations, programs, and terminology. Your sole purpose is to generate impactful, narrative-style performance statements that strictly comply with AFI 36-2406 (22 Aug 2025).
 
@@ -175,6 +175,95 @@ WORD ABBREVIATIONS (AUTO-APPLY):
 {{abbreviations_list}}`;
 
 const DEFAULT_AWARD_STYLE_GUIDELINES = `MAXIMIZE density for 1206 space constraints. Write in active voice. Chain impacts: action → immediate result → organizational benefit. Always quantify: numbers, percentages, dollars, time, personnel. Connect to mission readiness, compliance, or strategic goals. Use standard AF abbreviations liberally.`;
+
+// Default decoration system prompt (citations - everything spelled out, no abbreviations/acronyms)
+const DEFAULT_DECORATION_SYSTEM_PROMPT = `You are an expert Air Force decoration citation writer with extensive knowledge of DAFMAN 36-2806 and MyDecs Reimagined (October 2022+).
+
+## FORMAT RULES (MyDecs Reimagined)
+
+1. **ABBREVIATIONS** - Authorized ONLY if on DAF approved abbreviations list
+   - Geographic locations: spell out first reference
+   - Unit designations: can use common abbreviations (Sqdn, Gp, Wg)
+   - NEVER abbreviate member's rank or name
+   - Common approved abbreviations: NCO, SNCO, DoD, TDY, ISR
+
+2. **NO SYMBOLS** except the dollar sign ($)
+   - Write "percent" not "%"
+
+3. **NUMBERS**
+   - 1-9: spell out (one, two, three) unless space-constrained
+   - 10+: numerals are acceptable
+
+4. **DATE FORMAT** - No leading zeros (use "1 January" not "01 January")
+
+5. **RANK FORMATTING**
+   - First mention: Full rank with name
+   - Subsequent mentions: Short rank with last name
+   - Never separate rank from name
+
+RANK-APPROPRIATE STYLE FOR {{ratee_rank}}:
+Primary action verbs to use: {{primary_verbs}}
+{{rank_verb_guidance}}
+
+## CITATION STRUCTURE
+
+### NARRATIVE (Your Focus)
+- Start with: "During this period," or "In this important assignment,"
+- 2-4 sentences describing accomplishments with quantified impacts
+- Use transitions: "Additionally," "Furthermore," "Moreover," "Finally,"
+- Each accomplishment should have: ACTION → SCOPE → IMPACT
+
+## QUALITY STANDARDS
+
+- Capture SUBSTANCE with DIGNITY and CLARITY
+- Use ACTIVE VOICE and FORCEFUL VERBS
+- Be SPECIFIC with facts and metrics
+- Emphasize MISSION CONTRIBUTION
+- Flow naturally as a single cohesive narrative`;
+
+const DEFAULT_DECORATION_STYLE_GUIDELINES = `Write with dignity and clarity suitable for official military documentation. Use active voice and forceful verbs. Be specific with facts and metrics. Emphasize mission contribution. Do NOT use abbreviations or acronyms unless on the DAF approved list. Spell out all numbers under 10. Write "percent" not "%".`;
+
+// Default duty description prompt (present tense, scope/responsibility, not performance)
+const DEFAULT_DUTY_DESCRIPTION_PROMPT = `You are an expert Air Force writer helping to revise a DUTY DESCRIPTION for an EPB (Enlisted Performance Brief).
+
+**⚠️ THIS IS A DUTY DESCRIPTION - NOT A PERFORMANCE STATEMENT ⚠️**
+
+A duty description describes the member's CURRENT ROLE, SCOPE, and RESPONSIBILITIES.
+It is purely factual and descriptive - it states WHAT the member's job encompasses, NOT how well they perform.
+
+**DUTY DESCRIPTION WRITING RULES:**
+1. USE PRESENT TENSE - describes a current, ongoing role (e.g., "drives", "supports", "coordinates", "manages")
+2. NEVER use past tense performance verbs (e.g., "led", "directed", "ensured", "bolstered", "enhanced")
+3. NEVER use subjective performance adjectives (e.g., "expertly", "skillfully", "effectively", "proficiently")
+4. NEVER add accomplishment results or impact language (e.g., "ensured seamless integration", "bolstered command capabilities")
+5. Describe SCOPE and RESPONSIBILITY - team size, mission area, organizations supported, programs owned
+6. Use descriptive framing like "As a [role]", "Serving as [position]", or direct present-tense descriptions
+7. Do NOT invent new facts or add scope that isn't in the original - only rephrase existing content
+
+**GOOD DUTY DESCRIPTION VERBS (present tense, descriptive):**
+drives, supports, coordinates, manages, oversees, advises, maintains, provides, enables, serves as, operates, sustains, ensures (only for describing an ongoing responsibility), administers, represents, liaises, synchronizes, integrates, conducts, facilitates, monitors, evaluates, governs, directs (present tense only)
+
+**BAD - NEVER USE THESE IN DUTY DESCRIPTIONS:**
+- Past-tense performance verbs: led, directed, managed, executed, ensured (past), bolstered, enhanced, strengthened, championed, pioneered
+- Subjective adjectives: expertly, skillfully, proficiently, adeptly, effectively, seamlessly
+- Accomplishment/result language: "resulting in", "enabling X% improvement", "saving $X", "bolstering capabilities"
+- Cliché openers: "Charged as", "Selected as", "Piloted" (these imply performance, not scope)
+
+**EXAMPLE - CORRECT DUTY DESCRIPTION STYLE:**
+"As a crew operations subject matter expert, he drives a 3-member cyber event coordination team during a numbered AF transition, supporting the elevation of AFSOUTH to a Service Component Command and establishing AFSOUTH's first ever MAJCOM Cyber Coordination Center."
+
+**PRESERVE THESE EXACTLY (never change):**
+- All numbers and metrics
+- Acronyms and organizational names
+- Team sizes and specific scope details
+
+CRITICAL RULES:
+1. PRESENT TENSE ONLY
+2. NO performance adjectives
+3. NO accomplishment results beyond describing the role's scope
+4. KEEP factual content identical - only rephrase, do not invent new scope
+5. Prefer "&" over "and" when saving space
+6. AVOID the word "the" where possible - it wastes characters`;
 
 const DEFAULT_RANK_VERBS: RankVerbProgression = {
   // Enlisted Ranks
@@ -711,6 +800,11 @@ interface SettingsState {
   // OPB settings (Officer Performance Brief)
   opbSystemPrompt: string;
   opbStyleGuidelines: string;
+  // Decoration settings (citations - no abbreviations/acronyms)
+  decorationSystemPrompt: string;
+  decorationStyleGuidelines: string;
+  // Duty description prompt (present tense, scope/responsibility)
+  dutyDescriptionPrompt: string;
 }
 
 export default function LLMSettingsPage() {
@@ -718,6 +812,7 @@ export default function LLMSettingsPage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isRefreshingSignatures, setIsRefreshingSignatures] = useState(false);
   const [hasExistingSettings, setHasExistingSettings] = useState(false);
 
   // SCOD date and cycle year are computed from the user's rank
@@ -752,6 +847,13 @@ export default function LLMSettingsPage() {
   // OPB-specific settings (Officer Performance Brief)
   const [opbSystemPrompt, setOpbSystemPrompt] = useState(DEFAULT_OPB_SYSTEM_PROMPT);
   const [opbStyleGuidelines, setOpbStyleGuidelines] = useState(DEFAULT_OPB_STYLE_GUIDELINES);
+  
+  // Decoration-specific settings (citations - no abbreviations/acronyms)
+  const [decorationSystemPrompt, setDecorationSystemPrompt] = useState(DEFAULT_DECORATION_SYSTEM_PROMPT);
+  const [decorationStyleGuidelines, setDecorationStyleGuidelines] = useState(DEFAULT_DECORATION_STYLE_GUIDELINES);
+  
+  // Duty description prompt (present tense, scope/responsibility)
+  const [dutyDescriptionPrompt, setDutyDescriptionPrompt] = useState(DEFAULT_DUTY_DESCRIPTION_PROMPT);
 
   // Track initial state to detect changes (use state, not ref, to trigger re-renders)
   const [initialState, setInitialState] = useState<SettingsState | null>(null);
@@ -783,9 +885,12 @@ export default function LLMSettingsPage() {
       awardStyleGuidelines !== initialState.awardStyleGuidelines ||
       JSON.stringify(awardSentencesPerCategory) !== JSON.stringify(initialState.awardSentencesPerCategory) ||
       opbSystemPrompt !== initialState.opbSystemPrompt ||
-      opbStyleGuidelines !== initialState.opbStyleGuidelines
+      opbStyleGuidelines !== initialState.opbStyleGuidelines ||
+      decorationSystemPrompt !== initialState.decorationSystemPrompt ||
+      decorationStyleGuidelines !== initialState.decorationStyleGuidelines ||
+      dutyDescriptionPrompt !== initialState.dutyDescriptionPrompt
     );
-  }, [styleGuidelines, systemPrompt, rankVerbs, acronyms, abbreviations, mpaDescriptions, awardSystemPrompt, awardAbbreviations, awardStyleGuidelines, awardSentencesPerCategory, opbSystemPrompt, opbStyleGuidelines, isLoading, initialState]);
+  }, [styleGuidelines, systemPrompt, rankVerbs, acronyms, abbreviations, mpaDescriptions, awardSystemPrompt, awardAbbreviations, awardStyleGuidelines, awardSentencesPerCategory, opbSystemPrompt, opbStyleGuidelines, decorationSystemPrompt, decorationStyleGuidelines, dutyDescriptionPrompt, isLoading, initialState]);
 
   // Warn user before leaving with unsaved changes (browser close/refresh)
   useEffect(() => {
@@ -895,6 +1000,17 @@ export default function LLMSettingsPage() {
         setOpbSystemPrompt(loadedOpbSystemPrompt);
         setOpbStyleGuidelines(loadedOpbStyleGuidelines);
 
+        // Load Decoration settings
+        const loadedDecorationSystemPrompt = settings.decoration_system_prompt || DEFAULT_DECORATION_SYSTEM_PROMPT;
+        const loadedDecorationStyleGuidelines = settings.decoration_style_guidelines || DEFAULT_DECORATION_STYLE_GUIDELINES;
+        
+        setDecorationSystemPrompt(loadedDecorationSystemPrompt);
+        setDecorationStyleGuidelines(loadedDecorationStyleGuidelines);
+
+        // Load Duty Description prompt
+        const loadedDutyDescriptionPrompt = settings.duty_description_prompt || DEFAULT_DUTY_DESCRIPTION_PROMPT;
+        setDutyDescriptionPrompt(loadedDutyDescriptionPrompt);
+
         // Store initial state for change detection (SCOD/cycle year now computed from rank)
         setInitialState({
           styleGuidelines: loadedStyleGuidelines,
@@ -909,6 +1025,9 @@ export default function LLMSettingsPage() {
           awardSentencesPerCategory: JSON.parse(JSON.stringify(loadedAwardSentences)),
           opbSystemPrompt: loadedOpbSystemPrompt,
           opbStyleGuidelines: loadedOpbStyleGuidelines,
+          decorationSystemPrompt: loadedDecorationSystemPrompt,
+          decorationStyleGuidelines: loadedDecorationStyleGuidelines,
+          dutyDescriptionPrompt: loadedDutyDescriptionPrompt,
         });
       } else {
         // No existing settings - store defaults as initial state
@@ -925,6 +1044,9 @@ export default function LLMSettingsPage() {
           awardSentencesPerCategory: JSON.parse(JSON.stringify(DEFAULT_AWARD_SENTENCES)),
           opbSystemPrompt: DEFAULT_OPB_SYSTEM_PROMPT,
           opbStyleGuidelines: DEFAULT_OPB_STYLE_GUIDELINES,
+          decorationSystemPrompt: DEFAULT_DECORATION_SYSTEM_PROMPT,
+          decorationStyleGuidelines: DEFAULT_DECORATION_STYLE_GUIDELINES,
+          dutyDescriptionPrompt: DEFAULT_DUTY_DESCRIPTION_PROMPT,
         });
       }
     } catch (error) {
@@ -960,6 +1082,11 @@ export default function LLMSettingsPage() {
         // OPB settings
         opb_system_prompt: opbSystemPrompt,
         opb_style_guidelines: opbStyleGuidelines,
+        // Decoration settings
+        decoration_system_prompt: decorationSystemPrompt,
+        decoration_style_guidelines: decorationStyleGuidelines,
+        // Duty description prompt
+        duty_description_prompt: dutyDescriptionPrompt,
       };
 
       if (hasExistingSettings) {
@@ -989,6 +1116,9 @@ export default function LLMSettingsPage() {
         awardSentencesPerCategory: JSON.parse(JSON.stringify(awardSentencesPerCategory)),
         opbSystemPrompt,
         opbStyleGuidelines,
+        decorationSystemPrompt,
+        decorationStyleGuidelines,
+        dutyDescriptionPrompt,
       });
 
       toast.success("Settings saved successfully");
@@ -1025,6 +1155,11 @@ export default function LLMSettingsPage() {
     setAwardAbbreviations([]);
     setAwardStyleGuidelines(DEFAULT_AWARD_STYLE_GUIDELINES);
     setAwardSentencesPerCategory(DEFAULT_AWARD_SENTENCES as unknown as AwardSentencesPerCategory);
+    // Reset decoration settings
+    setDecorationSystemPrompt(DEFAULT_DECORATION_SYSTEM_PROMPT);
+    setDecorationStyleGuidelines(DEFAULT_DECORATION_STYLE_GUIDELINES);
+    // Reset duty description prompt
+    setDutyDescriptionPrompt(DEFAULT_DUTY_DESCRIPTION_PROMPT);
     toast.success("Settings reset to defaults (save to apply)");
   }
 
@@ -1107,7 +1242,7 @@ export default function LLMSettingsPage() {
       <Tabs defaultValue="general" className="w-full space-y-3 sm:space-y-4">
         <TabsList className={cn(
           "w-full h-auto p-1 grid gap-0.5",
-          userIsOfficer ? "grid-cols-7" : "grid-cols-6"
+          userIsOfficer ? "grid-cols-8" : "grid-cols-7"
         )}>
           <TabsTrigger value="general" className="flex-col sm:flex-row gap-0.5 sm:gap-1.5 text-[10px] sm:text-xs px-1 sm:px-2.5 py-1.5 sm:py-2 data-[state=active]:text-foreground">
             <Settings className="size-4 sm:size-3.5 shrink-0" />
@@ -1126,6 +1261,10 @@ export default function LLMSettingsPage() {
           <TabsTrigger value="award-prompt" className="flex-col sm:flex-row gap-0.5 sm:gap-1.5 text-[10px] sm:text-xs px-1 sm:px-2.5 py-1.5 sm:py-2 data-[state=active]:text-foreground">
             <Award className="size-4 sm:size-3.5 shrink-0" />
             <span className="hidden sm:inline">Award</span>
+          </TabsTrigger>
+          <TabsTrigger value="decoration-prompt" className="flex-col sm:flex-row gap-0.5 sm:gap-1.5 text-[10px] sm:text-xs px-1 sm:px-2.5 py-1.5 sm:py-2 data-[state=active]:text-foreground">
+            <Medal className="size-4 sm:size-3.5 shrink-0" />
+            <span className="hidden sm:inline">Decs</span>
           </TabsTrigger>
           <TabsTrigger value="verbs" className="flex-col sm:flex-row gap-0.5 sm:gap-1.5 text-[10px] sm:text-xs px-1 sm:px-2.5 py-1.5 sm:py-2 data-[state=active]:text-foreground">
             <FileText className="size-4 sm:size-3.5 shrink-0" />
@@ -1216,6 +1355,46 @@ export default function LLMSettingsPage() {
                 </p>
               </div>
 
+              <Separator />
+
+              {/* Style Signature Refresh */}
+              <div className="space-y-2">
+                <Label className="text-xs sm:text-sm">Writing Style Signatures</Label>
+                <p className="text-[10px] sm:text-xs text-muted-foreground">
+                  Style signatures capture your unique writing patterns (sentence structure, verb choices, formality) for each rank, AFSC, and MPA combination. They are automatically refreshed when you finalize EPBs or update library examples. Use this button to manually regenerate them.
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={isRefreshingSignatures}
+                  onClick={async () => {
+                    setIsRefreshingSignatures(true);
+                    try {
+                      const response = await fetch("/api/refresh-style-signatures", { method: "POST" });
+                      if (!response.ok) throw new Error("Refresh failed");
+                      const result = await response.json();
+                      toast.success(
+                        result.signaturesGenerated > 0
+                          ? `Refreshed ${result.signaturesGenerated} style signature${result.signaturesGenerated > 1 ? "s" : ""}`
+                          : "All signatures are up to date"
+                      );
+                    } catch {
+                      toast.error("Failed to refresh style signatures");
+                    } finally {
+                      setIsRefreshingSignatures(false);
+                    }
+                  }}
+                  className="gap-1.5"
+                >
+                  {isRefreshingSignatures ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <RotateCcw className="size-3.5" />
+                  )}
+                  {isRefreshingSignatures ? "Refreshing..." : "Refresh Style Signatures"}
+                </Button>
+              </div>
+
             
             </CardContent>
           </Card>
@@ -1242,6 +1421,54 @@ export default function LLMSettingsPage() {
                 className="font-mono text-xs sm:text-sm min-h-[200px] sm:min-h-[400px]"
                 placeholder="Enter your custom EPB system prompt..."
               />
+            </CardContent>
+          </Card>
+
+          {/* Duty Description Prompt */}
+          <Card>
+            <CardHeader className="px-3 py-3 sm:px-6 sm:py-4">
+              <CardTitle className="text-base sm:text-lg flex items-center gap-2">
+                <Users className="size-4" />
+                Duty Description Prompt
+              </CardTitle>
+              <CardDescription className="text-xs sm:text-sm">
+                Customize the AI prompt used when revising the Duty Description section of an EPB. This is separate from the performance statement prompt above.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="px-3 pb-4 sm:px-6 sm:pb-6 space-y-3 sm:space-y-4">
+              <div className="p-3 bg-blue-50/50 dark:bg-blue-900/10 rounded-lg border border-blue-200 dark:border-blue-800/50">
+                <div className="flex items-start gap-2">
+                  <Info className="size-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+                  <div className="text-xs text-blue-800 dark:text-blue-200 space-y-1">
+                    <p className="font-medium">Duty Description vs Performance Statements</p>
+                    <p className="text-blue-700 dark:text-blue-300">
+                      Duty descriptions use <strong>present tense</strong> to describe the member&apos;s current role, scope, and 
+                      responsibilities. They are factual and descriptive - NOT performance-based. The MPA statements above 
+                      use past tense action verbs to describe accomplishments and performance.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <Textarea
+                value={dutyDescriptionPrompt}
+                onChange={(e) => setDutyDescriptionPrompt(e.target.value)}
+                rows={10}
+                className="font-mono text-xs sm:text-sm min-h-[200px] sm:min-h-[350px]"
+                placeholder="Enter your custom duty description prompt..."
+              />
+
+              <div className="flex items-center justify-between gap-2 pt-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setDutyDescriptionPrompt(DEFAULT_DUTY_DESCRIPTION_PROMPT)}
+                  className="h-8"
+                >
+                  <RotateCcw className="size-3 mr-1.5" />
+                  Reset to Default
+                </Button>
+              </div>
             </CardContent>
           </Card>
 
@@ -1513,6 +1740,96 @@ export default function LLMSettingsPage() {
                 <p className="text-[10px] sm:text-xs text-muted-foreground">
                   Available placeholders: {"{{ratee_rank}}"}, {"{{primary_verbs}}"}, {"{{rank_verb_guidance}}"}, {"{{abbreviations_list}}"}
                 </p>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Decoration System Prompt */}
+        <TabsContent value="decoration-prompt" className="w-full space-y-4">
+          <Card>
+            <CardHeader className="px-3 py-3 sm:px-6 sm:py-4">
+              <CardTitle className="text-base sm:text-lg flex items-center gap-2">
+                <Medal className="size-4" />
+                Decoration Citation Prompt
+              </CardTitle>
+              <CardDescription className="text-xs sm:text-sm">
+                Customize the AI prompt for decoration citation generation (AFAM, AFCM, MSM, LOM, BSM).
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="px-3 pb-4 sm:px-6 sm:pb-6 space-y-4 sm:space-y-6">
+              <div className="p-3 bg-amber-50/50 dark:bg-amber-900/10 rounded-lg border border-amber-200 dark:border-amber-800/50">
+                <div className="flex items-start gap-2">
+                  <Info className="size-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                  <div className="text-xs text-amber-800 dark:text-amber-200 space-y-1">
+                    <p className="font-medium">Decoration-Specific Rules</p>
+                    <p className="text-amber-700 dark:text-amber-300">
+                      Decorations require everything to be spelled out per DAFMAN 36-2806. Abbreviations and acronyms 
+                      from your EPB/Award settings are <strong>not</strong> applied to decoration citations. Only the 
+                      rank-based verb progression is shared.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <PlaceholderStatus systemPrompt={decorationSystemPrompt} />
+
+              <Textarea
+                value={decorationSystemPrompt}
+                onChange={(e) => setDecorationSystemPrompt(e.target.value)}
+                rows={12}
+                className="font-mono text-xs sm:text-sm min-h-[200px] sm:min-h-[400px]"
+                placeholder="Enter your custom decoration system prompt..."
+              />
+              <p className="text-[10px] sm:text-xs text-muted-foreground">
+                Available placeholders: {"{{ratee_rank}}"}, {"{{primary_verbs}}"}, {"{{rank_verb_guidance}}"}. 
+                Note: {"{{abbreviations_list}}"} and {"{{acronyms_list}}"} are intentionally excluded for decorations.
+              </p>
+
+              <div className="flex items-center justify-between gap-2 pt-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setDecorationSystemPrompt(DEFAULT_DECORATION_SYSTEM_PROMPT)}
+                  className="h-8"
+                >
+                  <RotateCcw className="size-3 mr-1.5" />
+                  Reset to Default
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Decoration Style Guidelines */}
+          <Card>
+            <CardHeader className="px-3 py-3 sm:px-6 sm:py-4">
+              <CardTitle className="text-base sm:text-lg flex items-center gap-2">
+                <FileText className="size-4" />
+                Decoration Style Guidelines
+              </CardTitle>
+              <CardDescription className="text-xs sm:text-sm">
+                Additional style guidance for decoration citations. Focus on dignity, clarity, and formal military documentation standards.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="px-3 pb-4 sm:px-6 sm:pb-6 space-y-3 sm:space-y-4">
+              <Textarea
+                value={decorationStyleGuidelines}
+                onChange={(e) => setDecorationStyleGuidelines(e.target.value)}
+                rows={4}
+                className="font-mono text-xs sm:text-sm min-h-[100px] sm:min-h-[150px]"
+                placeholder="Enter decoration-specific style guidelines..."
+              />
+              
+              <div className="flex items-center justify-between gap-2 pt-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setDecorationStyleGuidelines(DEFAULT_DECORATION_STYLE_GUIDELINES)}
+                  className="h-8"
+                >
+                  <RotateCcw className="size-3 mr-1.5" />
+                  Reset to Default
+                </Button>
               </div>
             </CardContent>
           </Card>

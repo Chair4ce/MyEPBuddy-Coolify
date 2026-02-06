@@ -17,6 +17,7 @@ import {
 } from "@/lib/quality-control";
 import type { MPADescriptions, Project, ProjectStakeholder } from "@/types/database";
 import type { Rank, WritingStyle, UserLLMSettings, MajorGradedArea, Acronym, Abbreviation } from "@/types/database";
+import { getChainStyleSignature, getUserStyleSignature, buildSignaturePromptSection } from "@/lib/style-signatures";
 
 // Allow up to 60s for LLM calls (initial generation + quality control)
 export const maxDuration = 60;
@@ -566,8 +567,9 @@ async function fetchExampleStatements(
     });
   }
 
-  // PRIORITY 2: Personal examples (if writing style includes personal)
-  if (writingStyle === "personal" || writingStyle === "hybrid") {
+  // PRIORITY 2: Personal examples (if writing style includes personal or chain_of_command)
+  // For chain_of_command: the style signature controls HOW to write; personal examples provide WHAT to write about
+  if (writingStyle === "personal" || writingStyle === "chain_of_command") {
     const { data: personalData } = await supabase
       .from("refined_statements")
       .select("mpa, statement")
@@ -591,8 +593,8 @@ async function fetchExampleStatements(
     }
   }
 
-  // PRIORITY 3: Community examples (if writing style includes community)
-  if (writingStyle === "community" || writingStyle === "hybrid") {
+  // PRIORITY 3: Community examples (if writing style is community)
+  if (writingStyle === "community") {
     // Fetch top 20 community-voted statements for the selected AFSC
     // Optionally filtered by specific MPA for more targeted examples
     let query = supabase
@@ -671,7 +673,8 @@ function buildSystemPrompt(
   settings: Partial<UserLLMSettings>,
   rateeRank: Rank,
   examples: ExampleStatement[],
-  dutyDescription?: string
+  dutyDescription?: string,
+  styleSignatureSection?: string
 ): string {
   const rankVerbs = settings.rank_verb_progression?.[rateeRank] || {
     primary: ["Led", "Managed"],
@@ -732,6 +735,11 @@ The following describes the member's primary duty position and key responsibilit
 ${dutyDescription}
 
 IMPORTANT: Reference the duty description when generating statements to ensure accuracy and relevance to the member's actual job responsibilities. Statements should align with the scope and scale of their duties.`;
+  }
+
+  // Add style signature fingerprint if available
+  if (styleSignatureSection) {
+    prompt += `\n\n${styleSignatureSection}`;
   }
 
   // Add banned formatting rules
@@ -900,7 +908,51 @@ export async function POST(request: Request) {
       projectContextPrompt = sections.join("\n");
     }
 
-    const systemPrompt = buildSystemPrompt(settings, rateeRank, examples, dutyDescription);
+    // Load style signature based on writing style preference
+    let styleSignatureSection = "";
+    const effectiveWritingStyle = writingStyle || "personal";
+
+    if (effectiveWritingStyle === "chain_of_command" && rateeAfsc) {
+      // Chain of command: load the highest-ranking supervisor's style signature
+      try {
+        const chainResult = await getChainStyleSignature(
+          user.id,
+          rateeRank,
+          rateeAfsc,
+          selectedMPAs?.[0] || "general"
+        );
+        if (chainResult.signature) {
+          styleSignatureSection = buildSignaturePromptSection(
+            chainResult.signature.signature_text,
+            chainResult.sourceRank,
+            chainResult.fallbackUsed
+          );
+        }
+      } catch (err) {
+        console.error("[generate] Chain style signature error:", err);
+        // Continue without signature - graceful degradation
+      }
+    } else if (effectiveWritingStyle === "personal" && rateeAfsc) {
+      // Personal: optionally load the user's own signature for enhanced personalization
+      try {
+        const personalSig = await getUserStyleSignature(
+          user.id,
+          rateeRank,
+          rateeAfsc,
+          selectedMPAs?.[0] || "general"
+        );
+        if (personalSig) {
+          styleSignatureSection = buildSignaturePromptSection(
+            personalSig.signature_text
+          );
+        }
+      } catch (err) {
+        console.error("[generate] Personal style signature error:", err);
+      }
+    }
+    // For "community" style: no signature injection, rely on community examples
+
+    const systemPrompt = buildSystemPrompt(settings, rateeRank, examples, dutyDescription, styleSignatureSection);
     const modelProvider = getModelProvider(model, userKeys);
 
     // Group accomplishments by MPA (only if not using custom context)

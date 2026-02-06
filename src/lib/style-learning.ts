@@ -192,7 +192,8 @@ export function applyStyleToRevisionParams(
 
 /**
  * Process pending feedback events for a user
- * Call this after user actions that might generate new learning data
+ * Call this after user actions that might generate new learning data.
+ * Also triggers a background style signature refresh.
  */
 export async function triggerStyleProcessing(userId: string): Promise<void> {
   try {
@@ -210,6 +211,16 @@ export async function triggerStyleProcessing(userId: string): Promise<void> {
       .catch(() => {
         // Silent fail - background processing shouldn't break anything
       });
+
+    // Also trigger style signature refresh in the background
+    // Import dynamically to avoid circular deps
+    import("@/lib/style-signatures").then(({ refreshUserSignatures }) => {
+      refreshUserSignatures(userId).catch(() => {
+        // Silent fail - signature refresh is non-critical
+      });
+    }).catch(() => {
+      // Silent fail
+    });
   } catch {
     // Silent fail
   }

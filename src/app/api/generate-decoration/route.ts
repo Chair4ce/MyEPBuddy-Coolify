@@ -9,6 +9,7 @@ import { getDecryptedApiKeys } from "@/app/actions/api-keys";
 import { buildDecorationSystemPrompt, expandAbbreviations } from "@/lib/decoration-prompts";
 import type { DecorationAwardType, DecorationReason } from "@/lib/decoration-constants";
 import { DECORATION_TYPES } from "@/lib/decoration-constants";
+import type { UserLLMSettings } from "@/types/database";
 
 // Allow up to 60s for LLM calls
 export const maxDuration = 60;
@@ -80,26 +81,81 @@ export async function POST(request: Request) {
       );
     }
     
-    // Build system prompt
-    const systemPrompt = buildDecorationSystemPrompt({
-      awardType: body.awardType,
-      reason: body.reason || "meritorious_service",
-      rank: body.rateeRank,
-      fullName: body.rateeName,
-      dutyTitle: body.dutyTitle || "member",
-      unit: body.unit || "the organization",
-      startDate: body.startDate || "start date",
-      endDate: body.endDate || "end date",
-      accomplishments: body.accomplishments,
-      gender: body.rateeGender,
-      maxCharacters: decorationConfig.maxCharacters,
-    });
+    // Load user LLM settings for custom decoration prompt and rank verbs
+    const { data: settingsData } = await supabase
+      .from("user_llm_settings")
+      .select("decoration_system_prompt, decoration_style_guidelines, rank_verb_progression")
+      .eq("user_id", user.id)
+      .maybeSingle();
     
+    const userSettings = settingsData as unknown as Partial<UserLLMSettings> | null;
+    
+    // Build system prompt - use user's custom decoration prompt if available
+    let systemPrompt: string;
+    
+    if (userSettings?.decoration_system_prompt) {
+      // User has a custom decoration prompt - apply verb placeholder replacements
+      // Decorations do NOT get abbreviations or acronyms (everything spelled out)
+      const rankVerbs = userSettings.rank_verb_progression?.[body.rateeRank as keyof typeof userSettings.rank_verb_progression] || {
+        primary: ["Led", "Managed"],
+        secondary: ["Executed", "Coordinated"],
+      };
+      const rankVerbGuidance = `Primary verbs: ${rankVerbs.primary.join(", ")}\n  Secondary verbs: ${rankVerbs.secondary.join(", ")}`;
+      
+      let prompt = userSettings.decoration_system_prompt;
+      prompt = prompt.replace(/\{\{ratee_rank\}\}/g, body.rateeRank);
+      prompt = prompt.replace(/\{\{primary_verbs\}\}/g, rankVerbs.primary.join(", "));
+      prompt = prompt.replace(/\{\{rank_verb_guidance\}\}/g, rankVerbGuidance);
+      
+      // Append style guidelines if available
+      if (userSettings.decoration_style_guidelines) {
+        prompt += `\n\nADDITIONAL STYLE GUIDANCE:\n${userSettings.decoration_style_guidelines}`;
+      }
+      
+      // Append the structured citation details (opening template, accomplishments, etc.)
+      // The user prompt handles ratee info, accomplishments, and closing template
+      systemPrompt = prompt;
+    } else {
+      // Use default hardcoded decoration prompt builder
+      systemPrompt = buildDecorationSystemPrompt({
+        awardType: body.awardType,
+        reason: body.reason || "meritorious_service",
+        rank: body.rateeRank,
+        fullName: body.rateeName,
+        dutyTitle: body.dutyTitle || "member",
+        unit: body.unit || "the organization",
+        startDate: body.startDate || "start date",
+        endDate: body.endDate || "end date",
+        accomplishments: body.accomplishments,
+        gender: body.rateeGender,
+        maxCharacters: decorationConfig.maxCharacters,
+      });
+    }
+    
+    // Build user prompt with ratee details and accomplishments
+    const userPrompt = userSettings?.decoration_system_prompt
+      ? `Generate a ${decorationConfig.name} (${decorationConfig.abbreviation}) citation.
+
+## RATEE INFORMATION
+- Rank: ${body.rateeRank}
+- Full Name: ${body.rateeName}
+- Duty Title: ${body.dutyTitle || "member"}
+- Unit: ${body.unit || "the organization"}
+- Period: ${body.startDate || "start date"} to ${body.endDate || "end date"}
+- Award Reason: ${body.reason || "meritorious_service"}
+- Maximum Characters: ${decorationConfig.maxCharacters}
+
+## ACCOMPLISHMENTS TO INCORPORATE
+${body.accomplishments.map((a, i) => `${i + 1}. ${a}`).join("\n")}
+
+Generate the complete decoration citation. Output ONLY the citation text, ready to paste directly onto ${decorationConfig.afForm}.`
+      : "Generate the complete decoration citation based on the provided information and accomplishments.";
+
     // Generate citation
     const { text: rawCitation } = await generateText({
       model: modelProvider,
       system: systemPrompt,
-      prompt: "Generate the complete decoration citation based on the provided information and accomplishments.",
+      prompt: userPrompt,
       temperature: 0.7,
       maxTokens: 2000,
     });

@@ -404,6 +404,13 @@ export default function LibraryPage() {
 
       toast.success("Statement updated");
       setEditingStatement(null);
+
+      // Fire-and-forget: refresh style signatures when LLM example status changes
+      if (editedUseAsLlmExample !== editingStatement.use_as_llm_example) {
+        fetch("/api/refresh-style-signatures", { method: "POST" }).catch(() => {
+          // Silent fail - background processing
+        });
+      }
     } catch (error) {
       console.error("Save error:", error);
       toast.error("Failed to update statement");

@@ -65,7 +65,7 @@ import { useEPBCollaboration } from "@/hooks/use-epb-collaboration";
 import { useSectionLocks } from "@/hooks/use-section-locks";
 import { useShellFieldLocks } from "@/hooks/use-shell-field-locks";
 import { useIdleDetection } from "@/hooks/use-idle-detection";
-import type { EPBShell, EPBShellSection, EPBShellSnapshot, EPBSavedExample, Accomplishment, Profile, ManagedMember, UserLLMSettings, Rank, DutyDescriptionSnapshot, DutyDescriptionExample, DutyDescriptionTemplate } from "@/types/database";
+import type { EPBShell, EPBShellSection, EPBShellSnapshot, EPBSavedExample, Accomplishment, Profile, ManagedMember, UserLLMSettings, Rank, DutyDescriptionSnapshot, DutyDescriptionExample, DutyDescriptionTemplate, WritingStyle } from "@/types/database";
 import { useClarifyingQuestionsStore } from "@/stores/clarifying-questions-store";
 
 // Shared EPB info - represents an EPB shell that has been shared with the current user
@@ -80,12 +80,14 @@ interface SharedEPBInfo {
 interface EPBShellFormProps {
   cycleYear: number;
   model: string;
+  writingStyle: WritingStyle;
   onOpenAccomplishments: (mpa: string) => void;
 }
 
 export function EPBShellForm({
   cycleYear,
   model,
+  writingStyle,
   onOpenAccomplishments,
 }: EPBShellFormProps) {
   const supabase = createClient();
@@ -1679,7 +1681,7 @@ export function EPBShellForm({
             rateeAfsc: selectedRatee.afsc,
             cycleYear,
             model,
-            writingStyle: "personal",
+            writingStyle,
             selectedMPAs: [mpa],
             customContext: context,
             customContextOptions: {
@@ -1792,6 +1794,10 @@ export function EPBShellForm({
           aggressiveness,
           fillToMax,
           maxCharacters: maxChars,
+          category: mpa,
+          writingStyle,
+          rateeRank: selectedRatee?.rank,
+          rateeAfsc: selectedRatee?.afsc,
         }),
       });
 
@@ -1826,11 +1832,15 @@ export function EPBShellForm({
           selectionEnd: text.length,
           model,
           mode: "general",
-          context: context || "Rewrite this duty description with improved flow, better word economy, and stronger action verbs. Focus on describing responsibilities, scope, and impact areas. Do NOT include specific accomplishment metrics or results - this is a role description, not a performance statement.",
+          isDutyDescription: true,
+          context: context || "Rewrite this duty description with improved word economy and flow. Keep present tense, describe scope and responsibility factually. Do NOT add performance language or accomplishment results.",
           versionCount,
           aggressiveness,
           fillToMax,
           maxCharacters: MAX_DUTY_DESCRIPTION_CHARACTERS,
+          category: "duty_description",
+          rateeRank: selectedRatee?.rank,
+          rateeAfsc: selectedRatee?.afsc,
         }),
       });
 

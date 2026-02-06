@@ -20,7 +20,8 @@ import {
   shouldRunQualityControl,
   type QualityControlConfig,
 } from "@/lib/quality-control";
-import type { StyleExampleCategory } from "@/types/database";
+import type { StyleExampleCategory, WritingStyle } from "@/types/database";
+import { getChainStyleSignature, getUserStyleSignature, buildSignaturePromptSection } from "@/lib/style-signatures";
 
 // Allow up to 60s for LLM calls (initial generation + quality control pass)
 export const maxDuration = 60;
@@ -39,6 +40,10 @@ interface ReviseSelectionRequest {
   maxCharacters?: number; // Max character limit for the statement
   versionCount?: number; // Number of revisions to generate (default 3)
   category?: StyleExampleCategory; // MPA category for style learning
+  isDutyDescription?: boolean; // If true, use duty-description-specific prompt (scope/responsibility, not performance)
+  writingStyle?: WritingStyle; // Writing style preference for style signature injection
+  rateeRank?: string; // Rank of the ratee (for style signature lookup)
+  rateeAfsc?: string; // AFSC of the ratee (for style signature lookup)
 }
 
 // Overused/cliché verbs that should be avoided unless user explicitly requests them
@@ -111,6 +116,181 @@ function getModelProvider(
   }
 }
 
+/**
+ * Build system prompt for DUTY DESCRIPTION revisions.
+ * Duty descriptions describe the member's scope of responsibility and role in present tense.
+ * They are NOT performance statements - no past-tense action verbs, no subjective adjectives,
+ * no accomplishment results, no "how well" language.
+ */
+function buildDutyDescriptionPrompt(
+  mode: "expand" | "compress" | "general",
+  modeInstructions: Record<string, string>,
+  aggressivenessInstructions: string,
+  fillInstructions: string,
+  styleGuidance: string,
+  fewShotExamples: string,
+  versionCount: number,
+  userCustomPrompt?: string | null,
+): string {
+  // Override mode instructions for duty descriptions
+  const dutyModeOverride: Record<string, string> = {
+    expand: `**MODE: EXPAND (use longer words to fill more space)**
+Your goal is to make the selected text LONGER by:
+- Using longer, more descriptive words for the role and scope
+- Adding specific organizational details, team sizes, or mission scope
+- Expanding abbreviations to full words where space allows
+- Adding positional framing (e.g., "As a [role]" or "Serving as [position]")
+- KEEP PRESENT TENSE - this describes a current role, not a past accomplishment`,
+    compress: `**MODE: COMPRESS (use shorter words to save space)**
+Your goal is to make the selected text SHORTER by:
+- Using shorter, concise words to describe the role and scope
+- Abbreviating where standard AF abbreviations exist (e.g., "member" → "mbr", "team" → "tm")
+- Combining descriptive phrases where possible
+- Removing redundant positional language
+- KEEP PRESENT TENSE - this describes a current role, not a past accomplishment`,
+    general: `**MODE: IMPROVE (rewrite with fresh perspective)**
+Your goal is to improve the duty description by:
+- Using a different opening structure or framing
+- Varying how the scope and responsibility are described
+- Each of your ${versionCount} alternatives should approach the role description from a different angle
+- KEEP PRESENT TENSE - this describes a current role, not a past accomplishment
+- Target length: ~similar to original (within 20%)`,
+  };
+
+  // Use user's custom prompt if available, otherwise use default
+  const basePrompt = userCustomPrompt || `You are an expert Air Force writer helping to revise a DUTY DESCRIPTION for an EPB (Enlisted Performance Brief).
+
+**⚠️ THIS IS A DUTY DESCRIPTION - NOT A PERFORMANCE STATEMENT ⚠️**
+
+A duty description describes the member's CURRENT ROLE, SCOPE, and RESPONSIBILITIES.
+It is purely factual and descriptive - it states WHAT the member's job encompasses, NOT how well they perform.
+
+**DUTY DESCRIPTION WRITING RULES:**
+1. USE PRESENT TENSE - describes a current, ongoing role (e.g., "drives", "supports", "coordinates", "manages")
+2. NEVER use past tense performance verbs (e.g., "led", "directed", "ensured", "bolstered", "enhanced")
+3. NEVER use subjective performance adjectives (e.g., "expertly", "skillfully", "effectively", "proficiently")
+4. NEVER add accomplishment results or impact language (e.g., "ensured seamless integration", "bolstered command capabilities")
+5. Describe SCOPE and RESPONSIBILITY - team size, mission area, organizations supported, programs owned
+6. Use descriptive framing like "As a [role]", "Serving as [position]", or direct present-tense descriptions
+7. Do NOT invent new facts or add scope that isn't in the original - only rephrase existing content
+
+**GOOD DUTY DESCRIPTION VERBS (present tense, descriptive):**
+drives, supports, coordinates, manages, oversees, advises, maintains, provides, enables, serves as, operates, sustains, 
+ensures (only for describing an ongoing responsibility), administers, represents, liaises, synchronizes, integrates, 
+conducts, facilitates (for coordination, not accomplishments), monitors, evaluates, governs, directs (present tense only)
+
+**BAD - NEVER USE THESE IN DUTY DESCRIPTIONS:**
+- Past-tense performance verbs: led, directed, managed, executed, ensured (past), bolstered, enhanced, strengthened, championed, pioneered
+- Subjective adjectives: expertly, skillfully, proficiently, adeptly, effectively, seamlessly
+- Accomplishment/result language: "resulting in", "enabling X% improvement", "saving $X", "bolstering capabilities"
+- Cliché openers: "Charged as", "Selected as", "Piloted" (these imply performance, not scope)
+
+**EXAMPLE - CORRECT DUTY DESCRIPTION STYLE:**
+"As a crew operations subject matter expert, he drives a 3-member cyber event coordination team during a numbered AF transition, supporting the elevation of AFSOUTH to a Service Component Command and establishing AFSOUTH's first ever MAJCOM Cyber Coordination Center."
+
+**EXAMPLE - WRONG (performance language, past tense):**
+"Charged as crew ops SME, he expertly led a 3-mbr cyber event coordination team during a Numbered AF transition, enabling AFSOUTH's elevation to a Service Component Command & standing up AFSOUTH's initial MAJCOM Cyber Coordination Center. His guidance ensured seamless integration & enhanced cyber readiness."`;
+
+  return `${basePrompt}
+
+${dutyModeOverride[mode]}
+
+${aggressivenessInstructions}
+${fillInstructions}
+
+${styleGuidance}
+
+${fewShotExamples}
+
+**FORBIDDEN PUNCTUATION (DO NOT USE UNDER ANY CIRCUMSTANCES):**
+- Em-dashes: -- (ABSOLUTELY NEVER use these)
+- Semicolons: ;
+
+**USE ONLY:** Commas (,) and "and"/"&" to connect clauses
+
+**PRESERVE THESE EXACTLY (never change):**
+- All numbers and metrics (e.g., "36", "3-member", "$14B", "909K")
+- Acronyms (e.g., "AFSOUTH", "MAJCOM", "AF")
+- Proper nouns and organizational names
+- Team sizes and specific scope details
+
+CRITICAL RULES:
+1. PRESENT TENSE ONLY - "drives", "supports", "coordinates" - NOT "led", "drove", "supported"
+2. NO performance adjectives - NO "expertly", "skillfully", "seamlessly"
+3. NO accomplishment results or impact beyond describing the role's scope
+4. Each of your ${versionCount} alternatives MUST use DIFFERENT opening structures
+5. Output ONLY the revised text - no quotes, no explanation
+6. Maintain grammatical coherence with surrounding text
+7. NEVER use em-dashes (--) - use COMMAS instead
+8. KEEP factual content identical - only rephrase, do not invent new scope or responsibilities
+9. Prefer "&" over "and" when saving space
+10. AVOID the word "the" where possible - it wastes characters`;
+}
+
+/**
+ * Build system prompt for MPA STATEMENT revisions (performance/accomplishment statements).
+ * These use past-tense action verbs and describe the member's accomplishments and impact.
+ */
+function buildStatementPrompt(
+  mode: "expand" | "compress" | "general",
+  modeInstructions: Record<string, string>,
+  aggressivenessInstructions: string,
+  fillInstructions: string,
+  styleGuidance: string,
+  fewShotExamples: string,
+  verbsToAvoid: string[],
+  availableVerbs: string[],
+  versionCount: number,
+): string {
+  return `You are an expert Air Force writer helping to revise a portion of an award statement (AF Form 1206).
+
+Your task is to revise the selected portion of text while maintaining coherence with the surrounding context.
+
+${modeInstructions[mode]}
+
+${aggressivenessInstructions}
+${fillInstructions}
+
+${styleGuidance}
+
+${fewShotExamples}
+
+**BANNED VERBS - NEVER USE THESE (overused clichés):**
+${verbsToAvoid.map(v => `- "${v}"`).join("\n")}
+
+**RECOMMENDED STRONG VERBS (use these instead):**
+${availableVerbs.slice(0, 20).join(", ")}
+
+**FORBIDDEN PUNCTUATION (DO NOT USE UNDER ANY CIRCUMSTANCES):**
+- Em-dashes: -- (ABSOLUTELY NEVER use these)
+- Semicolons: ;
+- Slashes: /
+
+**USE ONLY:** Commas (,) to connect clauses
+
+**PRESERVE THESE EXACTLY (never change):**
+- All numbers and metrics (e.g., "36", "24/7", "$14B", "909K", "1.2M")
+- Percentages (e.g., "99%", "15%")
+- Dollar amounts (e.g., "$5M", "$14B")
+- Abbreviations for units (e.g., "Amn", "hrs", "TB")
+- Acronyms (e.g., "O&M", "AFCYBER", "USCYBERCOM")
+- Proper nouns and organizational names
+
+CRITICAL RULES:
+1. NEVER use any verb from the BANNED list - these are overused Air Force clichés
+2. Each of your ${versionCount} alternatives MUST use DIFFERENT opening verbs from each other
+3. Output ONLY the revised text for the selected portion - no quotes, no explanation
+4. Maintain the same general meaning but with appropriately varied phrasing based on aggressiveness level
+5. Maintain grammatical coherence with surrounding text
+6. NEVER use em-dashes (--) - use COMMAS instead to connect clauses
+7. If the selection starts at the beginning of the statement and includes "- ", preserve the "- " prefix
+8. READABILITY: Revised text should flow naturally when read aloud
+9. PARALLELISM: Use consistent verb tense throughout (all past tense OR all present participles)
+10. AVOID creating run-on laundry lists of 5+ actions - keep it focused
+11. AVOID the word "the" - it wastes characters (e.g., "led the team" → "led 4-mbr team" - always quantify scope)
+12. CONSISTENCY: Use either "&" OR "and" throughout - NEVER mix them. Prefer "&" when saving space.`;
+}
+
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
@@ -138,8 +318,23 @@ export async function POST(request: Request) {
       maxCharacters,
       versionCount = 3,
       category,
+      isDutyDescription = false,
+      writingStyle,
+      rateeRank,
+      rateeAfsc,
     } = body;
     
+    // Load user's custom duty description prompt if this is a duty description revision
+    let userDutyDescriptionPrompt: string | null = null;
+    if (isDutyDescription) {
+      const { data: settingsData } = await supabase
+        .from("user_llm_settings")
+        .select("duty_description_prompt")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      userDutyDescriptionPrompt = (settingsData as { duty_description_prompt: string | null } | null)?.duty_description_prompt || null;
+    }
+
     // Fetch user style context for personalization (non-blocking if fails)
     const styleContext = await getUserStyleContext(user.id, category);
     
@@ -282,53 +477,56 @@ Your goal is to SIGNIFICANTLY transform the selected text:
     const styleGuidance = buildStyleGuidance(styleContext);
     const fewShotExamples = buildFewShotExamples(styleContext, "USER'S APPROVED STATEMENTS (match this style)");
 
-    const systemPrompt = `You are an expert Air Force writer helping to revise a portion of an award statement (AF Form 1206).
+    // Load style signature for chain_of_command or personal style (non-duty-description only)
+    let styleSignatureSection = "";
+    if (!isDutyDescription && rateeRank && rateeAfsc) {
+      const effectiveStyle = writingStyle || "personal";
+      if (effectiveStyle === "chain_of_command") {
+        try {
+          const chainResult = await getChainStyleSignature(
+            user.id,
+            rateeRank,
+            rateeAfsc,
+            category || "general"
+          );
+          if (chainResult.signature) {
+            styleSignatureSection = buildSignaturePromptSection(
+              chainResult.signature.signature_text,
+              chainResult.sourceRank,
+              chainResult.fallbackUsed
+            );
+          }
+        } catch (err) {
+          console.error("[revise-selection] Chain style signature error:", err);
+        }
+      } else if (effectiveStyle === "personal") {
+        try {
+          const personalSig = await getUserStyleSignature(
+            user.id,
+            rateeRank,
+            rateeAfsc,
+            category || "general"
+          );
+          if (personalSig) {
+            styleSignatureSection = buildSignaturePromptSection(
+              personalSig.signature_text
+            );
+          }
+        } catch (err) {
+          console.error("[revise-selection] Personal style signature error:", err);
+        }
+      }
+    }
 
-Your task is to revise the selected portion of text while maintaining coherence with the surrounding context.
+    // Build system prompt - duty descriptions have fundamentally different writing rules
+    let systemPrompt = isDutyDescription 
+      ? buildDutyDescriptionPrompt(mode, modeInstructions, aggressivenessInstructions, fillInstructions, styleGuidance, fewShotExamples, versionCount, userDutyDescriptionPrompt)
+      : buildStatementPrompt(mode, modeInstructions, aggressivenessInstructions, fillInstructions, styleGuidance, fewShotExamples, verbsToAvoid, availableVerbs, versionCount);
 
-${modeInstructions[mode]}
-
-${aggressivenessInstructions}
-${fillInstructions}
-
-${styleGuidance}
-
-${fewShotExamples}
-
-**BANNED VERBS - NEVER USE THESE (overused clichés):**
-${verbsToAvoid.map(v => `- "${v}"`).join("\n")}
-
-**RECOMMENDED STRONG VERBS (use these instead):**
-${availableVerbs.slice(0, 20).join(", ")}
-
-**FORBIDDEN PUNCTUATION (DO NOT USE UNDER ANY CIRCUMSTANCES):**
-- Em-dashes: -- (ABSOLUTELY NEVER use these)
-- Semicolons: ;
-- Slashes: /
-
-**USE ONLY:** Commas (,) to connect clauses
-
-**PRESERVE THESE EXACTLY (never change):**
-- All numbers and metrics (e.g., "36", "24/7", "$14B", "909K", "1.2M")
-- Percentages (e.g., "99%", "15%")
-- Dollar amounts (e.g., "$5M", "$14B")
-- Abbreviations for units (e.g., "Amn", "hrs", "TB")
-- Acronyms (e.g., "O&M", "AFCYBER", "USCYBERCOM")
-- Proper nouns and organizational names
-
-CRITICAL RULES:
-1. NEVER use any verb from the BANNED list - these are overused Air Force clichés
-2. Each of your ${versionCount} alternatives MUST use DIFFERENT opening verbs from each other
-3. Output ONLY the revised text for the selected portion - no quotes, no explanation
-4. Maintain the same general meaning but with appropriately varied phrasing based on aggressiveness level
-5. Maintain grammatical coherence with surrounding text
-6. NEVER use em-dashes (--) - use COMMAS instead to connect clauses
-7. If the selection starts at the beginning of the statement and includes "- ", preserve the "- " prefix
-8. READABILITY: Revised text should flow naturally when read aloud
-9. PARALLELISM: Use consistent verb tense throughout (all past tense OR all present participles)
-10. AVOID creating run-on laundry lists of 5+ actions - keep it focused
-11. AVOID the word "the" - it wastes characters (e.g., "led the team" → "led 4-mbr team" - always quantify scope)
-12. CONSISTENCY: Use either "&" OR "and" throughout - NEVER mix them. Prefer "&" when saving space.`;
+    // Append style signature to system prompt if available
+    if (styleSignatureSection) {
+      systemPrompt += `\n\n${styleSignatureSection}`;
+    }
 
     const userPrompt = `FULL STATEMENT FOR CONTEXT:
 "${fullStatement}"
@@ -345,7 +543,8 @@ TEXT AFTER SELECTION:
 ${context ? `ADDITIONAL GUIDANCE: ${context}` : ""}
 
 MODE: ${mode.toUpperCase()}
-${mode === "expand" ? "Make it LONGER with more descriptive words." : mode === "compress" ? "Make it SHORTER with concise words and abbreviations." : "Improve quality while keeping similar length."}
+${isDutyDescription ? "⚠️ DUTY DESCRIPTION - Use PRESENT TENSE only. Describe scope & responsibility factually. NO performance verbs, NO subjective adjectives, NO accomplishment results." : ""}
+${mode === "expand" ? "Make it LONGER with more descriptive words." : mode === "compress" ? "Make it SHORTER with concise words and abbreviations." : isDutyDescription ? "Rephrase with improved word economy and flow while keeping present tense and factual scope." : "Improve quality while keeping similar length."}
 AGGRESSIVENESS: ${aggressiveness}% (${aggressiveness <= 20 ? "minimal changes" : aggressiveness <= 40 ? "conservative" : aggressiveness <= 60 ? "moderate" : aggressiveness <= 80 ? "aggressive" : "maximum rewrite"})
 ${fillToMax && maxCharacters ? `
 ⚠️ CHARACTER TARGET: ${maxCharacters - 10}-${maxCharacters} chars (add ~${maxCharacters - selectedText.length > 0 ? maxCharacters - selectedText.length : 0} chars)
