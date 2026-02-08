@@ -290,7 +290,7 @@ export function SplitViewEditor({
               onChange={(e) => handleS1Change(e.target.value)}
               disabled={disabled}
               placeholder={placeholder}
-              rows={2}
+              rows={3}
               className={cn(
                 "flex w-full rounded-md border border-input bg-transparent pl-3 pr-6 py-2 text-sm shadow-xs transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50 resize-none",
                 s1Length > suggestedPerSentence && "border-amber-400/50",
@@ -362,7 +362,7 @@ export function SplitViewEditor({
               onChange={(e) => handleS2Change(e.target.value)}
               disabled={disabled}
               placeholder="Second sentence (optional)..."
-              rows={2}
+              rows={3}
               className={cn(
                 "flex w-full rounded-md border border-input bg-transparent pl-3 pr-6 py-2 text-sm shadow-xs transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50 resize-none",
                 s2Length > suggestedPerSentence && "border-amber-400/50",
