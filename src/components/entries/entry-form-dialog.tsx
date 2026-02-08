@@ -37,6 +37,7 @@ import { cn } from "@/lib/utils";
 import type { Accomplishment, AccomplishmentAssessmentScores } from "@/types/database";
 import { ProjectSelector } from "@/components/entries/project-selector";
 import { createClient } from "@/lib/supabase/client";
+import { scanForSensitiveData, getScanSummary } from "@/lib/sensitive-data-scanner";
 
 interface EntryFormDialogProps {
   open: boolean;
@@ -79,6 +80,22 @@ export function EntryFormDialog({
   const mgas = ENTRY_MGAS;
   // Cycle year is computed from the user's rank and SCOD
   const cycleYear = getActiveCycleYear(profile?.rank as Rank | null);
+
+  // Trigger background PII/CUI scan for an accomplishment (defense-in-depth)
+  // Runs asynchronously after save — if sensitive data slips past client/server
+  // validation, this will auto-redact it
+  const triggerSensitiveDataScan = async (accomplishmentId: string) => {
+    try {
+      await fetch("/api/scan-entry", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accomplishmentId }),
+      });
+    } catch (error) {
+      // Silent fail — scan is a background safety net
+      console.error("Background sensitive data scan failed:", error);
+    }
+  };
 
   // Trigger background assessment for an accomplishment
   // This runs asynchronously and updates the store when complete
@@ -252,6 +269,17 @@ export function EntryFormDialog({
       return;
     }
 
+    // Scan for PII, CUI, and classification markings — hard block if found
+    const sensitiveMatches = scanForSensitiveData({
+      details: form.details,
+      impact: form.impact,
+      metrics: form.metrics,
+    });
+    if (sensitiveMatches.length > 0) {
+      toast.error(getScanSummary(sensitiveMatches), { duration: 10000 });
+      return;
+    }
+
     setIsSubmitting(true);
 
     const tags = form.tags
@@ -315,6 +343,9 @@ export function EntryFormDialog({
             triggerAssessment(editEntry.id);
           }
           
+          // Background PII/CUI scan (defense-in-depth)
+          triggerSensitiveDataScan(editEntry.id);
+          
           // Handle project link changes
           await updateProjectLink(editEntry.id);
         }
@@ -369,6 +400,9 @@ export function EntryFormDialog({
           if (!hasPreAssessment && isEnlisted(profile?.rank as Rank)) {
             triggerAssessment(result.data.id);
           }
+          
+          // Background PII/CUI scan (defense-in-depth)
+          triggerSensitiveDataScan(result.data.id);
           
           // Link to project if selected
           if (selectedProjectId) {

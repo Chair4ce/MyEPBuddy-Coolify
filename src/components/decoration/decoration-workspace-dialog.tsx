@@ -38,6 +38,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Spinner } from "@/components/ui/spinner";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "@/components/ui/sonner";
+import { scanStatementText, getScanSummary } from "@/lib/sensitive-data-scanner";
 import { AI_MODELS } from "@/lib/constants";
 import { DECORATION_TYPES, DECORATION_REASONS } from "@/features/decorations/constants";
 import { cn, getFullName } from "@/lib/utils";
@@ -334,6 +335,15 @@ export function DecorationWorkspaceDialog({
   const handleSaveShell = useCallback(async () => {
     if (!currentShell || !profile) return;
 
+    // Scan citation text for PII/CUI/classification markings before saving
+    if (citationText) {
+      const matches = scanStatementText(citationText);
+      if (matches.length > 0) {
+        toast.error(getScanSummary(matches), { duration: 10000 });
+        return;
+      }
+    }
+
     setIsSaving(true);
 
     try {
@@ -385,6 +395,15 @@ export function DecorationWorkspaceDialog({
   // Silent save for autosave (no toast notifications)
   const handleSilentSave = useCallback(async () => {
     if (!currentShell || !profile || isSaving) return;
+
+    // Scan citation text for PII/CUI/classification markings before autosaving
+    if (citationText) {
+      const matches = scanStatementText(citationText);
+      if (matches.length > 0) {
+        toast.error(getScanSummary(matches), { duration: 10000 });
+        return;
+      }
+    }
 
     try {
       const { error } = await supabase

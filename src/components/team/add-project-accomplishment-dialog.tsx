@@ -45,6 +45,7 @@ import {
 } from "lucide-react";
 import { celebrateEntry } from "@/lib/confetti";
 import { cn } from "@/lib/utils";
+import { scanForSensitiveData, getScanSummary } from "@/lib/sensitive-data-scanner";
 
 // Role categories with their options
 const ROLE_CATEGORIES = {
@@ -301,6 +302,17 @@ export function AddProjectAccomplishmentDialog({
   async function handleSubmit() {
     if (!profile || !project || !canSubmit()) return;
 
+    // Scan for PII, CUI, and classification markings — hard block if found
+    const sensitiveMatches = scanForSensitiveData({
+      details: form.details,
+      impact: form.impact,
+      metrics: form.metrics,
+    });
+    if (sensitiveMatches.length > 0) {
+      toast.error(getScanSummary(sensitiveMatches), { duration: 10000 });
+      return;
+    }
+
     setIsSubmitting(true);
 
     const tags = form.tags
@@ -339,6 +351,12 @@ export function AddProjectAccomplishmentDialog({
         } else if (result.data) {
           successes.push(`${member.rank || ""} ${member.name}`);
           createdAccomplishmentIds.push(result.data.id);
+          // Background PII/CUI scan (defense-in-depth)
+          fetch("/api/scan-entry", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ accomplishmentId: result.data.id }),
+          }).catch(() => {});
         }
       } catch (error) {
         errors.push(`${member.rank || ""} ${member.name}: ${error instanceof Error ? error.message : "Unknown error"}`);

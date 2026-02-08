@@ -16,6 +16,7 @@ import {
 } from "@/lib/constants";
 import type { Rank } from "@/types/database";
 import type { AccomplishmentAssessmentScores } from "@/types/database";
+import { scanAccomplishmentsForLLM } from "@/lib/sensitive-data-scanner";
 
 // Allow up to 60s for LLM calls
 export const maxDuration = 60;
@@ -271,6 +272,19 @@ export async function POST(request: Request) {
           { status: 403 }
         );
       }
+    }
+
+    // Pre-transmission sensitive data scan — block before data reaches LLM providers
+    const accScan = scanAccomplishmentsForLLM([{
+      details: accomplishment.details,
+      impact: accomplishment.impact,
+      metrics: accomplishment.metrics,
+    }]);
+    if (accScan.blocked) {
+      return NextResponse.json(
+        { error: "Accomplishment contains sensitive data (PII, CUI, or classification markings) that cannot be sent to AI providers. Please remove it before assessing." },
+        { status: 400 }
+      );
     }
 
     // Get the profile of the accomplishment owner for rank context

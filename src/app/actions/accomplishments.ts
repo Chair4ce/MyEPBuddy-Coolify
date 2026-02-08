@@ -1,8 +1,73 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import type { Accomplishment } from "@/types/database";
+import {
+  scanForSensitiveData,
+  getScanSummary,
+  type SensitiveMatch,
+} from "@/lib/sensitive-data-scanner";
+
+// ---------------------------------------------------------------------------
+// Audit helper – writes to sensitive_data_audit_log via service_role
+// (table has RLS that blocks anon/authenticated roles)
+// ---------------------------------------------------------------------------
+
+async function logSensitiveDataEvent(
+  action: "blocked" | "redacted" | "scan_clean",
+  accomplishmentId: string | null,
+  userId: string,
+  matches: SensitiveMatch[],
+  originalSnippets?: Record<string, string>
+) {
+  try {
+    const service = await createServiceClient();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (service as any).from("sensitive_data_audit_log").insert({
+      accomplishment_id: accomplishmentId,
+      user_id: userId,
+      action,
+      matches: matches.length > 0 ? matches.map((m) => ({
+        type: m.type,
+        category: m.category,
+        severity: m.severity,
+        label: m.label,
+        field: m.field,
+      })) : null,
+      original_snippets: originalSnippets || null,
+    });
+  } catch (err) {
+    // Audit logging should never block the main operation
+    console.error("Failed to write sensitive data audit log:", err);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Server-side sensitive data validation (defense-in-depth)
+// ---------------------------------------------------------------------------
+
+function validateSensitiveData(
+  fields: { details?: string; impact?: string | null; metrics?: string | null },
+  userId: string
+): { blocked: boolean; matches: SensitiveMatch[]; error?: string } {
+  const scanFields: { details?: string; impact?: string; metrics?: string } = {};
+  if (fields.details) scanFields.details = fields.details;
+  if (fields.impact) scanFields.impact = fields.impact;
+  if (fields.metrics) scanFields.metrics = fields.metrics;
+
+  const matches = scanForSensitiveData(scanFields);
+  if (matches.length > 0) {
+    // Fire-and-forget audit log for the blocked attempt
+    logSensitiveDataEvent("blocked", null, userId, matches);
+    return {
+      blocked: true,
+      matches,
+      error: getScanSummary(matches),
+    };
+  }
+  return { blocked: false, matches: [] };
+}
 
 export async function createAccomplishment(
   data: Omit<Accomplishment, "id" | "created_at" | "updated_at">
@@ -15,6 +80,15 @@ export async function createAccomplishment(
 
   if (!user) {
     return { error: "Not authenticated" };
+  }
+
+  // Server-side sensitive data scan — defense-in-depth
+  const validation = validateSensitiveData(
+    { details: data.details, impact: data.impact, metrics: data.metrics },
+    user.id
+  );
+  if (validation.blocked) {
+    return { error: validation.error };
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -49,6 +123,22 @@ export async function updateAccomplishment(
 
   if (!user) {
     return { error: "Not authenticated" };
+  }
+
+  // Server-side sensitive data scan — defense-in-depth
+  // Only scan fields that are being updated
+  if (data.details || data.impact || data.metrics) {
+    const validation = validateSensitiveData(
+      {
+        details: data.details,
+        impact: data.impact,
+        metrics: data.metrics,
+      },
+      user.id
+    );
+    if (validation.blocked) {
+      return { error: validation.error };
+    }
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "@/components/ui/sonner";
+import { scanStatementText, getScanSummary } from "@/lib/sensitive-data-scanner";
 import {
   Dialog,
   DialogContent,
@@ -1355,6 +1356,13 @@ export function EPBShellForm({
     const section = sections[mpa];
     if (!section || !profile) return;
 
+    // Scan for PII/CUI/classification markings before saving
+    const matches = scanStatementText(text);
+    if (matches.length > 0) {
+      toast.error(getScanSummary(matches), { duration: 10000 });
+      return;
+    }
+
     const { error } = await supabase
       .from("epb_shell_sections")
       .update({
@@ -1377,6 +1385,13 @@ export function EPBShellForm({
   // Save duty description
   const handleSaveDutyDescription = async (text: string) => {
     if (!currentShell || !profile) return;
+
+    // Scan for PII/CUI/classification markings before saving
+    const matches = scanStatementText(text);
+    if (matches.length > 0) {
+      toast.error(getScanSummary(matches), { duration: 10000 });
+      return;
+    }
 
     const { error } = await supabase
       .from("epb_shells")

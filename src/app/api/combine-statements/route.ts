@@ -6,6 +6,7 @@ import { createXai } from "@ai-sdk/xai";
 import { generateText } from "ai";
 import { NextResponse } from "next/server";
 import { getDecryptedApiKeys } from "@/app/actions/api-keys";
+import { scanTextForLLM } from "@/lib/sensitive-data-scanner";
 
 // Allow up to 60s for LLM calls
 export const maxDuration = 60;
@@ -81,6 +82,18 @@ export async function POST(request: Request) {
 
     if (!statements || statements.length === 0) {
       return NextResponse.json({ error: "No statements provided" }, { status: 400 });
+    }
+
+    // Scan statement text for PII/CUI/classification markings before sending to LLM
+    for (const stmt of statements) {
+      const { blocked, matches } = scanTextForLLM(stmt);
+      if (blocked) {
+        const types = [...new Set(matches.map((m) => m.label))].join(", ");
+        return NextResponse.json(
+          { error: `Sensitive data detected (${types}). Please remove before combining.` },
+          { status: 400 }
+        );
+      }
     }
 
     // Get user API keys (decrypted)

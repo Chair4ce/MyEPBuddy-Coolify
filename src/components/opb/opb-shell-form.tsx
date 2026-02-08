@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "@/components/ui/sonner";
+import { scanStatementText, getScanSummary } from "@/lib/sensitive-data-scanner";
 import {
   Tooltip,
   TooltipContent,
@@ -215,6 +216,13 @@ export function OPBShellForm({ cycleYear, model }: OPBShellFormProps) {
     async (mpa: string, text: string) => {
       const section = sections[mpa];
       if (!section) return;
+
+      // Scan for PII/CUI/classification markings before saving
+      const matches = scanStatementText(text);
+      if (matches.length > 0) {
+        toast.error(getScanSummary(matches), { duration: 10000 });
+        return;
+      }
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)

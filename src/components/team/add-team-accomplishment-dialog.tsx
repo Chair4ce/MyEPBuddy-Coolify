@@ -44,6 +44,7 @@ import {
 } from "lucide-react";
 import { celebrateEntry } from "@/lib/confetti";
 import { cn } from "@/lib/utils";
+import { scanForSensitiveData, getScanSummary } from "@/lib/sensitive-data-scanner";
 
 // Role-based verb suggestions to help supervisors choose appropriate verbs
 const VERB_CATEGORIES = {
@@ -220,6 +221,17 @@ export function AddTeamAccomplishmentDialog({
   async function handleSubmit() {
     if (!profile || !canSubmit()) return;
 
+    // Scan for PII, CUI, and classification markings — hard block if found
+    const sensitiveMatches = scanForSensitiveData({
+      details: form.details,
+      impact: form.impact,
+      metrics: form.metrics,
+    });
+    if (sensitiveMatches.length > 0) {
+      toast.error(getScanSummary(sensitiveMatches), { duration: 10000 });
+      return;
+    }
+
     setIsSubmitting(true);
 
     const tags = form.tags
@@ -256,6 +268,14 @@ export function AddTeamAccomplishmentDialog({
           errors.push(`${member.rank || ""} ${member.name}: ${result.error}`);
         } else {
           successes.push(`${member.rank || ""} ${member.name}`);
+          // Background PII/CUI scan (defense-in-depth)
+          if (result.data) {
+            fetch("/api/scan-entry", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ accomplishmentId: result.data.id }),
+            }).catch(() => {});
+          }
         }
       } catch (error) {
         errors.push(`${member.rank || ""} ${member.name}: ${error instanceof Error ? error.message : "Unknown error"}`);

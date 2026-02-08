@@ -39,6 +39,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Spinner } from "@/components/ui/spinner";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "@/components/ui/sonner";
+import { scanStatementText, getScanSummary } from "@/lib/sensitive-data-scanner";
 import {
   AI_MODELS,
   AWARD_1206_CATEGORIES,
@@ -346,6 +347,17 @@ export function AwardWorkspaceDialog({
   // Save shell and all sections
   const handleSaveShell = useCallback(async () => {
     if (!nomineeInfo || !profile || !currentShell) return;
+
+    // Scan all section texts for PII/CUI/classification markings before saving
+    for (const [, slotState] of Object.entries(slotStates)) {
+      if (slotState.draftText) {
+        const matches = scanStatementText(slotState.draftText);
+        if (matches.length > 0) {
+          toast.error(getScanSummary(matches), { duration: 10000 });
+          return;
+        }
+      }
+    }
 
     setIsSaving(true);
 

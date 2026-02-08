@@ -25,6 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "@/components/ui/sonner";
+import { scanStatementText, getScanSummary } from "@/lib/sensitive-data-scanner";
 import { Analytics } from "@/lib/analytics";
 import { cn, getCharacterCountColor } from "@/lib/utils";
 import { MAX_STATEMENT_CHARACTERS, STANDARD_MGAS, RANKS, AWARD_1206_CATEGORIES } from "@/lib/constants";
@@ -337,6 +338,13 @@ export default function LibraryPage() {
       return;
     }
 
+    // Scan for PII/CUI/classification markings before saving
+    const sensitiveMatches = scanStatementText(editedText.trim());
+    if (sensitiveMatches.length > 0) {
+      toast.error(getScanSummary(sensitiveMatches), { duration: 10000 });
+      return;
+    }
+
     setIsSaving(true);
 
     try {
@@ -406,6 +414,14 @@ export default function LibraryPage() {
 
   async function saveCopiedStatement() {
     if (!copyingStatement || !profile) return;
+
+    // Scan for PII/CUI/classification markings before saving
+    const sensitiveMatches = scanStatementText(copyingStatement.statement);
+    if (sensitiveMatches.length > 0) {
+      toast.error(getScanSummary(sensitiveMatches), { duration: 10000 });
+      return;
+    }
+
     setIsCopyingSaving(true);
 
     try {

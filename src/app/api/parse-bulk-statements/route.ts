@@ -9,6 +9,7 @@ import { getDecryptedApiKeys } from "@/app/actions/api-keys";
 import { STANDARD_MGAS, DEFAULT_MPA_DESCRIPTIONS } from "@/lib/constants";
 import { cleanText, extractDateRange, extractCycleYear } from "@/lib/text-cleaning";
 import type { Rank } from "@/types/database";
+import { scanTextForLLM } from "@/lib/sensitive-data-scanner";
 
 // Allow up to 60s for LLM calls
 export const maxDuration = 60;
@@ -199,6 +200,16 @@ export async function POST(request: Request) {
     if (!rawText || rawText.trim().length < 50) {
       return NextResponse.json(
         { error: "Please provide text to parse (minimum 50 characters)" },
+        { status: 400 }
+      );
+    }
+
+    // Scan raw text for PII/CUI/classification markings before sending to LLM
+    const { blocked, matches } = scanTextForLLM(rawText);
+    if (blocked) {
+      const types = [...new Set(matches.map((m) => m.label))].join(", ");
+      return NextResponse.json(
+        { error: `Sensitive data detected (${types}). Please remove sensitive data before parsing.` },
         { status: 400 }
       );
     }

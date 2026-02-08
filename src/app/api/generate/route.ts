@@ -18,6 +18,7 @@ import {
 import type { MPADescriptions, Project, ProjectStakeholder } from "@/types/database";
 import type { Rank, WritingStyle, UserLLMSettings, MajorGradedArea, Acronym, Abbreviation } from "@/types/database";
 import { getChainStyleSignature, getUserStyleSignature, buildSignaturePromptSection } from "@/lib/style-signatures";
+import { scanAccomplishmentsForLLM, scanTextForLLM } from "@/lib/sensitive-data-scanner";
 
 // Allow up to 60s for LLM calls (initial generation + quality control)
 export const maxDuration = 60;
@@ -791,6 +792,35 @@ export async function POST(request: Request) {
         { error: "Missing required fields - provide accomplishments, custom context, or EPB statements" },
         { status: 400 }
       );
+    }
+
+    // Pre-transmission sensitive data scan — block before data reaches LLM providers
+    if (hasAccomplishments) {
+      const accScan = scanAccomplishmentsForLLM(accomplishments);
+      if (accScan.blocked) {
+        return NextResponse.json(
+          { error: "Entry contains sensitive data (PII, CUI, or classification markings) that cannot be sent to AI providers. Please remove it before generating." },
+          { status: 400 }
+        );
+      }
+    }
+    if (hasCustomContext) {
+      const ctxScan = scanTextForLLM(customContext, customContextOptions?.customContext2);
+      if (ctxScan.blocked) {
+        return NextResponse.json(
+          { error: "Custom context contains sensitive data (PII, CUI, or classification markings) that cannot be sent to AI providers. Please remove it before generating." },
+          { status: 400 }
+        );
+      }
+    }
+    if (hasEPBStatements) {
+      const stmtScan = scanTextForLLM(...epbStatements.map((s: { statement: string }) => s.statement));
+      if (stmtScan.blocked) {
+        return NextResponse.json(
+          { error: "EPB statements contain sensitive data (PII, CUI, or classification markings) that cannot be sent to AI providers. Please remove it before generating." },
+          { status: 400 }
+        );
+      }
     }
 
     // Get user's LLM settings (or use defaults)

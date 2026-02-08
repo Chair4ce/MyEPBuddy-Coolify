@@ -23,6 +23,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/components/ui/sonner";
+import { scanStatementText, getScanSummary } from "@/lib/sensitive-data-scanner";
 import {
   Dialog,
   DialogContent,
@@ -353,6 +354,13 @@ export default function GeneratePage() {
   // Handle applying a mentor suggestion to the EPB
   const handleApplySuggestion = useCallback(async (sectionKey: string, newText: string) => {
     if (!profile || !currentShell) return;
+
+    // Scan for PII/CUI/classification markings before saving
+    const matches = scanStatementText(newText);
+    if (matches.length > 0) {
+      toast.error(getScanSummary(matches), { duration: 10000 });
+      return;
+    }
 
     try {
       if (sectionKey === "duty_description") {

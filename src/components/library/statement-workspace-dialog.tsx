@@ -43,6 +43,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "@/components/ui/sonner";
+import { scanStatementText, getScanSummary } from "@/lib/sensitive-data-scanner";
 import { cn, getCharacterCountColor } from "@/lib/utils";
 import { MAX_STATEMENT_CHARACTERS, STANDARD_MGAS, RANKS, AI_MODELS, getActiveCycleYear } from "@/lib/constants";
 import {
@@ -667,6 +668,13 @@ export function StatementWorkspaceDialog({
 
     if (!selectedMpa) {
       toast.error("Please select an MPA");
+      return;
+    }
+
+    // Scan for PII/CUI/classification markings before saving
+    const sensitiveMatches = scanStatementText(draftStatement.trim());
+    if (sensitiveMatches.length > 0) {
+      toast.error(getScanSummary(sensitiveMatches), { duration: 10000 });
       return;
     }
 

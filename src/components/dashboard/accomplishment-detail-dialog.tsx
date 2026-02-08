@@ -66,6 +66,7 @@ import {
   getAccomplishmentChainMembers,
 } from "@/app/actions/accomplishment-comments";
 import type { AccomplishmentCommentWithAuthor, ChainMember } from "@/types/database";
+import { scanForSensitiveData, getScanSummary } from "@/lib/sensitive-data-scanner";
 
 interface AccomplishmentDetailDialogProps {
   accomplishment: FeedAccomplishment | null;
@@ -216,6 +217,17 @@ export function AccomplishmentDetailDialog({
 
   async function handleSubmitEdit() {
     if (!accomplishment) return;
+
+    // Scan for PII, CUI, and classification markings — hard block if found
+    const sensitiveMatches = scanForSensitiveData({
+      details: editForm.details,
+      impact: editForm.impact,
+      metrics: editForm.metrics,
+    });
+    if (sensitiveMatches.length > 0) {
+      toast.error(getScanSummary(sensitiveMatches), { duration: 10000 });
+      return;
+    }
     
     setIsSubmitting(true);
     const tags = editForm.tags
@@ -243,6 +255,12 @@ export function AccomplishmentDetailDialog({
         metrics: editForm.metrics || null,
         tags,
       });
+      // Background PII/CUI scan (defense-in-depth)
+      fetch("/api/scan-entry", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accomplishmentId: accomplishment.id }),
+      }).catch(() => {});
     }
     setIsSubmitting(false);
   }

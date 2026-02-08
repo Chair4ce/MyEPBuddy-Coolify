@@ -6,6 +6,7 @@ import { createXai } from "@ai-sdk/xai";
 import { generateText } from "ai";
 import { NextResponse } from "next/server";
 import { getDecryptedApiKeys } from "@/app/actions/api-keys";
+import { scanAccomplishmentsForLLM } from "@/lib/sensitive-data-scanner";
 
 // Allow up to 60s for LLM calls
 export const maxDuration = 60;
@@ -236,6 +237,15 @@ export async function POST(request: Request) {
     if (!categories || categories.length === 0) {
       return NextResponse.json(
         { error: "No categories provided" },
+        { status: 400 }
+      );
+    }
+
+    // Pre-transmission sensitive data scan — block before data reaches LLM providers
+    const entryScan = scanAccomplishmentsForLLM(entries);
+    if (entryScan.blocked) {
+      return NextResponse.json(
+        { error: "Entries contain sensitive data (PII, CUI, or classification markings) that cannot be sent to AI providers. Please remove it before generating." },
         { status: 400 }
       );
     }

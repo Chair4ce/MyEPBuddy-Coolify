@@ -35,6 +35,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/components/ui/sonner";
+import { scanStatementText, getScanSummary } from "@/lib/sensitive-data-scanner";
 import { Analytics } from "@/lib/analytics";
 import { cn, getCharacterCountColor } from "@/lib/utils";
 import { MAX_STATEMENT_CHARACTERS, STANDARD_MGAS, RANKS, AWARD_1206_CATEGORIES, getActiveCycleYear } from "@/lib/constants";
@@ -410,6 +411,13 @@ export function AddStatementDialog({
         toast.error("Please select the win level");
         return;
       }
+    }
+
+    // Scan for PII/CUI/classification markings before saving
+    const sensitiveMatches = scanStatementText(statementText.trim());
+    if (sensitiveMatches.length > 0) {
+      toast.error(getScanSummary(sensitiveMatches), { duration: 10000 });
+      return;
     }
 
     setIsSaving(true);

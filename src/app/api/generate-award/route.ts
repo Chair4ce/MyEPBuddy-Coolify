@@ -8,6 +8,7 @@ import { NextResponse } from "next/server";
 import { AWARD_1206_CATEGORIES, DEFAULT_AWARD_SENTENCES } from "@/lib/constants";
 import { getDecryptedApiKeys } from "@/app/actions/api-keys";
 import type { Rank, UserLLMSettings, AwardLevel, AwardCategory, AwardSentencesPerCategory, WinLevel } from "@/types/database";
+import { scanAccomplishmentsForLLM, scanTextForLLM } from "@/lib/sensitive-data-scanner";
 
 // Allow up to 60s for LLM calls
 export const maxDuration = 60;
@@ -361,6 +362,26 @@ export async function POST(request: Request) {
         { error: "Missing accomplishments or custom context" },
         { status: 400 }
       );
+    }
+
+    // Pre-transmission sensitive data scan — block before data reaches LLM providers
+    if (accomplishments && accomplishments.length > 0) {
+      const accScan = scanAccomplishmentsForLLM(accomplishments);
+      if (accScan.blocked) {
+        return NextResponse.json(
+          { error: "Accomplishments contain sensitive data (PII, CUI, or classification markings) that cannot be sent to AI providers. Please remove it before generating." },
+          { status: 400 }
+        );
+      }
+    }
+    if (isCustomContextMode || isRevisionMode) {
+      const textScan = scanTextForLLM(customContext, existingStatement);
+      if (textScan.blocked) {
+        return NextResponse.json(
+          { error: "Context contains sensitive data (PII, CUI, or classification markings) that cannot be sent to AI providers. Please remove it before generating." },
+          { status: 400 }
+        );
+      }
     }
 
     // Get user's LLM settings

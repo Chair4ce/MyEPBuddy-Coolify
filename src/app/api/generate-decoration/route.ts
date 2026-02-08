@@ -10,6 +10,7 @@ import { buildDecorationSystemPrompt, expandAbbreviations } from "@/lib/decorati
 import type { DecorationAwardType, DecorationReason } from "@/lib/decoration-constants";
 import { DECORATION_TYPES } from "@/lib/decoration-constants";
 import type { UserLLMSettings } from "@/types/database";
+import { scanTextForLLM } from "@/lib/sensitive-data-scanner";
 
 // Allow up to 60s for LLM calls
 export const maxDuration = 60;
@@ -58,6 +59,18 @@ export async function POST(request: Request) {
         { error: "Missing required fields" },
         { status: 400 }
       );
+    }
+
+    // Scan accomplishment text for PII/CUI/classification markings before sending to LLM
+    for (const accomplishment of body.accomplishments) {
+      const { blocked, matches } = scanTextForLLM(accomplishment);
+      if (blocked) {
+        const types = [...new Set(matches.map((m) => m.label))].join(", ");
+        return NextResponse.json(
+          { error: `Sensitive data detected (${types}). Please remove before generating.` },
+          { status: 400 }
+        );
+      }
     }
     
     // Get decoration config
