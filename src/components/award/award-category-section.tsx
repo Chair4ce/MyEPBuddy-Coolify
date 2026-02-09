@@ -44,7 +44,7 @@ import {
 import type { Accomplishment, AwardLevel, AwardCategory, AwardShellSection } from "@/types/database";
 import { useAwardShellStore } from "@/stores/award-shell-store";
 import type { SectionSlotState } from "@/stores/award-shell-store";
-import { compressText, normalizeSpaces, getVisualLineSegments, AF1206_LINE_WIDTH_PX } from "@/lib/bullet-fitting";
+import { compressText, normalizeSpaces, getVisualLineSegments, AF1206_LINE_WIDTH_PX, toDisplayText, fromDisplayText } from "@/lib/bullet-fitting";
 
 // ============================================================================
 // Types
@@ -530,8 +530,17 @@ function StatementSlotCard({
                 >
                 <textarea
                   ref={textareaRef}
-                  value={draftText}
-                  onChange={(e) => onUpdate({ draftText: e.target.value, isDirty: true })}
+                  value={toDisplayText(draftText)}
+                  onChange={(e) => onUpdate({ draftText: fromDisplayText(e.target.value), isDirty: true })}
+                  onCopy={(e) => {
+                    // Ensure clipboard gets regular hyphens, not non-breaking hyphens,
+                    // so pasting into the actual 1206 PDF uses standard characters.
+                    const selection = window.getSelection()?.toString();
+                    if (selection) {
+                      e.preventDefault();
+                      e.clipboardData.setData('text/plain', fromDisplayText(selection));
+                    }
+                  }}
                   onMouseUp={handleTextSelect}
                   onKeyUp={(e) => {
                     // Handle shift+arrow key selection
@@ -560,6 +569,13 @@ function StatementSlotCard({
                     whiteSpace: 'pre-wrap',
                     wordWrap: 'break-word',
                     overflowWrap: 'break-word',
+                    // Disable kerning and ligatures to match AF Form 1206 PDF rendering.
+                    // The PDF form fields do not apply kerning, so character pairs like
+                    // "Vo" have uniform spacing. Disabling these also fixes accumulated
+                    // width errors with repeating characters (e.g., long runs of periods).
+                    fontKerning: 'none',
+                    fontVariantLigatures: 'none',
+                    fontFeatureSettings: '"kern" 0, "liga" 0, "clig" 0',
                   }}
                   rows={2}
               />

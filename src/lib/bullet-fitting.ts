@@ -137,6 +137,10 @@ const TIMES_NEW_ROMAN_12PT_WIDTHS: Record<number, number> = {
   8196: 5.33,  // \u2004 - three-per-em space (medium, wider)
   8201: 2.67,  // \u2009 - thin space
   8198: 2.67,  // \u2006 - six-per-em space (narrow)
+  
+  // Non-breaking hyphen (same width as regular hyphen)
+  // Used to prevent browser line-breaks at hyphens in textarea display
+  8209: 5.328125, // \u2011 - non-breaking hyphen
 };
 
 // Default width for unknown characters
@@ -152,6 +156,14 @@ export const AF1206_LINE_WIDTH_PX = 765.95;
 const THIN_SPACE = '\u2006';   // Narrower than normal space
 const MEDIUM_SPACE = '\u2004'; // Wider than normal space
 const NORMAL_SPACE = ' ';
+
+// Non-breaking hyphen for textarea display.
+// The browser's Unicode line-breaking algorithm treats regular hyphens (U+002D)
+// as valid break points. The AF Form 1206 PDF does NOT break at hyphens, so we
+// swap to non-breaking hyphens (U+2011) for display. They render identically
+// but the browser won't wrap there.
+const NON_BREAKING_HYPHEN = '\u2011';
+const REGULAR_HYPHEN = '-';
 
 // Optimization status
 export const FIT_STATUS = {
@@ -184,11 +196,17 @@ export function getTextWidthPx(text: string): number {
 
 /**
  * Split text into tokens that Adobe would use for line breaking
- * Adobe breaks after: spaces, ?, /, |, -, %, !
+ * Adobe breaks after: spaces, ?, /, |, %, !
  * but only if immediately followed by: [a-zA-z], [0-9], +, \
+ * 
+ * NOTE: Hyphens (-) are intentionally NOT included as breakable characters.
+ * The actual AF Form 1206 PDF treats hyphenated words (e.g., "tri-service")
+ * as single units that stay together on the same line. Including hyphens as
+ * break points caused mismatches between our line-count predictions and the
+ * actual PDF rendering.
  */
 function adobeLineSplit(text: string): string[] {
-  const regex = /([\u2004\u2009\u2006\s?/|\-%!])(?=[a-zA-Z0-9+\\])/;
+  const regex = /([\u2004\u2009\u2006\s?/|%!])(?=[a-zA-Z0-9+\\])/;
   return text.split(regex).filter(Boolean);
 }
 
@@ -477,13 +495,34 @@ export function expandText(text: string): { text: string; addedPx: number } {
 }
 
 /**
- * Reset text to use normal spaces (remove any thin/medium space optimization)
+ * Reset text to use normal spaces and normal hyphens
+ * (remove any thin/medium space optimization and non-breaking hyphen display chars)
  */
 export function normalizeSpaces(text: string): string {
   return text
     .replace(/\u2006/g, ' ')  // thin space → normal
     .replace(/\u2004/g, ' ')  // medium space → normal
-    .replace(/\u2009/g, ' '); // hair space → normal
+    .replace(/\u2009/g, ' ')  // hair space → normal
+    .replace(/\u2011/g, '-'); // non-breaking hyphen → regular hyphen
+}
+
+/**
+ * Convert text for textarea display.
+ * Replaces regular hyphens with non-breaking hyphens (U+2011) so the browser
+ * does not treat them as line-break opportunities. The non-breaking hyphen
+ * renders identically to a regular hyphen.
+ */
+export function toDisplayText(text: string): string {
+  return text.replace(/-/g, NON_BREAKING_HYPHEN);
+}
+
+/**
+ * Convert text from textarea display back to storage form.
+ * Replaces non-breaking hyphens (U+2011) with regular hyphens so stored text
+ * uses standard characters and is compatible with PDF form fields.
+ */
+export function fromDisplayText(text: string): string {
+  return text.replace(/\u2011/g, REGULAR_HYPHEN);
 }
 
 /**
@@ -704,8 +743,10 @@ export function getVisualLineSegments(
   let lastBreakableIndex = 0;
   let lastBreakableWidth = 0;
   
-  // Characters after which we can break (similar to PDF word wrap behavior)
-  const breakableChars = new Set([' ', '-', '/', '|', '?', '!', '\u2006', '\u2004']);
+  // Characters after which we can break (matching AF Form 1206 PDF word wrap behavior)
+  // NOTE: Hyphens (-) are intentionally excluded — the 1206 PDF treats hyphenated
+  // words (e.g., "tri-service") as single units that do not break across lines.
+  const breakableChars = new Set([' ', '/', '|', '?', '!', '\u2006', '\u2004']);
   
   for (let i = 0; i < text.length; i++) {
     const char = text[i];

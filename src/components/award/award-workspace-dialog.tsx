@@ -47,6 +47,7 @@ import {
   AWARD_CATEGORIES,
 } from "@/lib/constants";
 import { cn } from "@/lib/utils";
+import { toDisplayText, fromDisplayText } from "@/lib/bullet-fitting";
 import {
   Award,
   Copy,
@@ -1094,8 +1095,17 @@ export function AwardWorkspaceDialog({
                 style={{ width: 'fit-content' }}
               >
                 <textarea
-                  value={previewText}
-                  onChange={(e) => setPreviewText(e.target.value)}
+                  value={toDisplayText(previewText)}
+                  onChange={(e) => setPreviewText(fromDisplayText(e.target.value))}
+                  onCopy={(e) => {
+                    // Ensure clipboard gets regular hyphens, not non-breaking hyphens,
+                    // so pasting into the actual 1206 PDF uses standard characters.
+                    const selection = window.getSelection()?.toString();
+                    if (selection) {
+                      e.preventDefault();
+                      e.clipboardData.setData('text/plain', fromDisplayText(selection));
+                    }
+                  }}
                   className="bg-transparent focus:outline-none resize-none block"
                   style={{
                     width: '765.95px',
@@ -1110,6 +1120,13 @@ export function AwardWorkspaceDialog({
                     whiteSpace: 'pre-wrap',
                     wordWrap: 'break-word',
                     overflowWrap: 'break-word',
+                    // Disable kerning and ligatures to match AF Form 1206 PDF rendering.
+                    // The PDF form fields do not apply kerning, so character pairs like
+                    // "Vo" have uniform spacing. Disabling these also fixes accumulated
+                    // width errors with repeating characters (e.g., long runs of periods).
+                    fontKerning: 'none',
+                    fontVariantLigatures: 'none',
+                    fontFeatureSettings: '"kern" 0, "liga" 0, "clig" 0',
                   }}
                   placeholder="Your statements will appear here..."
                   aria-label="AF Form 1206 statements preview"
