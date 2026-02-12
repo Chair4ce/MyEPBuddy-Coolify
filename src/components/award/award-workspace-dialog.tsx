@@ -41,11 +41,12 @@ import { Separator } from "@/components/ui/separator";
 import { toast } from "@/components/ui/sonner";
 import { scanStatementText, getScanSummary } from "@/lib/sensitive-data-scanner";
 import {
-  AI_MODELS,
   AWARD_1206_CATEGORIES,
   AWARD_LEVELS,
   AWARD_CATEGORIES,
 } from "@/lib/constants";
+import { ModelSelector } from "@/components/model-selector";
+import { AiModelSurveyModal, useAiModelSurvey } from "@/components/modals/ai-model-survey-modal";
 import { cn } from "@/lib/utils";
 import { toDisplayText, fromDisplayText } from "@/lib/bullet-fitting";
 import {
@@ -171,6 +172,9 @@ export function AwardWorkspaceDialog({
     setIsLoadingShell,
     reset,
   } = useAwardShellStore();
+
+  // AI model survey (one-time)
+  const aiSurvey = useAiModelSurvey("award");
 
   // Local state
   const [accomplishments, setAccomplishments] = useState<Accomplishment[]>([]);
@@ -940,21 +944,11 @@ export function AwardWorkspaceDialog({
                       </div>
                       <div className="space-y-2">
                         <Label className="text-xs">AI Model</Label>
-                        <Select
+                        <ModelSelector
                           value={selectedModel}
                           onValueChange={setSelectedModel}
-                        >
-                          <SelectTrigger className="h-9">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {AI_MODELS.map((m) => (
-                              <SelectItem key={m.id} value={m.id}>
-                                {m.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                          compact
+                        />
                       </div>
                     </div>
                     <div className="flex items-center gap-2 pt-4">
@@ -1244,6 +1238,13 @@ export function AwardWorkspaceDialog({
           }}
         />
       )}
+
+      {/* AI Model Survey - one-time */}
+      <AiModelSurveyModal
+        open={aiSurvey.showSurvey}
+        onOpenChange={aiSurvey.onOpenChange}
+        sourcePage={aiSurvey.sourcePage}
+      />
     </>
   );
 }

@@ -18,6 +18,7 @@ import { Progress } from "@/components/ui/progress";
 import { Spinner } from "@/components/ui/spinner";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "@/components/ui/sonner";
+import { trackGenerationForSurvey } from "@/components/modals/ai-model-survey-modal";
 import { cn } from "@/lib/utils";
 import { DECORATION_TYPES } from "@/features/decorations/constants";
 import {
@@ -484,6 +485,7 @@ export function DecorationCitationEditor({
 
       const data = await response.json();
       setCitationText(data.citation);
+      trackGenerationForSurvey();
 
       if (!data.metadata.withinLimit) {
         toast.warning(

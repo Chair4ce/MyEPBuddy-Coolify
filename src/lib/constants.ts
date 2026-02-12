@@ -103,48 +103,72 @@ export function isMilitaryEnlisted(rank: Rank | null): boolean {
   return isEnlisted(rank);
 }
 
+export type ModelQuality = "excellent" | "good" | "basic";
+
 export const AI_MODELS = [
   {
     id: "gpt-4o",
     name: "GPT-4o",
     provider: "openai",
     description: "OpenAI's most capable model",
+    quality: "excellent" as ModelQuality,
+    statementTip:
+      "Excellent at structured military writing. Produces polished, regulation-ready statements with minimal editing.",
   },
   {
     id: "gpt-4o-mini",
     name: "GPT-4o Mini",
     provider: "openai",
     description: "Fast and cost-effective",
+    quality: "good" as ModelQuality,
+    statementTip:
+      "Good output for most statements. May occasionally need light editing on tone or impact phrasing.",
   },
   {
     id: "claude-sonnet-4-20250514",
     name: "Claude Sonnet 4",
     provider: "anthropic",
     description: "Anthropic's balanced model",
+    quality: "excellent" as ModelQuality,
+    statementTip:
+      "Top-tier for EPB statements. Strong at matching writing style, following instructions, and capturing impact.",
   },
   {
     id: "claude-3-5-haiku-20241022",
     name: "Claude 3.5 Haiku",
     provider: "anthropic",
     description: "Fast and efficient",
+    quality: "good" as ModelQuality,
+    statementTip:
+      "Fast with solid results. Good for quick drafts, though complex statements may need refinement.",
   },
   {
     id: "gemini-2.0-flash",
     name: "Gemini 2.0 Flash",
     provider: "google",
-    description: "Google's latest fast model",
+    description: "Free default model",
+    quality: "basic" as ModelQuality,
+    statementTip:
+      "Basic quality — usable but statements often need editing. This is the free default when no API key is saved.",
+    isAppDefault: true,
   },
   {
     id: "gemini-1.5-pro-002",
     name: "Gemini 1.5 Pro",
     provider: "google",
     description: "Google's advanced model",
+    quality: "good" as ModelQuality,
+    statementTip:
+      "Solid upgrade over Flash. Produces more detailed and polished statements with better impact language.",
   },
   {
     id: "grok-2",
     name: "Grok 2",
     provider: "xai",
     description: "xAI's powerful model",
+    quality: "good" as ModelQuality,
+    statementTip:
+      "Capable model with good general performance. May occasionally use non-standard military phrasing.",
   },
 ] as const;
 

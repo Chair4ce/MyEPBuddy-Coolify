@@ -23,6 +23,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { toast } from "@/components/ui/sonner";
+import { trackGenerationForSurvey } from "@/components/modals/ai-model-survey-modal";
 import { cn } from "@/lib/utils";
 import {
   Sparkles,
@@ -1113,6 +1114,7 @@ export function AwardCategorySectionCard({
       const versions: string[] = data.statements?.[0]?.statementGroups?.[0]?.versions || [];
       
       onUpdateSlotState(categoryKey, slotIndex, { isGenerating: false });
+      trackGenerationForSurvey();
       toast.success(`Generated ${versions.length} statement${versions.length > 1 ? "s" : ""}!`);
       return versions;
     } catch (error) {

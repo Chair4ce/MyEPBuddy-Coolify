@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Analytics } from "@/lib/analytics";
+import { trackGenerationForSurvey } from "@/components/modals/ai-model-survey-modal";
 import { fetchWithRetry } from "@/lib/fetch-with-retry";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -1781,6 +1782,7 @@ export function EPBShellForm({
       
       // Track generation success
       Analytics.generateCompleted(model, Date.now() - generateStartTime, validResults.length);
+      trackGenerationForSurvey();
       
       return validResults;
     } catch (error) {

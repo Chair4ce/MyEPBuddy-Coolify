@@ -33,10 +33,11 @@ import {
 } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AI_MODELS, STANDARD_MGAS, ENTRY_MGAS, getActiveCycleYear, isOfficer, isEnlisted } from "@/lib/constants";
+import { ModelSelector } from "@/components/model-selector";
+import { AiModelSurveyModal, useAiModelSurvey } from "@/components/modals/ai-model-survey-modal";
 import { cn } from "@/lib/utils";
 import {
   Sparkles,
-  Key,
   Users,
   User,
   UserPlus,
@@ -55,7 +56,6 @@ import {
 } from "@/components/ui/collapsible";
 import Link from "next/link";
 import type { Accomplishment, WritingStyle, UserLLMSettings, Profile, ManagedMember, EPBShell, Rank } from "@/types/database";
-import { getKeyStatus } from "@/app/actions/api-keys";
 import { EPBShellForm } from "@/components/epb/epb-shell-form";
 import { EPBShellShareDialog } from "@/components/epb/epb-shell-share-dialog";
 import { OPBShellForm } from "@/components/opb/opb-shell-form";
@@ -70,7 +70,6 @@ export default function GeneratePage() {
   const { selectedRatee, setSelectedRatee, currentShell, setCurrentShell, sections: shellSections, updateSection, reset: resetShellStore } = useEPBShellStore();
   
   const [selectedModel, setSelectedModel] = useState<string>("gemini-2.0-flash");
-  const [hasUserKey, setHasUserKey] = useState(false);
   const [writingStyle, setWritingStyle] = useState<WritingStyle>("personal");
   const [hasChain, setHasChain] = useState(false); // Whether user has a supervisor chain
   const [communityMpaFilter, setCommunityMpaFilter] = useState<string>("all");
@@ -88,6 +87,9 @@ export default function GeneratePage() {
   
   // Officer workspace mode: "opb" for personal OPB, "epb" for team EPBs
   const [officerWorkspaceMode, setOfficerWorkspaceMode] = useState<"opb" | "epb">("epb");
+
+  // AI model survey (one-time)
+  const aiSurvey = useAiModelSurvey("generate");
 
   // Accomplishment selection dialog
   const [showAccomplishmentDialog, setShowAccomplishmentDialog] = useState(false);
@@ -297,25 +299,6 @@ export default function GeneratePage() {
     loadUserSettings();
   }, [profile, supabase]);
 
-  // Check if user has API keys
-  useEffect(() => {
-    async function checkUserKeys() {
-      if (!profile) return;
-
-      // Use server action to check key status (never fetches actual keys)
-      const keyStatus = await getKeyStatus();
-      const selectedProvider = AI_MODELS.find((m) => m.id === selectedModel)?.provider;
-
-      const hasKey =
-        (selectedProvider === "openai" && keyStatus.openai_key) ||
-        (selectedProvider === "anthropic" && keyStatus.anthropic_key) ||
-        (selectedProvider === "google" && keyStatus.google_key) ||
-        (selectedProvider === "xai" && keyStatus.grok_key);
-      setHasUserKey(hasKey);
-    }
-
-    checkUserKeys();
-  }, [profile, selectedModel]);
 
   // Load accomplishments for the dialog (EPB shell form loads its own for generation)
   useEffect(() => {
@@ -846,23 +829,10 @@ export default function GeneratePage() {
                 {/* Model Selection */}
                 <div className="space-y-2">
                   <Label>AI Model</Label>
-                  <Select value={selectedModel} onValueChange={setSelectedModel}>
-                    <SelectTrigger aria-label="Select AI model">
-                      <SelectValue>{selectedModelInfo?.name}</SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {AI_MODELS.map((model) => (
-                        <SelectItem key={model.id} value={model.id}>
-                          <div className="flex flex-col items-start">
-                            <span>{model.name}</span>
-                            <span className="text-xs text-muted-foreground">
-                              {model.description}
-                            </span>
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <ModelSelector
+                    value={selectedModel}
+                    onValueChange={setSelectedModel}
+                  />
                 </div>
 
                 {/* Writing Style */}
@@ -977,25 +947,6 @@ export default function GeneratePage() {
               )}
 
               <Separator />
-
-              {/* API Key Status */}
-              <div className="flex items-center gap-2 text-xs sm:text-sm">
-                <Key className="size-4 text-muted-foreground shrink-0" />
-                <span className="text-muted-foreground min-w-0">
-                  {hasUserKey ? (
-                    <span className="text-green-600 dark:text-green-400">
-                      Using your {selectedModelInfo?.provider} API key
-                    </span>
-                  ) : (
-                    <span>
-                      Using default API key •{" "}
-                      <a href="/settings/api-keys" className="text-primary hover:underline">
-                        Add your own key
-                      </a>
-                    </span>
-                  )}
-                </span>
-              </div>
             </CardContent>
           </CollapsibleContent>
         </Card>
@@ -1107,6 +1058,13 @@ export default function GeneratePage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* AI Model Survey - one-time */}
+      <AiModelSurveyModal
+        open={aiSurvey.showSurvey}
+        onOpenChange={aiSurvey.onOpenChange}
+        sourcePage={aiSurvey.sourcePage}
+      />
     </div>
   );
 }

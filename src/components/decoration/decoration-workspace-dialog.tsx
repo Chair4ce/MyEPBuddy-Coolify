@@ -39,7 +39,8 @@ import { Spinner } from "@/components/ui/spinner";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "@/components/ui/sonner";
 import { scanStatementText, getScanSummary } from "@/lib/sensitive-data-scanner";
-import { AI_MODELS } from "@/lib/constants";
+import { ModelSelector } from "@/components/model-selector";
+import { AiModelSurveyModal, useAiModelSurvey } from "@/components/modals/ai-model-survey-modal";
 import { DECORATION_TYPES, DECORATION_REASONS } from "@/features/decorations/constants";
 import { cn, getFullName } from "@/lib/utils";
 import {
@@ -159,6 +160,9 @@ export function DecorationWorkspaceDialog({
     setIsDirty,
     reset,
   } = useDecorationShellStore();
+
+  // AI model survey (one-time)
+  const aiSurvey = useAiModelSurvey("decoration");
 
   // Local state
   const [statements, setStatements] = useState<RefinedStatement[]>([]);
@@ -787,18 +791,11 @@ export function DecorationWorkspaceDialog({
                       {/* AI Model */}
                       <div className="space-y-2">
                         <Label className="text-xs">AI Model</Label>
-                        <Select value={selectedModel} onValueChange={setSelectedModel}>
-                          <SelectTrigger className="h-9">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {AI_MODELS.map((m) => (
-                              <SelectItem key={m.id} value={m.id}>
-                                {m.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <ModelSelector
+                          value={selectedModel}
+                          onValueChange={setSelectedModel}
+                          compact
+                        />
                       </div>
 
                       {/* Danger Zone - Delete */}
@@ -963,6 +960,13 @@ export function DecorationWorkspaceDialog({
           }}
         />
       )}
+
+      {/* AI Model Survey - one-time */}
+      <AiModelSurveyModal
+        open={aiSurvey.showSurvey}
+        onOpenChange={aiSurvey.onOpenChange}
+        sourcePage={aiSurvey.sourcePage}
+      />
     </TooltipProvider>
   );
 }
