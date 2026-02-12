@@ -12,6 +12,21 @@
 import type { DecorationAwardType, DecorationReason, DecorationPromptParams, ClosingIntensity } from "./types";
 import { DECORATION_TYPES, RANK_VERBS, getVerbCategory } from "./constants";
 
+/**
+ * Formats a date string (e.g. "2025-02-26") into military citation format
+ * "26 February 2025". No leading zeros on the day per DAFMAN 36-2806.
+ * Falls back to the original string if parsing fails.
+ */
+function formatCitationDate(dateStr: string | undefined): string {
+  if (!dateStr) return "";
+  const parsed = new Date(dateStr + "T00:00:00");
+  if (isNaN(parsed.getTime())) return dateStr;
+  const day = parsed.getDate(); // no leading zero
+  const month = parsed.toLocaleString("en-US", { month: "long" });
+  const year = parsed.getFullYear();
+  return `${day} ${month} ${year}`;
+}
+
 export function buildDecorationSystemPrompt(params: DecorationPromptParams): string {
   const config = DECORATION_TYPES.find(d => d.key === params.awardType);
   if (!config) throw new Error(`Unknown award type: ${params.awardType}`);
@@ -41,7 +56,7 @@ export function buildDecorationSystemPrompt(params: DecorationPromptParams): str
 **Full Name:** ${params.fullName}
 **Duty Title:** ${params.dutyTitle}
 **Assignment:** ${params.assignmentLine}
-**Period:** ${params.startDate} to ${params.endDate}
+**Period:** ${formatCitationDate(params.startDate)} to ${formatCitationDate(params.endDate)}
 **Award Reason:** ${formatReason(params.reason)}
 
 ## HARD CHARACTER LIMIT — THIS IS YOUR #1 CONSTRAINT
@@ -124,28 +139,28 @@ function getOpeningTemplate(params: DecorationPromptParams): string {
   const templates: Record<DecorationAwardType, Record<string, string>> = {
     afam: {
       meritorious_service: `${params.rank} ${params.fullName} distinguished ${pronoun} by meritorious service as ${params.dutyTitle}, ${params.assignmentLine}.`,
-      outstanding_achievement: `${params.rank} ${params.fullName} distinguished ${pronoun} by outstanding achievement as ${params.dutyTitle}, ${params.assignmentLine}, from ${params.startDate} to ${params.endDate}.`,
+      outstanding_achievement: `${params.rank} ${params.fullName} distinguished ${pronoun} by outstanding achievement as ${params.dutyTitle}, ${params.assignmentLine}, from ${formatCitationDate(params.startDate)} to ${formatCitationDate(params.endDate)}.`,
       default: `${params.rank} ${params.fullName} distinguished ${pronoun} by outstanding achievement as ${params.dutyTitle}, ${params.assignmentLine}.`,
     },
     afcm: {
-      meritorious_service: `${params.rank} ${params.fullName} distinguished ${pronoun} by meritorious service as ${params.dutyTitle}, ${params.assignmentLine}, from ${params.startDate} to ${params.endDate}.`,
-      outstanding_achievement: `${params.rank} ${params.fullName} distinguished ${pronoun} by outstanding achievement as ${params.dutyTitle}, ${params.assignmentLine}, from ${params.startDate} to ${params.endDate}.`,
+      meritorious_service: `${params.rank} ${params.fullName} distinguished ${pronoun} by meritorious service as ${params.dutyTitle}, ${params.assignmentLine}, from ${formatCitationDate(params.startDate)} to ${formatCitationDate(params.endDate)}.`,
+      outstanding_achievement: `${params.rank} ${params.fullName} distinguished ${pronoun} by outstanding achievement as ${params.dutyTitle}, ${params.assignmentLine}, from ${formatCitationDate(params.startDate)} to ${formatCitationDate(params.endDate)}.`,
       act_of_courage: `${params.rank} ${params.fullName} distinguished ${pronoun} by an act of courage as ${params.dutyTitle}, ${params.assignmentLine}.`,
       default: `${params.rank} ${params.fullName} distinguished ${pronoun} by meritorious service as ${params.dutyTitle}, ${params.assignmentLine}.`,
     },
     msm: {
-      meritorious_service: `${params.rank} ${params.fullName} distinguished ${pronoun} in the performance of outstanding service to the United States as ${params.dutyTitle}, ${params.assignmentLine}, from ${params.startDate} to ${params.endDate}.`,
-      outstanding_achievement: `${params.rank} ${params.fullName} distinguished ${pronoun} by outstanding achievement as ${params.dutyTitle}, ${params.assignmentLine}, from ${params.startDate} to ${params.endDate}.`,
-      retirement: `${params.rank} ${params.fullName} distinguished ${pronoun} in the performance of outstanding service to the United States as ${params.dutyTitle}, ${params.assignmentLine}, from ${params.startDate} to ${params.endDate}.`,
+      meritorious_service: `${params.rank} ${params.fullName} distinguished ${pronoun} in the performance of outstanding service to the United States as ${params.dutyTitle}, ${params.assignmentLine}, from ${formatCitationDate(params.startDate)} to ${formatCitationDate(params.endDate)}.`,
+      outstanding_achievement: `${params.rank} ${params.fullName} distinguished ${pronoun} by outstanding achievement as ${params.dutyTitle}, ${params.assignmentLine}, from ${formatCitationDate(params.startDate)} to ${formatCitationDate(params.endDate)}.`,
+      retirement: `${params.rank} ${params.fullName} distinguished ${pronoun} in the performance of outstanding service to the United States as ${params.dutyTitle}, ${params.assignmentLine}, from ${formatCitationDate(params.startDate)} to ${formatCitationDate(params.endDate)}.`,
       default: `${params.rank} ${params.fullName} distinguished ${pronoun} in the performance of outstanding service to the United States as ${params.dutyTitle}, ${params.assignmentLine}.`,
     },
     lom: {
-      meritorious_service: `${params.rank} ${params.fullName} distinguished ${pronoun} by exceptionally meritorious conduct in the performance of outstanding service to the United States as ${params.dutyTitle}, ${params.assignmentLine}, from ${params.startDate} to ${params.endDate}.`,
-      retirement: `${params.rank} ${params.fullName} distinguished ${pronoun} by exceptionally meritorious conduct in the performance of outstanding service to the United States as ${params.dutyTitle}, ${params.assignmentLine}, from ${params.startDate} to ${params.endDate}.`,
+      meritorious_service: `${params.rank} ${params.fullName} distinguished ${pronoun} by exceptionally meritorious conduct in the performance of outstanding service to the United States as ${params.dutyTitle}, ${params.assignmentLine}, from ${formatCitationDate(params.startDate)} to ${formatCitationDate(params.endDate)}.`,
+      retirement: `${params.rank} ${params.fullName} distinguished ${pronoun} by exceptionally meritorious conduct in the performance of outstanding service to the United States as ${params.dutyTitle}, ${params.assignmentLine}, from ${formatCitationDate(params.startDate)} to ${formatCitationDate(params.endDate)}.`,
       default: `${params.rank} ${params.fullName} distinguished ${pronoun} by exceptionally meritorious conduct in the performance of outstanding service as ${params.dutyTitle}, ${params.assignmentLine}.`,
     },
     bsm: {
-      combat_meritorious: `${params.rank} ${params.fullName} distinguished ${pronoun} by meritorious service in connection with military operations against an armed enemy while serving as ${params.dutyTitle}, ${params.assignmentLine}, from ${params.startDate} to ${params.endDate}.`,
+      combat_meritorious: `${params.rank} ${params.fullName} distinguished ${pronoun} by meritorious service in connection with military operations against an armed enemy while serving as ${params.dutyTitle}, ${params.assignmentLine}, from ${formatCitationDate(params.startDate)} to ${formatCitationDate(params.endDate)}.`,
       combat_valor: `${params.rank} ${params.fullName} distinguished ${pronoun} by heroic achievement in connection with combat operations against an armed enemy while serving as ${params.dutyTitle}, ${params.assignmentLine}.`,
       default: `${params.rank} ${params.fullName} distinguished ${pronoun} by meritorious achievement in connection with military operations as ${params.dutyTitle}, ${params.assignmentLine}.`,
     },

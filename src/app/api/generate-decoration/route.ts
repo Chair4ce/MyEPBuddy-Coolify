@@ -12,6 +12,17 @@ import { DECORATION_TYPES } from "@/lib/decoration-constants";
 import type { UserLLMSettings } from "@/types/database";
 import { scanTextForLLM } from "@/lib/sensitive-data-scanner";
 
+/** Format "2025-02-26" → "26 February 2025" for citation display */
+function formatCitationDate(dateStr: string | undefined): string {
+  if (!dateStr) return "";
+  const parsed = new Date(dateStr + "T00:00:00");
+  if (isNaN(parsed.getTime())) return dateStr;
+  const day = parsed.getDate();
+  const month = parsed.toLocaleString("en-US", { month: "long" });
+  const year = parsed.getFullYear();
+  return `${day} ${month} ${year}`;
+}
+
 // Allow up to 60s for LLM calls
 export const maxDuration = 60;
 
@@ -190,7 +201,7 @@ export async function POST(request: Request) {
 - Full Name: ${body.rateeName}
 - Duty Title: ${body.dutyTitle || "member"}
 - Assignment: ${assignmentLine}
-- Period: ${body.startDate || "start date"} to ${body.endDate || "end date"}
+- Period: ${formatCitationDate(body.startDate) || "start date"} to ${formatCitationDate(body.endDate) || "end date"}
 - Award Reason: ${body.reason || "meritorious_service"}
 - Maximum Characters: ${decorationConfig.maxCharacters}
 
