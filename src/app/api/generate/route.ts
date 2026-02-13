@@ -1,14 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
-import { createOpenAI } from "@ai-sdk/openai";
-import { createAnthropic } from "@ai-sdk/anthropic";
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { createXai } from "@ai-sdk/xai";
 import { generateText, type LanguageModel } from "ai";
 import { NextResponse } from "next/server";
 import { DEFAULT_ACRONYMS, formatAcronymsList } from "@/lib/default-acronyms";
 import { formatAbbreviationsList } from "@/lib/default-abbreviations";
 import { STANDARD_MGAS, DEFAULT_MPA_DESCRIPTIONS, formatMPAContext, MAX_STATEMENT_CHARACTERS, MAX_HLR_CHARACTERS } from "@/lib/constants";
 import { getDecryptedApiKeys } from "@/app/actions/api-keys";
+import { getModelProvider } from "@/lib/llm-provider";
+import { handleLLMError } from "@/lib/llm-error-handler";
 import { buildCharacterEmphasisPrompt } from "@/lib/character-verification";
 import {
   performQualityControl,
@@ -715,52 +713,10 @@ IMPORTANT: Use proper sentence structure with commas and periods only. No specia
   return prompt;
 }
 
-function getModelProvider(
-  modelId: string,
-  userKeys: {
-    openai_key?: string | null;
-    anthropic_key?: string | null;
-    google_key?: string | null;
-    grok_key?: string | null;
-  } | null
-) {
-  const provider = modelId.includes("claude")
-    ? "anthropic"
-    : modelId.includes("gemini")
-      ? "google"
-      : modelId.includes("grok")
-        ? "xai"
-        : "openai";
-
-  switch (provider) {
-    case "anthropic": {
-      const customAnthropic = createAnthropic({
-        apiKey: userKeys?.anthropic_key || process.env.ANTHROPIC_API_KEY || "",
-      });
-      return customAnthropic(modelId);
-    }
-    case "google": {
-      const customGoogle = createGoogleGenerativeAI({
-        apiKey: userKeys?.google_key || process.env.GOOGLE_GENERATIVE_AI_API_KEY || "",
-      });
-      return customGoogle(modelId);
-    }
-    case "xai": {
-      const customXai = createXai({
-        apiKey: userKeys?.grok_key || process.env.XAI_API_KEY || "",
-      });
-      return customXai(modelId);
-    }
-    default: {
-      const customOpenai = createOpenAI({
-        apiKey: userKeys?.openai_key || process.env.OPENAI_API_KEY || "",
-      });
-      return customOpenai(modelId);
-    }
-  }
-}
+// getModelProvider is now imported from @/lib/llm-provider
 
 export async function POST(request: Request) {
+  let requestModel: string | undefined;
   try {
     const supabase = await createClient();
 
@@ -773,6 +729,7 @@ export async function POST(request: Request) {
     }
 
     const body: GenerateRequest = await request.json();
+    requestModel = body.model;
     const { 
       rateeId, rateeRank, rateeAfsc, cycleYear, model, writingStyle, 
       communityMpaFilter, communityAfscFilter, accomplishments, selectedMPAs, 
@@ -1861,10 +1818,6 @@ ALWAYS include 1-3 clarifying questions, even if input seems detailed. Ask about
 
     return NextResponse.json({ statements: results });
   } catch (error) {
-    console.error("Generate API error:", error);
-    return NextResponse.json(
-      { error: "Failed to generate statements" },
-      { status: 500 }
-    );
+    return handleLLMError(error, "POST /api/generate", requestModel);
   }
 }

@@ -814,7 +814,10 @@ export function CustomContextWorkspace({
         }),
       });
 
-      if (!response.ok) throw new Error("Generation failed");
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || "Generation failed");
+      }
 
       const result = await response.json();
       const mpaResult = result.statements?.[0];
@@ -880,7 +883,7 @@ export function CustomContextWorkspace({
       );
     } catch (error) {
       console.error(error);
-      toast.error("Failed to generate statement");
+      toast.error(error instanceof Error ? error.message : "Failed to generate statement");
     } finally {
       setGeneratingMPA(null);
     }
@@ -922,7 +925,10 @@ export function CustomContextWorkspace({
         }),
       });
 
-      if (!response.ok) throw new Error("Regeneration failed");
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || "Regeneration failed");
+      }
 
       const result = await response.json();
       const mpaResult = result.statements?.[0];
@@ -956,7 +962,7 @@ export function CustomContextWorkspace({
       toast.success(`Enhanced statement with your clarifying details`);
     } catch (error) {
       console.error(error);
-      toast.error("Failed to regenerate statement");
+      toast.error(error instanceof Error ? error.message : "Failed to regenerate statement");
     } finally {
       setIsRegeneratingWithContext(false);
       setGeneratingMPA(null);
@@ -986,7 +992,10 @@ export function CustomContextWorkspace({
         }),
       });
 
-      if (!response.ok) throw new Error("Revision failed");
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || "Revision failed");
+      }
 
       const result = await response.json();
       const revisedText = result.revisions?.[0] || currentText;
@@ -1015,7 +1024,7 @@ export function CustomContextWorkspace({
       toast.success("Statement revised!");
     } catch (error) {
       console.error(error);
-      toast.error("Failed to revise statement");
+      toast.error(error instanceof Error ? error.message : "Failed to revise statement");
     }
   };
 

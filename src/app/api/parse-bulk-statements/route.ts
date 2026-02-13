@@ -1,11 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
-import { createOpenAI } from "@ai-sdk/openai";
-import { createAnthropic } from "@ai-sdk/anthropic";
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { createXai } from "@ai-sdk/xai";
 import { generateText } from "ai";
 import { NextResponse } from "next/server";
 import { getDecryptedApiKeys } from "@/app/actions/api-keys";
+import { getModelProvider } from "@/lib/llm-provider";
+import { handleLLMError } from "@/lib/llm-error-handler";
 import { STANDARD_MGAS, DEFAULT_MPA_DESCRIPTIONS } from "@/lib/constants";
 import { cleanText, extractDateRange, extractCycleYear } from "@/lib/text-cleaning";
 import type { Rank } from "@/types/database";
@@ -43,69 +41,6 @@ interface ParseBulkStatementsResponse {
   statements: ParsedStatement[];
   extractedDateRange: { start: string; end: string } | null;
   extractedCycleYear: number | null;
-}
-
-function getModelProvider(
-  modelId: string,
-  userKeys: {
-    openai_key?: string | null;
-    anthropic_key?: string | null;
-    google_key?: string | null;
-    grok_key?: string | null;
-  } | null
-) {
-  const provider = modelId.includes("claude")
-    ? "anthropic"
-    : modelId.includes("gemini")
-      ? "google"
-      : modelId.includes("grok")
-        ? "xai"
-        : "openai";
-
-  switch (provider) {
-    case "anthropic": {
-      const apiKey = userKeys?.anthropic_key || process.env.ANTHROPIC_API_KEY;
-      if (!apiKey) {
-        // Fallback to Gemini if no Anthropic key
-        const customGoogle = createGoogleGenerativeAI({
-          apiKey: userKeys?.google_key || process.env.GOOGLE_GENERATIVE_AI_API_KEY || "",
-        });
-        return customGoogle(DEFAULT_PARSE_MODEL);
-      }
-      const customAnthropic = createAnthropic({ apiKey });
-      return customAnthropic(modelId);
-    }
-    case "google": {
-      const customGoogle = createGoogleGenerativeAI({
-        apiKey: userKeys?.google_key || process.env.GOOGLE_GENERATIVE_AI_API_KEY || "",
-      });
-      return customGoogle(modelId);
-    }
-    case "xai": {
-      const apiKey = userKeys?.grok_key || process.env.XAI_API_KEY;
-      if (!apiKey) {
-        // Fallback to Gemini if no xAI key
-        const customGoogle = createGoogleGenerativeAI({
-          apiKey: userKeys?.google_key || process.env.GOOGLE_GENERATIVE_AI_API_KEY || "",
-        });
-        return customGoogle(DEFAULT_PARSE_MODEL);
-      }
-      const customXai = createXai({ apiKey });
-      return customXai(modelId);
-    }
-    default: {
-      const apiKey = userKeys?.openai_key || process.env.OPENAI_API_KEY;
-      if (!apiKey) {
-        // Fallback to Gemini if no OpenAI key
-        const customGoogle = createGoogleGenerativeAI({
-          apiKey: userKeys?.google_key || process.env.GOOGLE_GENERATIVE_AI_API_KEY || "",
-        });
-        return customGoogle(DEFAULT_PARSE_MODEL);
-      }
-      const customOpenai = createOpenAI({ apiKey });
-      return customOpenai(modelId);
-    }
-  }
 }
 
 function buildParsingPrompt(mpaDetectionMode: "auto" | "manual", manualMpa?: string): string {
@@ -174,6 +109,7 @@ Return a JSON object with this exact structure:
 }
 
 export async function POST(request: Request) {
+  let modelId = DEFAULT_PARSE_MODEL;
   try {
     const supabase = await createClient();
 
@@ -196,6 +132,7 @@ export async function POST(request: Request) {
       defaultRank,
       model = DEFAULT_PARSE_MODEL,
     } = body;
+    modelId = model;
 
     if (!rawText || rawText.trim().length < 50) {
       return NextResponse.json(
@@ -285,10 +222,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json(response);
   } catch (error) {
-    console.error("Error parsing bulk statements:", error);
-    return NextResponse.json(
-      { error: "Failed to parse statements" },
-      { status: 500 }
-    );
+    return handleLLMError(error, "POST /api/parse-bulk-statements", modelId);
   }
 }

@@ -1,8 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { generateText } from "ai";
 import { NextResponse } from "next/server";
 import { getDecryptedApiKeys } from "@/app/actions/api-keys";
+import { getModelProvider } from "@/lib/llm-provider";
+import { handleLLMError } from "@/lib/llm-error-handler";
 
 // Allow up to 60s for LLM calls
 export const maxDuration = 60;
@@ -208,22 +209,9 @@ export async function POST(request: Request): Promise<NextResponse<ApplyFeedback
     }
 
     // Text has changed or multiple occurrences - use LLM to intelligently apply the change
-    // Get user's API keys (user's key takes priority over system fallback)
     const userKeys = await getDecryptedApiKeys();
-    const apiKey = userKeys?.google_key || process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-    
-    if (!apiKey) {
-      console.error("Google AI API key not configured");
-      return NextResponse.json({
-        success: false,
-        aborted: true,
-        reason: "AI service not configured. Please apply this change manually."
-      });
-    }
-
-    const google = createGoogleGenerativeAI({
-      apiKey,
-    });
+    const feedbackModelId = "gemini-2.0-flash";
+    const feedbackModel = getModelProvider(feedbackModelId, userKeys);
 
     const systemPrompt = `You are a SURGICAL text editor. Apply ONE specific change to a document.
 
@@ -266,7 +254,7 @@ Return valid JSON:`;
     let text: string;
     try {
       const result = await generateText({
-        model: google("gemini-2.0-flash"),
+        model: feedbackModel,
         system: systemPrompt,
         prompt: userPrompt,
         temperature: 0.1, // Low temperature for precise edits
@@ -274,12 +262,15 @@ Return valid JSON:`;
       });
       text = result.text;
     } catch (llmError) {
-      console.error("LLM API call failed:", llmError);
+      // Use handleLLMError to parse the error, then reformat for this route's response type
+      const llmResponse = handleLLMError(llmError, "POST /api/feedback/apply", feedbackModelId);
+      const llmBody = await llmResponse.json();
       return NextResponse.json({
         success: false,
+        error: llmBody.error || "Failed to apply feedback",
         aborted: true,
-        reason: "AI service temporarily unavailable. Please apply this change manually."
-      });
+        reason: llmBody.error || "AI service error",
+      } satisfies ApplyFeedbackResponse);
     }
 
     // Parse the LLM response
@@ -347,10 +338,15 @@ Return valid JSON:`;
       });
     }
   } catch (error) {
-    console.error("Apply Feedback API error:", error);
-    return NextResponse.json(
-      { success: false, error: "Failed to apply feedback" },
-      { status: 500 }
-    );
+    console.error("Feedback apply error:", error);
+    // Use handleLLMError to parse the error, then reformat for this route's response type
+    const llmResponse = handleLLMError(error, "POST /api/feedback/apply");
+    const llmBody = await llmResponse.json();
+    return NextResponse.json({
+      success: false,
+      error: llmBody.error || "Failed to apply feedback",
+      aborted: true,
+      reason: llmBody.error || "An unexpected error occurred",
+    } satisfies ApplyFeedbackResponse);
   }
 }

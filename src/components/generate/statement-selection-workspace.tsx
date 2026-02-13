@@ -249,10 +249,12 @@ export function StatementSelectionWorkspace({
           }),
         });
         
-        if (response.ok) {
-          const data = await response.json();
-          generated1 = data.statement || "";
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || "Failed to generate statement 1");
         }
+        const data = await response.json();
+        generated1 = data.statement || "";
       }
       
       if (hasSlot2) {
@@ -274,10 +276,12 @@ export function StatementSelectionWorkspace({
           }),
         });
         
-        if (response.ok) {
-          const data = await response.json();
-          generated2 = data.statement || "";
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || "Failed to generate statement 2");
         }
+        const data = await response.json();
+        generated2 = data.statement || "";
       }
       
       setWorkspaceState(prev => prev ? {
@@ -289,7 +293,7 @@ export function StatementSelectionWorkspace({
       
     } catch (error) {
       console.error("Generate error:", error);
-      toast.error("Failed to generate statements");
+      toast.error(error instanceof Error ? error.message : "Failed to generate statements");
       setWorkspaceState(prev => prev ? { ...prev, stage: "select" } : prev);
     }
   };
@@ -326,7 +330,10 @@ export function StatementSelectionWorkspace({
         }),
       });
       
-      if (!response.ok) throw new Error("Revision failed");
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || "Revision failed");
+      }
       
       const data = await response.json();
       if (data.revisions?.[0]) {
@@ -335,7 +342,7 @@ export function StatementSelectionWorkspace({
       }
     } catch (error) {
       console.error("Revision error:", error);
-      toast.error("Failed to revise statement");
+      toast.error(error instanceof Error ? error.message : "Failed to revise statement");
     } finally {
       setRevisingKey(null);
     }

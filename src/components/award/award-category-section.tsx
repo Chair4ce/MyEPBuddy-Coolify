@@ -333,8 +333,9 @@ function StatementSlotCard({
       if (versions && versions.length > 0) {
         setGeneratedVersions(versions);
       }
-    } catch {
-      toast.error("Failed to generate");
+    } catch (error) {
+      console.error("Generate error:", error);
+      toast.error(error instanceof Error ? error.message : "Failed to generate");
     } finally {
       onUpdate({ isGenerating: false });
     }
@@ -410,13 +411,16 @@ function StatementSlotCard({
         }),
       });
 
-      if (!response.ok) throw new Error("Revision failed");
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || "Revision failed");
+      }
 
       const data = await response.json();
       setRevisionResults(data.revisions || []);
     } catch (error) {
       console.error("Revision error:", error);
-      toast.error("Failed to revise selection");
+      toast.error(error instanceof Error ? error.message : "Failed to revise selection");
     } finally {
       setIsRevising(false);
     }
@@ -454,7 +458,10 @@ function StatementSlotCard({
         }),
       });
 
-      if (!response.ok) throw new Error("Reshape failed");
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || "Reshape failed");
+      }
 
       const data = await response.json();
       if (data.revisions?.[0]) {
@@ -463,7 +470,7 @@ function StatementSlotCard({
       }
     } catch (error) {
       console.error("Reshape error:", error);
-      toast.error("Failed to reshape statement");
+      toast.error(error instanceof Error ? error.message : "Failed to reshape statement");
     } finally {
       onUpdate({ isRevising: false });
     }
@@ -1106,7 +1113,8 @@ export function AwardCategorySectionCard({
       });
 
       if (!response.ok) {
-        throw new Error("Generation failed");
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || "Generation failed");
       }
 
       const data = await response.json();
@@ -1119,7 +1127,7 @@ export function AwardCategorySectionCard({
       return versions;
     } catch (error) {
       console.error("Generation error:", error);
-      toast.error("Failed to generate statement");
+      toast.error(error instanceof Error ? error.message : "Failed to generate statement");
       onUpdateSlotState(categoryKey, slotIndex, { isGenerating: false });
       return [];
     }

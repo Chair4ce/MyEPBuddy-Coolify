@@ -374,7 +374,7 @@ ${contextForGeneration}`;
         return statements;
       } catch (error) {
         console.error("Error generating statement:", error);
-        toast.error("Failed to generate statement");
+        toast.error(error instanceof Error ? error.message : "Failed to generate statement");
         return [];
       } finally {
         setIsGenerating(null);

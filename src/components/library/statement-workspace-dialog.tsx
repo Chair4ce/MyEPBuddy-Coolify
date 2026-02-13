@@ -455,7 +455,8 @@ export function StatementWorkspaceDialog({
       });
       
       if (!response.ok) {
-        throw new Error("Failed to fetch AI synonyms");
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to fetch AI synonyms");
       }
       
       const data = await response.json();
@@ -468,7 +469,7 @@ export function StatementWorkspaceDialog({
       }
     } catch (error) {
       console.error("Failed to fetch AI synonyms:", error);
-      toast.error("Failed to fetch AI synonyms");
+      toast.error(error instanceof Error ? error.message : "Failed to fetch AI synonyms");
       setAiSynonyms([]);
     } finally {
       setIsLoadingAiSynonyms(false);
@@ -637,8 +638,8 @@ export function StatementWorkspaceDialog({
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Generation failed");
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || "Generation failed");
       }
 
       const data = await response.json();

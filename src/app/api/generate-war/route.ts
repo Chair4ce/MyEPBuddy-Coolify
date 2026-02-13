@@ -1,12 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
-import { createOpenAI } from "@ai-sdk/openai";
-import { createAnthropic } from "@ai-sdk/anthropic";
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { createXai } from "@ai-sdk/xai";
 import { generateText } from "ai";
 import { NextResponse } from "next/server";
 import { getDecryptedApiKeys } from "@/app/actions/api-keys";
 import { scanAccomplishmentsForLLM } from "@/lib/sensitive-data-scanner";
+import { getModelProvider } from "@/lib/llm-provider";
+import { handleLLMError } from "@/lib/llm-error-handler";
 
 // Allow up to 60s for LLM calls
 export const maxDuration = 60;
@@ -56,66 +54,6 @@ interface WARReport {
     label: string;
     items: string[];
   }[];
-}
-
-function getModelProvider(
-  modelId: string,
-  userKeys: {
-    openai_key?: string | null;
-    anthropic_key?: string | null;
-    google_key?: string | null;
-    grok_key?: string | null;
-  } | null
-) {
-  const provider = modelId.includes("claude")
-    ? "anthropic"
-    : modelId.includes("gemini")
-      ? "google"
-      : modelId.includes("grok")
-        ? "xai"
-        : "openai";
-
-  switch (provider) {
-    case "anthropic": {
-      const apiKey = userKeys?.anthropic_key || process.env.ANTHROPIC_API_KEY;
-      if (!apiKey) {
-        const customGoogle = createGoogleGenerativeAI({
-          apiKey: userKeys?.google_key || process.env.GOOGLE_GENERATIVE_AI_API_KEY || "",
-        });
-        return customGoogle(DEFAULT_MODEL);
-      }
-      const customAnthropic = createAnthropic({ apiKey });
-      return customAnthropic(modelId);
-    }
-    case "google": {
-      const customGoogle = createGoogleGenerativeAI({
-        apiKey: userKeys?.google_key || process.env.GOOGLE_GENERATIVE_AI_API_KEY || "",
-      });
-      return customGoogle(modelId);
-    }
-    case "xai": {
-      const apiKey = userKeys?.grok_key || process.env.XAI_API_KEY;
-      if (!apiKey) {
-        const customGoogle = createGoogleGenerativeAI({
-          apiKey: userKeys?.google_key || process.env.GOOGLE_GENERATIVE_AI_API_KEY || "",
-        });
-        return customGoogle(DEFAULT_MODEL);
-      }
-      const customXai = createXai({ apiKey });
-      return customXai(modelId);
-    }
-    default: {
-      const apiKey = userKeys?.openai_key || process.env.OPENAI_API_KEY;
-      if (!apiKey) {
-        const customGoogle = createGoogleGenerativeAI({
-          apiKey: userKeys?.google_key || process.env.GOOGLE_GENERATIVE_AI_API_KEY || "",
-        });
-        return customGoogle(DEFAULT_MODEL);
-      }
-      const customOpenai = createOpenAI({ apiKey });
-      return customOpenai(modelId);
-    }
-  }
 }
 
 function buildWARPrompt(
@@ -200,6 +138,7 @@ Generate the WAR now:`;
 }
 
 export async function POST(request: Request) {
+  let modelId: string | undefined;
   try {
     const supabase = await createClient();
 
@@ -250,11 +189,9 @@ export async function POST(request: Request) {
       );
     }
 
-    // Get user's API keys
+    // Get user's API keys and model provider
     const userKeys = await getDecryptedApiKeys();
-
-    // Get the model provider
-    const modelId = model || DEFAULT_MODEL;
+    modelId = model || DEFAULT_MODEL;
     const modelProvider = getModelProvider(modelId, userKeys);
 
     // Build the prompt
@@ -322,10 +259,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ report });
   } catch (error) {
-    console.error("Error generating WAR:", error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Internal server error" },
-      { status: 500 }
-    );
+    return handleLLMError(error, "POST /api/generate-war", modelId);
   }
 }

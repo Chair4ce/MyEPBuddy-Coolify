@@ -171,6 +171,184 @@ export async function deleteApiKey(
   return { success: true };
 }
 
+/**
+ * Test result from validating an API key against the provider.
+ */
+export interface TestKeyResult {
+  valid: boolean;
+  error?: string;
+}
+
+/**
+ * Validate an API key by calling the provider's lightweight models endpoint.
+ * This uses zero tokens and only checks authentication/permissions.
+ *
+ * @param keyName - Which provider to test (openai_key, anthropic_key, etc.)
+ * @param rawKey - Optional raw key to test before saving. If omitted, tests the saved key.
+ */
+export async function testApiKey(
+  keyName: KeyName,
+  rawKey?: string,
+): Promise<TestKeyResult> {
+  const supabase = await createClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return { valid: false, error: "Not authenticated" };
+  }
+
+  // Resolve the key to test: use raw key if provided, otherwise decrypt the saved key
+  let apiKey: string | null = rawKey?.trim() || null;
+
+  if (!apiKey) {
+    const { data } = await supabase
+      .from("user_api_keys")
+      .select(keyName)
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (!data || !(data as Record<string, string | null>)[keyName]) {
+      return { valid: false, error: "No API key saved for this provider" };
+    }
+
+    apiKey = safeDecrypt((data as Record<string, string>)[keyName]);
+    if (!apiKey) {
+      return { valid: false, error: "Failed to decrypt saved key" };
+    }
+  }
+
+  // Call the provider's models endpoint to validate the key
+  try {
+    const result = await validateKeyWithProvider(keyName, apiKey);
+    return result;
+  } catch (error) {
+    console.error(`[testApiKey] Unexpected error for ${keyName}:`, error);
+    return {
+      valid: false,
+      error: "An unexpected error occurred while testing the key",
+    };
+  }
+}
+
+/**
+ * Makes a lightweight API call to the provider's models list endpoint.
+ * These calls use zero tokens - they only check if the key is authorized.
+ */
+async function validateKeyWithProvider(
+  keyName: KeyName,
+  apiKey: string,
+): Promise<TestKeyResult> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000); // 10s timeout
+
+  try {
+    let url: string;
+    let headers: Record<string, string>;
+
+    switch (keyName) {
+      case "openai_key":
+        url = "https://api.openai.com/v1/models";
+        headers = { Authorization: `Bearer ${apiKey}` };
+        break;
+
+      case "anthropic_key":
+        url = "https://api.anthropic.com/v1/models";
+        headers = {
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+        };
+        break;
+
+      case "google_key":
+        url = `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`;
+        headers = {};
+        break;
+
+      case "grok_key":
+        url = "https://api.x.ai/v1/models";
+        headers = { Authorization: `Bearer ${apiKey}` };
+        break;
+
+      default:
+        return { valid: false, error: "Unknown provider" };
+    }
+
+    const response = await fetch(url, {
+      method: "GET",
+      headers,
+      signal: controller.signal,
+    });
+
+    if (response.ok) {
+      return { valid: true };
+    }
+
+    // Parse the error response for a user-friendly message
+    const providerName = PROVIDER_NAMES[keyName];
+    const status = response.status;
+
+    let errorDetail = "";
+    try {
+      const body = await response.json();
+      // Extract nested error message from various provider formats
+      if (body.error?.message) {
+        errorDetail = body.error.message;
+      } else if (body.message) {
+        errorDetail = body.message;
+      }
+    } catch {
+      // Response body wasn't JSON
+    }
+
+    switch (status) {
+      case 401:
+        return {
+          valid: false,
+          error: `Invalid ${providerName} API key. The key was rejected by ${providerName}. Please check that you copied it correctly.`,
+        };
+      case 403:
+        return {
+          valid: false,
+          error: `Your ${providerName} API key does not have sufficient permissions. ${errorDetail || "Check your account settings."}`,
+        };
+      case 429:
+        return {
+          valid: false,
+          error: `${providerName} rate limit or quota exceeded. Your key is valid but may have hit usage limits. ${errorDetail}`,
+        };
+      default:
+        return {
+          valid: false,
+          error: `${providerName} returned an error (${status}). ${errorDetail || "Please try again."}`,
+        };
+    }
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      return {
+        valid: false,
+        error: "Connection timed out. The provider may be experiencing issues. Please try again.",
+      };
+    }
+    const msg = error instanceof Error ? error.message : "Unknown error";
+    if (msg.includes("fetch failed") || msg.includes("ENOTFOUND")) {
+      return {
+        valid: false,
+        error: "Unable to connect to the provider. Please check your internet connection.",
+      };
+    }
+    return { valid: false, error: `Connection error: ${msg}` };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+const PROVIDER_NAMES: Record<KeyName, string> = {
+  openai_key: "OpenAI",
+  anthropic_key: "Anthropic",
+  google_key: "Google AI",
+  grok_key: "xAI",
+};
+
 export interface DecryptedApiKeys {
   openai_key: string | null;
   anthropic_key: string | null;

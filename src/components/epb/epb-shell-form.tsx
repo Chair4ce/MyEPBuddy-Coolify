@@ -1726,7 +1726,10 @@ export function EPBShellForm({
           }),
         });
 
-        if (!response.ok) throw new Error("Generation failed");
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || "Generation failed");
+        }
 
         const result = await response.json();
         const mpaResult = result.statements?.[0];
@@ -1825,7 +1828,10 @@ export function EPBShellForm({
         }),
       });
 
-      if (!response.ok) throw new Error("Revision failed");
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || "Revision failed");
+      }
 
       const result = await response.json();
       // Return all revisions (or slice to requested count)
@@ -1868,7 +1874,10 @@ export function EPBShellForm({
         }),
       });
 
-      if (!response.ok) throw new Error("Revision failed");
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || "Revision failed");
+      }
 
       const result = await response.json();
       const revisions = result.revisions || [];

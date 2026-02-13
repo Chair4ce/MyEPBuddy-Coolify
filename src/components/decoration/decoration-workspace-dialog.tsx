@@ -568,7 +568,7 @@ export function DecorationWorkspaceDialog({
       });
 
       if (!response.ok) {
-        const error = await response.json();
+        const error = await response.json().catch(() => ({}));
         throw new Error(error.error || "Failed to generate citation");
       }
 

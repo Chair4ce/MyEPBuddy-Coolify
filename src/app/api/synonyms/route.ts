@@ -1,11 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
-import { createOpenAI } from "@ai-sdk/openai";
-import { createAnthropic } from "@ai-sdk/anthropic";
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { createXai } from "@ai-sdk/xai";
 import { generateText } from "ai";
 import { NextResponse } from "next/server";
 import { getDecryptedApiKeys } from "@/app/actions/api-keys";
+import { getModelProvider } from "@/lib/llm-provider";
+import { handleLLMError } from "@/lib/llm-error-handler";
 
 // Allow up to 60s for LLM calls
 export const maxDuration = 60;
@@ -17,52 +15,8 @@ interface SynonymRequest {
   context?: "epb" | "decoration" | "award"; // Type of document for better suggestions
 }
 
-function getModelProvider(
-  modelId: string,
-  userKeys: {
-    openai_key?: string | null;
-    anthropic_key?: string | null;
-    google_key?: string | null;
-    grok_key?: string | null;
-  } | null
-) {
-  const provider = modelId.includes("claude")
-    ? "anthropic"
-    : modelId.includes("gemini")
-      ? "google"
-      : modelId.includes("grok")
-        ? "xai"
-        : "openai";
-
-  switch (provider) {
-    case "anthropic": {
-      const customAnthropic = createAnthropic({
-        apiKey: userKeys?.anthropic_key || process.env.ANTHROPIC_API_KEY || "",
-      });
-      return customAnthropic(modelId);
-    }
-    case "google": {
-      const customGoogle = createGoogleGenerativeAI({
-        apiKey: userKeys?.google_key || process.env.GOOGLE_GENERATIVE_AI_API_KEY || "",
-      });
-      return customGoogle(modelId);
-    }
-    case "xai": {
-      const customXai = createXai({
-        apiKey: userKeys?.grok_key || process.env.XAI_API_KEY || "",
-      });
-      return customXai(modelId);
-    }
-    default: {
-      const customOpenai = createOpenAI({
-        apiKey: userKeys?.openai_key || process.env.OPENAI_API_KEY || "",
-      });
-      return customOpenai(modelId);
-    }
-  }
-}
-
 export async function POST(request: Request) {
+  let modelId: string | undefined;
   try {
     const supabase = await createClient();
 
@@ -76,6 +30,7 @@ export async function POST(request: Request) {
 
     const body: SynonymRequest = await request.json();
     const { word, fullStatement, model, context = "epb" } = body;
+    modelId = model;
 
     if (!word || !fullStatement) {
       return NextResponse.json(
@@ -169,11 +124,7 @@ Return ONLY a JSON array of strings:
 
     return NextResponse.json({ synonyms });
   } catch (error) {
-    console.error("Synonyms API error:", error);
-    return NextResponse.json(
-      { error: "Failed to generate synonyms" },
-      { status: 500 }
-    );
+    return handleLLMError(error, "POST /api/synonyms", modelId);
   }
 }
 

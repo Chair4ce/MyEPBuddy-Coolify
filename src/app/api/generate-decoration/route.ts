@@ -1,11 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
-import { createOpenAI } from "@ai-sdk/openai";
-import { createAnthropic } from "@ai-sdk/anthropic";
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { createXai } from "@ai-sdk/xai";
-import { generateText, type LanguageModel } from "ai";
+import { generateText } from "ai";
 import { NextResponse } from "next/server";
 import { getDecryptedApiKeys } from "@/app/actions/api-keys";
+import { getModelProvider } from "@/lib/llm-provider";
+import { handleLLMError } from "@/lib/llm-error-handler";
 import { buildDecorationSystemPrompt, expandAbbreviations } from "@/lib/decoration-prompts";
 import type { DecorationAwardType, DecorationReason } from "@/lib/decoration-constants";
 import { DECORATION_TYPES } from "@/lib/decoration-constants";
@@ -78,6 +76,7 @@ function buildAssignmentLine(body: GenerateDecorationRequest): string {
 }
 
 export async function POST(request: Request) {
+  let modelId: string | undefined;
   try {
     const supabase = await createClient();
     
@@ -118,17 +117,10 @@ export async function POST(request: Request) {
       );
     }
     
-    // Get API keys
+    // Get API keys and select model provider
     const apiKeys = await getDecryptedApiKeys();
-    
-    // Select model provider
-    const { provider: modelProvider, error: modelError } = getModelProvider(body.model, apiKeys || {});
-    if (!modelProvider) {
-      return NextResponse.json(
-        { error: modelError || "No API key available for selected model" },
-        { status: 400 }
-      );
-    }
+    modelId = body.model;
+    const modelProvider = getModelProvider(modelId, apiKeys);
     
     // Load user LLM settings for custom decoration prompt, rank verbs, and abbreviations
     const { data: settingsData } = await supabase
@@ -250,57 +242,6 @@ HARD LIMIT: The entire citation MUST be ≤ ${decorationConfig.maxCharacters} ch
     });
     
   } catch (error) {
-    console.error("Generate decoration error:", error);
-    return NextResponse.json(
-      { error: "Failed to generate citation" },
-      { status: 500 }
-    );
+    return handleLLMError(error, "POST /api/generate-decoration", modelId);
   }
-}
-
-const PROVIDER_LABELS: Record<string, string> = {
-  "gpt-": "OpenAI",
-  "claude-": "Anthropic",
-  "gemini-": "Google",
-  "grok-": "xAI (Grok)",
-};
-
-function getModelProvider(
-  model: string,
-  apiKeys: { openai_key?: string | null; anthropic_key?: string | null; google_key?: string | null; grok_key?: string | null }
-): { provider: LanguageModel | null; error?: string } {
-  // Check user keys first, then fall back to env keys
-  const openaiKey = apiKeys.openai_key || process.env.OPENAI_API_KEY;
-  const anthropicKey = apiKeys.anthropic_key || process.env.ANTHROPIC_API_KEY;
-  const googleKey = apiKeys.google_key || process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-  const xaiKey = apiKeys.grok_key || process.env.XAI_API_KEY;
-  
-  // Match the selected model to its provider — return a clear error if key is missing
-  if (model.startsWith("gpt-")) {
-    if (!openaiKey) return { provider: null, error: "No OpenAI API key configured. Add one in Settings → API Keys." };
-    return { provider: createOpenAI({ apiKey: openaiKey })(model) };
-  }
-  
-  if (model.startsWith("claude-")) {
-    if (!anthropicKey) return { provider: null, error: "No Anthropic API key configured. Add one in Settings → API Keys." };
-    return { provider: createAnthropic({ apiKey: anthropicKey })(model) };
-  }
-  
-  if (model.startsWith("gemini-")) {
-    if (!googleKey) return { provider: null, error: "No Google API key configured. The Gemini default model requires a GOOGLE_GENERATIVE_AI_API_KEY environment variable." };
-    return { provider: createGoogleGenerativeAI({ apiKey: googleKey })(model) };
-  }
-  
-  if (model.startsWith("grok-")) {
-    if (!xaiKey) return { provider: null, error: "No xAI API key configured. Add one in Settings → API Keys." };
-    return { provider: createXai({ apiKey: xaiKey })(model) };
-  }
-  
-  // Unknown model prefix — try fallback with whatever key is available
-  if (googleKey) return { provider: createGoogleGenerativeAI({ apiKey: googleKey })("gemini-2.0-flash") };
-  if (anthropicKey) return { provider: createAnthropic({ apiKey: anthropicKey })("claude-sonnet-4-20250514") };
-  if (openaiKey) return { provider: createOpenAI({ apiKey: openaiKey })("gpt-4o") };
-  if (xaiKey) return { provider: createXai({ apiKey: xaiKey })("grok-3-mini-fast-latest") };
-  
-  return { provider: null, error: "No API keys configured. Add at least one in Settings → API Keys." };
 }

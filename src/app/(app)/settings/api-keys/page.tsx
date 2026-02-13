@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/components/ui/sonner";
 import { Analytics } from "@/lib/analytics";
-import { Loader2, Key, Shield, ExternalLink, Check, Trash2, ShieldAlert } from "lucide-react";
+import { Loader2, Key, Shield, ExternalLink, Check, Trash2, ShieldAlert, FlaskConical, CircleCheck, CircleX } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,6 +28,7 @@ import {
   getKeyStatus,
   saveApiKey,
   deleteApiKey,
+  testApiKey,
   type KeyStatus,
   type KeyName,
 } from "@/app/actions/api-keys";
@@ -66,6 +67,9 @@ const providers: Provider[] = [
   },
 ];
 
+/** Test result state for visual feedback */
+type TestState = "idle" | "testing" | "valid" | "invalid";
+
 function ProviderKeyCard({
   provider,
   hasKey,
@@ -81,6 +85,63 @@ function ProviderKeyCard({
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [testState, setTestState] = useState<TestState>("idle");
+  const [testError, setTestError] = useState<string | null>(null);
+
+  // Reset test state when key input changes
+  function handleKeyChange(value: string) {
+    setNewKey(value);
+    if (testState !== "idle") {
+      setTestState("idle");
+      setTestError(null);
+    }
+  }
+
+  /** Test a raw key before saving */
+  async function handleTestBeforeSave() {
+    if (!newKey.trim()) {
+      toast.error("Please enter an API key first");
+      return;
+    }
+    setTestState("testing");
+    setTestError(null);
+    try {
+      const result = await testApiKey(provider.key, newKey.trim());
+      if (result.valid) {
+        setTestState("valid");
+        toast.success(`${provider.name} key is valid`);
+      } else {
+        setTestState("invalid");
+        setTestError(result.error || "Key validation failed");
+        toast.error(result.error || "Key validation failed");
+      }
+    } catch {
+      setTestState("invalid");
+      setTestError("Failed to test key");
+      toast.error("Failed to test key");
+    }
+  }
+
+  /** Test the already-saved key */
+  async function handleTestSavedKey() {
+    setTestState("testing");
+    setTestError(null);
+    try {
+      const result = await testApiKey(provider.key);
+      if (result.valid) {
+        setTestState("valid");
+        toast.success(`${provider.name} key is valid`);
+      } else {
+        setTestState("invalid");
+        setTestError(result.error || "Key validation failed");
+        toast.error(result.error || "Key validation failed");
+      }
+    } catch {
+      setTestState("invalid");
+      setTestError("Failed to test key");
+      toast.error("Failed to test key");
+    }
+  }
 
   async function handleSave() {
     if (!newKey.trim()) {
@@ -91,6 +152,8 @@ function ProviderKeyCard({
     try {
       await onSave(newKey.trim());
       setNewKey("");
+      setTestState("idle");
+      setTestError(null);
     } finally {
       setIsSaving(false);
     }
@@ -100,6 +163,8 @@ function ProviderKeyCard({
     setIsDeleting(true);
     try {
       await onDelete();
+      setTestState("idle");
+      setTestError(null);
     } finally {
       setIsDeleting(false);
       setShowDeleteConfirm(false);
@@ -125,48 +190,116 @@ function ProviderKeyCard({
       </div>
 
       {hasKey ? (
-        <div className="flex items-center justify-between bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-900/50 rounded-md px-3 py-2">
-          <div className="flex items-center gap-2 text-green-700 dark:text-green-400">
-            <Check className="size-4" />
-            <span className="text-sm font-medium">API key saved</span>
+        <div className="space-y-2">
+          <div className="flex items-center justify-between bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-900/50 rounded-md px-3 py-2">
+            <div className="flex items-center gap-2 text-green-700 dark:text-green-400">
+              <Check className="size-4" />
+              <span className="text-sm font-medium">API key saved</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleTestSavedKey}
+                disabled={testState === "testing"}
+                className="text-muted-foreground hover:text-foreground"
+                aria-label={`Test ${provider.name} API key`}
+              >
+                {testState === "testing" ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : testState === "valid" ? (
+                  <CircleCheck className="size-4 text-green-600 dark:text-green-400" />
+                ) : testState === "invalid" ? (
+                  <CircleX className="size-4 text-destructive" />
+                ) : (
+                  <FlaskConical className="size-4" />
+                )}
+                <span className="ml-1 text-xs">
+                  {testState === "testing"
+                    ? "Testing..."
+                    : testState === "valid"
+                      ? "Valid"
+                      : testState === "invalid"
+                        ? "Invalid"
+                        : "Test"}
+                </span>
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowDeleteConfirm(true)}
+                disabled={isDeleting}
+                className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                aria-label={`Delete ${provider.name} API key`}
+              >
+                {isDeleting ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Trash2 className="size-4" />
+                )}
+              </Button>
+            </div>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowDeleteConfirm(true)}
-            disabled={isDeleting}
-            className="text-destructive hover:text-destructive hover:bg-destructive/10"
-          >
-            {isDeleting ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Trash2 className="size-4" />
-            )}
-          </Button>
+          {/* Show test error message for saved keys */}
+          {testState === "invalid" && testError && (
+            <p className="text-xs text-destructive px-1">{testError}</p>
+          )}
         </div>
       ) : (
-        <div className="flex gap-2">
-          <Input
-            type="password"
-            value={newKey}
-            onChange={(e) => setNewKey(e.target.value)}
-            placeholder={`Enter your ${provider.name} API key`}
-            className="font-mono text-sm"
-            aria-label={`${provider.name} API key`}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                handleSave();
-              }
-            }}
-          />
-          <Button onClick={handleSave} disabled={isSaving || !newKey.trim()}>
-            {isSaving ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              "Save"
-            )}
-          </Button>
+        <div className="space-y-2">
+          <div className="flex gap-2">
+            <Input
+              type="password"
+              value={newKey}
+              onChange={(e) => handleKeyChange(e.target.value)}
+              placeholder={`Enter your ${provider.name} API key`}
+              className="font-mono text-sm"
+              aria-label={`${provider.name} API key`}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleSave();
+                }
+              }}
+            />
+            <Button
+              variant="outline"
+              onClick={handleTestBeforeSave}
+              disabled={testState === "testing" || !newKey.trim()}
+              aria-label={`Test ${provider.name} API key before saving`}
+            >
+              {testState === "testing" ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : testState === "valid" ? (
+                <CircleCheck className="size-4 text-green-600 dark:text-green-400" />
+              ) : testState === "invalid" ? (
+                <CircleX className="size-4 text-destructive" />
+              ) : (
+                <FlaskConical className="size-4" />
+              )}
+              <span className="ml-1">Test</span>
+            </Button>
+            <Button onClick={handleSave} disabled={isSaving || !newKey.trim()}>
+              {isSaving ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                "Save"
+              )}
+            </Button>
+          </div>
+          {/* Show test result message below the input */}
+          {testState === "valid" && (
+            <p className="text-xs text-green-600 dark:text-green-400 px-1 flex items-center gap-1">
+              <CircleCheck className="size-3" />
+              Key is valid and ready to use
+            </p>
+          )}
+          {testState === "invalid" && testError && (
+            <p className="text-xs text-destructive px-1 flex items-center gap-1">
+              <CircleX className="size-3" />
+              {testError}
+            </p>
+          )}
         </div>
       )}
 

@@ -1,11 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
-import { createOpenAI } from "@ai-sdk/openai";
-import { createAnthropic } from "@ai-sdk/anthropic";
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { createXai } from "@ai-sdk/xai";
 import { generateText } from "ai";
 import { getDecryptedApiKeys } from "@/app/actions/api-keys";
+import { getModelProvider } from "@/lib/llm-provider";
+import { handleLLMError } from "@/lib/llm-error-handler";
 
 export const maxDuration = 60;
 
@@ -15,52 +13,6 @@ interface AdaptSentenceRequest {
   targetMax: number;
   mpaContext: string; // e.g., "Executing the Mission"
   preserveSentenceIndex: number; // Which sentence to try to preserve more (0 or 1)
-}
-
-// Get model provider for a specific model
-function getModelProvider(
-  modelId: string,
-  userKeys?: {
-    openai_key?: string | null;
-    anthropic_key?: string | null;
-    google_key?: string | null;
-    grok_key?: string | null;
-  } | null
-) {
-  const provider = modelId.startsWith("claude")
-    ? "anthropic"
-    : modelId.startsWith("gemini")
-      ? "google"
-      : modelId.startsWith("grok")
-        ? "xai"
-        : "openai";
-
-  switch (provider) {
-    case "anthropic": {
-      const customAnthropic = createAnthropic({
-        apiKey: userKeys?.anthropic_key || process.env.ANTHROPIC_API_KEY || "",
-      });
-      return customAnthropic(modelId);
-    }
-    case "google": {
-      const customGoogle = createGoogleGenerativeAI({
-        apiKey: userKeys?.google_key || process.env.GOOGLE_GENERATIVE_AI_API_KEY || "",
-      });
-      return customGoogle(modelId);
-    }
-    case "xai": {
-      const customXai = createXai({
-        apiKey: userKeys?.grok_key || process.env.XAI_API_KEY || "",
-      });
-      return customXai(modelId);
-    }
-    default: {
-      const customOpenai = createOpenAI({
-        apiKey: userKeys?.openai_key || process.env.OPENAI_API_KEY || "",
-      });
-      return customOpenai(modelId);
-    }
-  }
 }
 
 export async function POST(req: NextRequest) {
@@ -155,10 +107,6 @@ Return ONLY the adapted statement (both sentences combined). Do not include any 
       wasTruncated: false,
     });
   } catch (error) {
-    console.error("Adapt sentence error:", error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to adapt sentence" },
-      { status: 500 }
-    );
+    return handleLLMError(error, "POST /api/adapt-sentence", model);
   }
 }

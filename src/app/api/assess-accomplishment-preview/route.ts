@@ -1,11 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
-import { createOpenAI } from "@ai-sdk/openai";
-import { createAnthropic } from "@ai-sdk/anthropic";
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { createXai } from "@ai-sdk/xai";
 import { generateText } from "ai";
 import { NextResponse } from "next/server";
 import { getDecryptedApiKeys } from "@/app/actions/api-keys";
+import { getModelProvider } from "@/lib/llm-provider";
+import { handleLLMError } from "@/lib/llm-error-handler";
 import { 
   DEFAULT_MPA_DESCRIPTIONS, 
   ENTRY_MGAS, 
@@ -28,51 +26,6 @@ interface AssessPreviewRequest {
   metrics: string | null;
   mpa: string;
   model?: string;
-}
-
-function getModelProvider(
-  modelId: string,
-  userKeys: {
-    openai_key?: string | null;
-    anthropic_key?: string | null;
-    google_key?: string | null;
-    grok_key?: string | null;
-  } | null
-) {
-  const provider = modelId.includes("claude")
-    ? "anthropic"
-    : modelId.includes("gemini")
-      ? "google"
-      : modelId.includes("grok")
-        ? "xai"
-        : "openai";
-
-  switch (provider) {
-    case "anthropic": {
-      const customAnthropic = createAnthropic({
-        apiKey: userKeys?.anthropic_key || process.env.ANTHROPIC_API_KEY || "",
-      });
-      return customAnthropic(modelId);
-    }
-    case "google": {
-      const customGoogle = createGoogleGenerativeAI({
-        apiKey: userKeys?.google_key || process.env.GOOGLE_GENERATIVE_AI_API_KEY || "",
-      });
-      return customGoogle(modelId);
-    }
-    case "xai": {
-      const customXai = createXai({
-        apiKey: userKeys?.grok_key || process.env.XAI_API_KEY || "",
-      });
-      return customXai(modelId);
-    }
-    default: {
-      const customOpenai = createOpenAI({
-        apiKey: userKeys?.openai_key || process.env.OPENAI_API_KEY || "",
-      });
-      return customOpenai(modelId);
-    }
-  }
 }
 
 // Build the assessment prompt for an individual accomplishment using rank-appropriate ACA rubric
@@ -220,6 +173,7 @@ Respond with ONLY the JSON object, no additional text.`;
 }
 
 export async function POST(request: Request) {
+  let modelId = "gemini-2.0-flash";
   try {
     const supabase = await createClient();
 
@@ -233,6 +187,7 @@ export async function POST(request: Request) {
 
     const body: AssessPreviewRequest = await request.json();
     const { action_verb, details, impact, metrics, mpa, model = "gemini-2.0-flash" } = body;
+    modelId = model;
 
     if (!action_verb || !details) {
       return NextResponse.json(
@@ -319,10 +274,6 @@ export async function POST(request: Request) {
       rateeRank: profile?.rank || null
     });
   } catch (error) {
-    console.error("Assess accomplishment preview API error:", error);
-    return NextResponse.json(
-      { error: "Failed to assess accomplishment" },
-      { status: 500 }
-    );
+    return handleLLMError(error, "POST /api/assess-accomplishment-preview", modelId);
   }
 }

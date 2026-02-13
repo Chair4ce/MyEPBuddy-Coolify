@@ -1,11 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
-import { createOpenAI } from "@ai-sdk/openai";
-import { createAnthropic } from "@ai-sdk/anthropic";
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { createXai } from "@ai-sdk/xai";
 import { generateText, type LanguageModel } from "ai";
 import { NextResponse } from "next/server";
 import { getDecryptedApiKeys } from "@/app/actions/api-keys";
+import { getModelProvider } from "@/lib/llm-provider";
+import { handleLLMError } from "@/lib/llm-error-handler";
 import { 
   getUserStyleContext, 
   buildStyleGuidance, 
@@ -70,51 +68,6 @@ const RECOMMENDED_VERBS = [
   "analyzed", "assessed", "evaluated", "identified", "diagnosed", "investigated",
   "negotiated", "secured", "acquired", "procured", "saved", "recovered",
 ];
-
-function getModelProvider(
-  modelId: string,
-  userKeys: {
-    openai_key?: string | null;
-    anthropic_key?: string | null;
-    google_key?: string | null;
-    grok_key?: string | null;
-  } | null
-) {
-  const provider = modelId.includes("claude")
-    ? "anthropic"
-    : modelId.includes("gemini")
-      ? "google"
-      : modelId.includes("grok")
-        ? "xai"
-        : "openai";
-
-  switch (provider) {
-    case "anthropic": {
-      const customAnthropic = createAnthropic({
-        apiKey: userKeys?.anthropic_key || process.env.ANTHROPIC_API_KEY || "",
-      });
-      return customAnthropic(modelId);
-    }
-    case "google": {
-      const customGoogle = createGoogleGenerativeAI({
-        apiKey: userKeys?.google_key || process.env.GOOGLE_GENERATIVE_AI_API_KEY || "",
-      });
-      return customGoogle(modelId);
-    }
-    case "xai": {
-      const customXai = createXai({
-        apiKey: userKeys?.grok_key || process.env.XAI_API_KEY || "",
-      });
-      return customXai(modelId);
-    }
-    default: {
-      const customOpenai = createOpenAI({
-        apiKey: userKeys?.openai_key || process.env.OPENAI_API_KEY || "",
-      });
-      return customOpenai(modelId);
-    }
-  }
-}
 
 /**
  * Build system prompt for DUTY DESCRIPTION revisions.
@@ -292,6 +245,7 @@ CRITICAL RULES:
 }
 
 export async function POST(request: Request) {
+  let requestModelId: string | undefined;
   try {
     const supabase = await createClient();
 
@@ -435,6 +389,7 @@ STEP 5: Only output revisions that are ${targetMin}-${maxChars} characters
     // Get user API keys (decrypted)
     const userKeys = await getDecryptedApiKeys();
 
+    requestModelId = model;
     const modelProvider = getModelProvider(model, userKeys);
 
     const beforeSelection = fullStatement.substring(0, selectionStart);
@@ -633,11 +588,7 @@ Return JSON array only: [${Array.from({ length: versionCount }, (_, i) => `"revi
       original: selectedText,
     });
   } catch (error) {
-    console.error("Revise Selection API error:", error);
-    return NextResponse.json(
-      { error: "Failed to revise selection" },
-      { status: 500 }
-    );
+    return handleLLMError(error, "POST /api/revise-selection", requestModelId);
   }
 }
 
