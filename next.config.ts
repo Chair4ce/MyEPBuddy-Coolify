@@ -26,11 +26,11 @@ const securityHeaders = [
     key: "Content-Security-Policy",
     value: [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://va.vercel-scripts.com",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://va.vercel-scripts.com https://static.cloudflareinsights.com",
       "style-src 'self' 'unsafe-inline'",
       `img-src ${imageSources}`,
       "font-src 'self' https://fonts.gstatic.com",
-      `connect-src 'self' https://*.supabase.co https://api.openai.com https://api.anthropic.com https://generativelanguage.googleapis.com https://va.vercel-scripts.com wss://*.supabase.co ${localSupabaseUrls}`.trim(),
+      `connect-src 'self' https://*.supabase.co https://*.hoagspace.com https://api.openai.com https://api.anthropic.com https://generativelanguage.googleapis.com https://va.vercel-scripts.com wss://*.supabase.co wss://*.hoagspace.com ${localSupabaseUrls}`.trim(),
       "worker-src 'self' blob:",
       "frame-ancestors 'none'",
       "base-uri 'self'",
