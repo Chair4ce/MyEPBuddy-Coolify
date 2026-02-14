@@ -14,7 +14,7 @@
  * while keeping all data flowing into our Supabase analytics_events table.
  */
 
-import { track as vercelTrack } from "@vercel/analytics";
+const vercelTrack = (..._args: any[]) => {};
 
 const VERCEL_CUSTOM_EVENTS_ENABLED =
   process.env.NEXT_PUBLIC_VERCEL_CUSTOM_EVENTS === "true";

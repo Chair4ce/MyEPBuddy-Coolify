@@ -4,7 +4,6 @@ import { ThemeProvider } from "@/components/providers/theme-provider";
 import { AnalyticsProvider } from "@/components/providers/analytics-provider";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
-import { Analytics as VercelAnalytics } from "@vercel/analytics/next"
 
 const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
@@ -134,7 +133,6 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <AnalyticsProvider>
-            <VercelAnalytics />
             {children}
             <Toaster position="top-center" />
           </AnalyticsProvider>
